@@ -1,0 +1,172 @@
+<?php
+
+namespace App\Domain\Scan;
+
+/**
+ * ScanConstants — the single home for the scan layer's shared literals.
+ *
+ * CONST-at-top, project-wide: selector role keys, confidence thresholds, the
+ * source-trust ranking, escalation-heuristic limits and the failure-reason codes
+ * all live here so no magic string is scattered through the fetch/represent/map
+ * classes. A service references ScanConstants::X, never a literal.
+ */
+final class ScanConstants
+{
+    // === SELECTOR ROLES ===
+    // The six page selectors the widget needs at runtime.
+    public const ROLE_ADD_TO_CART = 'add_to_cart';
+
+    public const ROLE_PRODUCT_IMAGE = 'product_image';
+
+    public const ROLE_TITLE = 'title';
+
+    public const ROLE_PRICE = 'price';
+
+    public const ROLE_DESCRIPTION = 'description';
+
+    public const ROLE_VARIATIONS = 'variations';
+
+    public const SELECTOR_ROLES = [
+        self::ROLE_ADD_TO_CART,
+        self::ROLE_PRODUCT_IMAGE,
+        self::ROLE_TITLE,
+        self::ROLE_PRICE,
+        self::ROLE_DESCRIPTION,
+        self::ROLE_VARIATIONS,
+    ];
+
+    // === FIELD SOURCES (trust ranking, high -> low) ===
+    // Where an extracted field came from. model_inferred is the lowest-trust and
+    // is ALWAYS flagged for merchant review.
+    public const SOURCE_JSONLD = 'jsonld';
+
+    public const SOURCE_OG = 'og';
+
+    public const SOURCE_MICRODATA = 'microdata';
+
+    public const SOURCE_DOM = 'dom';
+
+    public const SOURCE_SCREENSHOT = 'screenshot';
+
+    public const SOURCE_MODEL_INFERRED = 'model_inferred';
+
+    // Confidence weight per source — a high-trust source lifts a field's score.
+    public const SOURCE_WEIGHT = [
+        self::SOURCE_JSONLD => 1.0,
+        self::SOURCE_OG => 0.9,
+        self::SOURCE_MICRODATA => 0.9,
+        self::SOURCE_DOM => 0.75,
+        self::SOURCE_SCREENSHOT => 0.6,
+        self::SOURCE_MODEL_INFERRED => 0.4,
+    ];
+
+    // === CONFIDENCE THRESHOLDS ===
+    // The aggregate floor below which laravel-backend fails the scan. The review
+    // queue flags any field/selector under REVIEW_FLOOR for merchant attention.
+    public const CONFIDENCE_THRESHOLD = 0.45;
+
+    public const REVIEW_FLOOR = 0.7;
+
+    // A selector that resolves to exactly one element gets full verification
+    // weight; a 0/>1 match is penalised hard and flagged.
+    public const SELECTOR_MATCH_ONE_WEIGHT = 1.0;
+
+    public const SELECTOR_MATCH_MULTI_WEIGHT = 0.35;
+
+    public const SELECTOR_MATCH_ZERO_WEIGHT = 0.0;
+
+    // === SELECTOR STRATEGY WEIGHTS (stable -> brittle) ===
+    public const STRATEGY_ID = 'id';
+
+    public const STRATEGY_DATA_ATTR = 'data_attr';
+
+    public const STRATEGY_ARIA = 'aria';
+
+    public const STRATEGY_SEMANTIC = 'semantic';
+
+    public const STRATEGY_ITEMPROP = 'itemprop';
+
+    public const STRATEGY_CLASS = 'class';
+
+    public const STRATEGY_POSITIONAL = 'positional';
+
+    public const STRATEGY_WEIGHT = [
+        self::STRATEGY_ID => 1.0,
+        self::STRATEGY_DATA_ATTR => 0.95,
+        self::STRATEGY_ARIA => 0.9,
+        self::STRATEGY_ITEMPROP => 0.9,
+        self::STRATEGY_SEMANTIC => 0.85,
+        self::STRATEGY_CLASS => 0.6,
+        self::STRATEGY_POSITIONAL => 0.3, // brittle — always flagged for review
+    ];
+
+    // === FETCH ===
+    public const FETCH_VIA_HTTP = 'http';
+
+    public const FETCH_VIA_HEADLESS = 'headless';
+
+    // === EGRESS LIMITS (SSRF / DoS bounds) ===
+    // Defaults when the SCRAPER_* config is absent. The byte cap is enforced
+    // MID-STREAM (BoundedSink); the redirect cap bounds the manual re-guarded hops.
+    public const EGRESS_MAX_BYTES = 3_145_728;     // 3 MiB
+
+    public const EGRESS_MAX_REDIRECTS = 5;
+
+    public const EGRESS_HTTP_TIMEOUT = 15;         // seconds
+
+    public const EGRESS_RENDER_TIMEOUT = 30;       // seconds
+
+    public const EGRESS_ROBOTS_TIMEOUT = 5;        // seconds
+
+    public const EGRESS_ROBOTS_MAX_BYTES = 524_288; // 512 KiB — robots.txt is tiny
+
+    // === FAILURE REASONS (merchant-facing class) ===
+    public const FAIL_INVALID_URL = 'invalid_url';
+
+    public const FAIL_ROBOTS_BLOCKED = 'robots_blocked';
+
+    public const FAIL_BOT_BLOCKED = 'bot_blocked';
+
+    public const FAIL_RENDER_EMPTY = 'render_empty';
+
+    public const FAIL_TIMEOUT = 'timeout';
+
+    public const FAIL_TOO_LARGE = 'too_large';
+
+    public const FAIL_HTTP_ERROR = 'http_error';
+
+    public const FAIL_RENDER_DISABLED = 'render_disabled';
+
+    public const FAIL_INVALID_EXTRACTION = 'invalid_extraction';
+
+    public const FAIL_BELOW_THRESHOLD = 'below_threshold';
+
+    // === HEADLESS-ESCALATION HEURISTIC ===
+    // A raw HTTP body looks "rendered enough" to skip headless when it has a
+    // product signal (title/price/og:image/JSON-LD Product) AND enough visible
+    // text. SPA shells (tiny text, framework root marker, no product node) escalate.
+    public const MIN_TEXT_DENSITY_CHARS = 600;   // min visible text to trust HTTP
+
+    public const SPA_ROOT_MARKERS = [
+        'id="root"',
+        'id="app"',
+        'id="__next"',
+        'id="__nuxt"',
+        'ng-app',
+        'data-reactroot',
+    ];
+
+    // === REPRESENTATION BUDGET ===
+    // Cap the cleaned HTML handed to the model (chars). Drop chrome/boilerplate
+    // before product content if the page exceeds this.
+    public const REPRESENTATION_MAX_CHARS = 24_000;
+
+    // Tags whose subtree is pure noise for extraction — stripped wholesale.
+    public const NOISE_TAGS = ['script', 'style', 'svg', 'noscript', 'iframe', 'template'];
+
+    // application/ld+json scripts are GOLD — kept and lifted, never stripped.
+    public const JSONLD_TYPE = 'application/ld+json';
+
+    // === PRICE PLACEHOLDER REJECTS (lazy image guard) ===
+    public const PLACEHOLDER_IMAGE_MARKERS = ['data:image', '1x1', 'spacer', 'blank.gif', 'transparent'];
+}

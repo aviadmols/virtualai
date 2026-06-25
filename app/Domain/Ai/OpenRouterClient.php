@@ -1,0 +1,399 @@
+<?php
+
+namespace App\Domain\Ai;
+
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Factory as HttpFactory;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
+
+/**
+ * OpenRouterClient — the thin, well-tested seam to OpenRouter.
+ *
+ * Single responsibility: build the request, send it, parse the response, mask the
+ * logs. Knows NOTHING about credits, tenancy or the pipeline. It reads the
+ * server-only key from config, sends the three required headers, honours the
+ * timeout, masks every log line (bearer key + image payloads), and classifies
+ * every failure into a typed OpenRouterException.
+ *
+ * The fallback is owned HERE (not provider-side) so classification is clean: a
+ * primary failure is retried (bounded backoff on transient) then re-called on the
+ * fallback model, and the terminal failure carries a stable error code.
+ */
+final class OpenRouterClient
+{
+    // === CONSTANTS ===
+    private const CHAT_PATH = '/chat/completions';
+    private const GENERATION_PATH = '/generation';
+
+    // Required headers (OpenRouter attribution + auth).
+    private const HEADER_REFERER = 'HTTP-Referer';
+    private const HEADER_TITLE = 'X-Title';
+
+    // Config keys (server-only key lives in config/services.php openrouter.*).
+    private const CFG_KEY = 'services.openrouter.key';
+    private const CFG_BASE_URL = 'services.openrouter.base_url';
+    private const CFG_TIMEOUT = 'services.openrouter.timeout';
+    private const CFG_REFERER = 'services.openrouter.http_referer';
+    private const CFG_TITLE = 'services.openrouter.app_title';
+
+    // Backoff / retry knobs. Bounded — a blind retry risks a double spend.
+    private const MAX_RETRIES = 1;            // one bounded retry on the primary per model
+    private const BACKOFF_BASE_MS = 400;      // exponential base
+    private const BACKOFF_JITTER_MS = 250;    // +- jitter
+    private const COST_LOOKUP_ATTEMPTS = 3;   // the generation endpoint can lag
+    private const COST_LOOKUP_BACKOFF_MS = 300;
+
+    // Masking — show only the prefix of the bearer key in logs.
+    private const KEY_VISIBLE_PREFIX = 8;
+    private const KEY_MASK = '****';
+
+    // Retryable provider statuses.
+    private const STATUS_RATE_LIMITED = 429;
+    private const STATUS_SERVER_MIN = 500;
+
+    public function __construct(
+        private readonly HttpFactory $http,
+    ) {}
+
+    /**
+     * POST a chat/completions body and return the raw decoded response array.
+     * Classifies HTTP-level failures; does NOT interpret the choices (the
+     * operation callers do that). Single model id — fallback is orchestrated by
+     * callWithFallback().
+     *
+     * @param  array<string,mixed>  $body
+     * @return array<string,mixed>
+     */
+    public function chat(array $body, string $operationKey): array
+    {
+        $model = (string) ($body['model'] ?? 'unknown');
+
+        try {
+            $response = $this->request()->post(self::CHAT_PATH, $body);
+        } catch (ConnectionException $e) {
+            $this->logOutcome($operationKey, $model, 'timeout', null, null, null);
+
+            throw OpenRouterException::make(
+                OpenRouterException::CODE_MODEL_TIMEOUT,
+                sprintf('OpenRouter call timed out for model %s.', $model),
+                modelUsed: $model,
+                previous: $e,
+            );
+        }
+
+        return $this->handleResponse($response, $operationKey, $model);
+    }
+
+    /**
+     * Run buildBody($model) against the primary model, retrying transient
+     * failures with bounded backoff, then falling back to $fallbackModel. Returns
+     * the decoded response of the first success. Re-throws a classified terminal
+     * error otherwise.
+     *
+     * @param  callable(string):array<string,mixed>  $buildBody
+     * @return array<string,mixed>
+     */
+    public function callWithFallback(
+        string $operationKey,
+        string $primaryModel,
+        ?string $fallbackModel,
+        callable $buildBody,
+    ): array {
+        $models = array_values(array_filter([$primaryModel, $fallbackModel]));
+        $last = null;
+
+        foreach ($models as $index => $model) {
+            $attempt = 0;
+
+            while (true) {
+                try {
+                    return $this->chat($buildBody($model), $operationKey);
+                } catch (OpenRouterException $e) {
+                    $last = $e;
+
+                    // Bounded retry on the SAME model only for transient errors.
+                    if ($e->isTransient() && $attempt < self::MAX_RETRIES) {
+                        $this->sleepBackoff($attempt);
+                        $attempt++;
+
+                        continue;
+                    }
+
+                    // bad_request is our bug — do not waste a fallback on it.
+                    if ($e->errorCode === OpenRouterException::CODE_BAD_REQUEST) {
+                        throw $e;
+                    }
+
+                    // Move to the next (fallback) model, if any.
+                    break;
+                }
+            }
+        }
+
+        throw $last ?? OpenRouterException::make(
+            OpenRouterException::CODE_PROVIDER_OUTAGE,
+            sprintf('No model produced a response for operation %s.', $operationKey),
+        );
+    }
+
+    /**
+     * Resolve the cost of a generation: inline usage.cost first, then the
+     * generation cost endpoint (retried for lag), then an honest unavailable.
+     * NEVER guesses a number.
+     *
+     * @param  array<string,mixed>  $response
+     */
+    public function parseCost(array $response, ?int $estimatedCostMicroUsd = null): ParsedCost
+    {
+        $inline = $this->extractInlineCost($response);
+
+        if ($inline !== null) {
+            return ParsedCost::inline($inline);
+        }
+
+        $generationId = $this->extractGenerationId($response);
+
+        if ($generationId !== null) {
+            $endpointCost = $this->lookupGenerationCost($generationId);
+
+            if ($endpointCost !== null) {
+                return ParsedCost::fromEndpoint($endpointCost);
+            }
+        }
+
+        return ParsedCost::unavailable($estimatedCostMicroUsd);
+    }
+
+    /** The OpenRouter generation id from a chat response, if present. */
+    public function extractGenerationId(array $response): ?string
+    {
+        $id = $response['id'] ?? null;
+
+        return is_string($id) && $id !== '' ? $id : null;
+    }
+
+    /** The model OpenRouter actually used (may be the fallback). */
+    public function extractModelUsed(array $response, string $requested): string
+    {
+        $used = $response['model'] ?? null;
+
+        return is_string($used) && $used !== '' ? $used : $requested;
+    }
+
+    /**
+     * Build the pending request with the three required headers + the server-only
+     * bearer. The key is set via withToken so it is never assembled into a logged
+     * string here.
+     */
+    private function request(): PendingRequest
+    {
+        return $this->http
+            ->baseUrl((string) config(self::CFG_BASE_URL))
+            ->timeout((int) config(self::CFG_TIMEOUT))
+            ->withToken((string) config(self::CFG_KEY))
+            ->withHeaders([
+                self::HEADER_REFERER => (string) config(self::CFG_REFERER),
+                self::HEADER_TITLE => (string) config(self::CFG_TITLE),
+            ])
+            ->acceptJson()
+            ->asJson();
+    }
+
+    /**
+     * Turn an HTTP response into a decoded array or a classified exception.
+     * Treats every response as hostile: a 200 may wrap a provider error envelope.
+     *
+     * @return array<string,mixed>
+     */
+    private function handleResponse(Response $response, string $operationKey, string $model): array
+    {
+        $status = $response->status();
+        $decoded = $this->safeDecode($response->body());
+
+        // Provider error envelope can arrive on a 200 OR an error status.
+        $envelope = is_array($decoded) ? ($decoded['error'] ?? null) : null;
+
+        if ($response->successful() && $envelope === null) {
+            $this->logOutcome($operationKey, $model, 'ok', $status, $this->extractGenerationId($decoded ?? []), $decoded);
+
+            return $decoded ?? [];
+        }
+
+        $providerMessage = is_array($envelope) ? (string) ($envelope['message'] ?? '') : $response->body();
+        $code = $this->classifyStatus($status, $providerMessage);
+
+        $this->logOutcome($operationKey, $model, $code, $status, null, null);
+
+        throw OpenRouterException::make(
+            $code,
+            sprintf('OpenRouter %s for model %s (status %d): %s', $code, $model, $status, $this->mask($providerMessage)),
+            providerStatus: $status,
+            modelUsed: $model,
+        );
+    }
+
+    /** Map a provider status + message to a stable error code. */
+    private function classifyStatus(int $status, string $message): string
+    {
+        if ($status === self::STATUS_RATE_LIMITED) {
+            return OpenRouterException::CODE_RATE_LIMITED;
+        }
+
+        if ($status >= self::STATUS_SERVER_MIN) {
+            return OpenRouterException::CODE_PROVIDER_OUTAGE;
+        }
+
+        $needle = mb_strtolower($message);
+
+        // Content / safety refusals classify as model_refused (release, surface).
+        if (str_contains($needle, 'moderation')
+            || str_contains($needle, 'content')
+            || str_contains($needle, 'safety')
+            || str_contains($needle, 'flagged')) {
+            return OpenRouterException::CODE_MODEL_REFUSED;
+        }
+
+        // 4xx (other than 429) is a malformed request on our side.
+        return OpenRouterException::CODE_BAD_REQUEST;
+    }
+
+    /** The inline usage cost in USD, if the response carries it. */
+    private function extractInlineCost(array $response): ?float
+    {
+        $cost = $response['usage']['cost'] ?? null;
+
+        if (is_numeric($cost)) {
+            return (float) $cost;
+        }
+
+        return null;
+    }
+
+    /** Query the generation cost endpoint, retrying for the known lag. */
+    private function lookupGenerationCost(string $generationId): ?float
+    {
+        for ($attempt = 0; $attempt < self::COST_LOOKUP_ATTEMPTS; $attempt++) {
+            try {
+                $response = $this->request()->get(self::GENERATION_PATH, ['id' => $generationId]);
+            } catch (ConnectionException) {
+                $this->sleepCostBackoff();
+
+                continue;
+            }
+
+            if ($response->successful()) {
+                $cost = $this->extractEndpointCost($this->safeDecode($response->body()));
+
+                if ($cost !== null) {
+                    return $cost;
+                }
+            }
+
+            $this->sleepCostBackoff();
+        }
+
+        return null;
+    }
+
+    /** Cost from the generation endpoint payload (total_cost). */
+    private function extractEndpointCost(?array $decoded): ?float
+    {
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        $data = $decoded['data'] ?? $decoded;
+        $cost = $data['total_cost'] ?? ($data['usage'] ?? null);
+
+        if (is_numeric($cost)) {
+            return (float) $cost;
+        }
+
+        return null;
+    }
+
+    /** Decode a JSON body, returning null on garbage (never throws). */
+    private function safeDecode(string $body): ?array
+    {
+        $decoded = json_decode($body, true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * Masked, non-throwing log of a call outcome. NEVER logs the bearer key, the
+     * image payload, or the full body — only the model, operation, outcome,
+     * status, generation id and parsed cost.
+     *
+     * @param  array<string,mixed>|null  $decoded
+     */
+    private function logOutcome(
+        string $operationKey,
+        string $model,
+        string $outcome,
+        ?int $status,
+        ?string $generationId,
+        ?array $decoded,
+    ): void {
+        try {
+            $cost = $decoded !== null ? $this->extractInlineCost($decoded) : null;
+
+            Log::info('openrouter.call', [
+                'operation' => $operationKey,
+                'model' => $model,
+                'outcome' => $outcome,
+                'status' => $status,
+                'generation_id' => $generationId,
+                'cost_usd' => $cost,
+                'key' => $this->maskedKeyHint(),
+            ]);
+        } catch (\Throwable) {
+            // A log write must never block or throw into the call path.
+        }
+    }
+
+    /** A masked hint of the configured key for log correlation (never the key). */
+    private function maskedKeyHint(): string
+    {
+        return $this->mask((string) config(self::CFG_KEY));
+    }
+
+    /** Mask any secret-ish string to prefix + ****. */
+    private function mask(string $value): string
+    {
+        if ($value === '') {
+            return self::KEY_MASK;
+        }
+
+        if (mb_strlen($value) <= self::KEY_VISIBLE_PREFIX) {
+            return self::KEY_MASK;
+        }
+
+        return mb_substr($value, 0, self::KEY_VISIBLE_PREFIX).self::KEY_MASK;
+    }
+
+    /**
+     * Exponential jittered backoff for a transient retry. Uses the Sleep facade
+     * (not raw usleep) so production behaviour is identical but tests can
+     * Sleep::fake() — otherwise real sleeps make the money-path suite flaky
+     * (TS-OPENROUTER-003). Under Sleep::fake() no real time passes, so the random
+     * jitter stays (production thundering-herd protection) while tests assert the
+     * backoff was exercised by COUNT (Sleep::assertSlept*), not exact duration.
+     */
+    private function sleepBackoff(int $attempt): void
+    {
+        $base = self::BACKOFF_BASE_MS * (2 ** $attempt);
+        $jitter = random_int(0, self::BACKOFF_JITTER_MS);
+
+        Sleep::for($base + $jitter)->milliseconds();
+    }
+
+    /** Fixed backoff between generation-cost-endpoint lookups (also via Sleep). */
+    private function sleepCostBackoff(): void
+    {
+        Sleep::for(self::COST_LOOKUP_BACKOFF_MS)->milliseconds();
+    }
+}

@@ -1,0 +1,31 @@
+# FrankPHP / Caddy site config for the web service.
+# Railway provides $PORT; FrankPHP serves the Laravel public/ dir.
+{
+	frankenphp
+	# Disable the Caddy admin endpoint in production.
+	admin off
+	# Trust Railway's proxy so APP_URL / HTTPS detection works behind the edge
+	# (secure cookies, the widget's Origin checks, and signed-URL generation all
+	# depend on the request being seen as HTTPS).
+	servers {
+		trusted_proxies static private_ranges
+	}
+	log {
+		output stdout
+		format console
+	}
+}
+
+:{$PORT:8080} {
+	root * public/
+	encode zstd gzip
+
+	# Long-cache fingerprinted local assets (widget bundle + Filament build).
+	# Try-on images are served by the CDN in front of S3/R2, NOT from here.
+	@static {
+		path *.css *.js *.svg *.png *.jpg *.jpeg *.gif *.ico *.woff *.woff2 *.ttf
+	}
+	header @static Cache-Control "public, max-age=31536000, immutable"
+
+	php_server
+}
