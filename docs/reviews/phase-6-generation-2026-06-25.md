@@ -113,3 +113,59 @@ Recurring -> troubleshooting-archivist: hand the class real-usleep-plus-random-j
 GATE: BLOCKED - 1 blocking finding (non-deterministic money-path test suite; production money/tenant/media code
   PASSES by reading and by steady-state tests). Return to laravel-backend (+ ai-openrouter) to make the Phase-6
   money-path tests deterministic and prove 20x+ green; then re-review.
+
+
+## 2026-06-25T12:00:00Z - Phase 6 RE-REVIEW (clears the 2026-06-25 BLOCK above) - VERDICT: GREEN
+Reviewer: code-review-gatekeeper
+Re-review of: BLOCKER 1 (non-deterministic money-path suite) + the latent null-cost gap noted under it.
+Trigger: laravel-backend + ai-openrouter remediation. Re-read the changed code AND re-ran the suite myself
+  (not on the report's word).
+
+What I verified by READING the changed code:
+  - app/Domain/Ai/ParsedCost.php: the null-cost gap is now CLOSED AT THE TYPE. The constructor (:46-49)
+    forces available=false + source=unavailable whenever costUsd === null, regardless of caller intent. The
+    contradictory available=true/costUsd=null state I flagged is structurally impossible to construct. New
+    tests/Unit/Ai/ParsedCostTest.php proves the invariant over every path incl. the direct contradictory ctor.
+  - app/Domain/Generation/GenerateTryOnJob.php finalizeSuccess (:354-363): defense in depth - costUsd === null
+    routes to finalizeFailure(COST_UNAVAILABLE) BEFORE any CreditMath::chargeMicroUsd call; the charge math then
+    uses the local non-null $costUsd. chargeMicroUsd(null) is now unreachable on every path (the process()
+    :159 guard AND this success-boundary guard AND the ParsedCost type invariant - three independent layers).
+    A null/unavailable cost -> release + NO charge + free-try NOT consumed.
+  - app/Domain/Ai/OpenRouterClient.php (:386-398): backoff now sleeps via the Sleep facade
+    (Sleep::for(...)->milliseconds()), not raw usleep. Production behaviour identical; random_int jitter kept
+    for thundering-herd protection; tests Sleep::fake() it so no real time passes and timing is deterministic.
+  - tests/Feature/Generation/GenerationTestSupport.php: bootGenerationEnv() now Sleep::fake()s and deliberately
+    does NOT pre-install an empty Http::fake() (documented trap: an empty catch-all swallows later stubs). Each
+    test installs its own complete fake; no cross-test bleed under any --filter ordering. Sleep imported (:16).
+  - tests/Feature/Generation/GenerateTryOnJobTest.php double-dispatch (:158-191): now asserts the CLEAN
+    short-circuit - status stays succeeded, exactly ONE charge, ONE free try, and exactly ONE
+    generation_succeeded trace (proving the 2nd run returned null at lockAndPrecheck, never the transition
+    backstop). No expectException - if the 2nd run threw the illegal-transition RuntimeException the test would
+    error. cost_unavailable test (:131-156) asserts failed + COST_UNAVAILABLE + null charge_ledger_id + balance
+    intact + reserved 0 + zero charge rows + free-try not consumed. Both meaningful, not theatre.
+
+What I verified by RE-RUNNING (my own hands, not the report):
+  - php artisan test --filter Generation (default order): 15/15 GREEN, 43 passed / 177 assertions each.
+  - php artisan test --filter Generation --order-by=random: 10/10 GREEN, 43 passed / 177 assertions each.
+  - php artisan test (full, default order): 10/10 GREEN, 281 passed / 834 assertions each.
+  - php artisan test --order-by=random (full): 6/6 GREEN, 281 passed / 834 assertions each.
+  TOTAL: 41 consecutive green runs, ZERO flakes. The two failures from the BLOCK (chargeMicroUsd(null)
+  TypeError; succeeded->processing illegal-transition) did not recur in any run or any ordering. In the
+  original BLOCK the flake surfaced within the first few --filter Generation runs; it is now gone.
+
+Re-review disposition of the BLOCK:
+  - BLOCKER 1 (non-deterministic money-path suite): RESOLVED. Root cause (real usleep + random jitter, no
+    Sleep::fake; empty-Http::fake bleed) fixed at the source; proven by 41x stable green incl. random order.
+  - Latent null-cost gap (noted under the BLOCK): RESOLVED at the type (ParsedCost invariant) AND defended in
+    depth at the consumer (finalizeSuccess guard). chargeMicroUsd(null) is structurally unreachable.
+  - Suggestions 2 (loadSourceImage comment) and 3 (job size) were non-gating and remain owner discretion;
+    they do not affect this verdict.
+  - Harness traps logged by the team as TS-BUILD-004; the flake class logged as TS-OPENROUTER-003 - consistent
+    with my archivist handoff. (Re-confirm those entries land in docs/TROUBLESHOOTING.md.)
+
+MONEY-SAFETY: PASS (re-confirmed). TENANT-SAFETY: PASS. MEDIA: PASS. (All unchanged from the BLOCK's read; the
+  remediation touched only cost-typing + determinism, not the charge/reserve/release/idempotency/tenancy laws.)
+
+GATE: GREEN - the Phase-6 charge gate may flip. The only blocker is cleared, the money-path suite is
+  deterministic (41x green, incl. random order), and the null-cost gap is closed at the type + defended in
+  depth at the consumer. No re-review outstanding.

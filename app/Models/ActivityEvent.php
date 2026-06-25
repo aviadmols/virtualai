@@ -37,6 +37,7 @@ class ActivityEvent extends Model
     public const KIND_CREDIT_GATE_BLOCKED = 'credit_gate_blocked';
     public const KIND_LEAD_GATE_BLOCKED = 'lead_gate_blocked';
     public const KIND_LEAD_REGISTERED = 'lead_registered';
+    public const KIND_LEAD_ADDED_TO_CART = 'lead_added_to_cart';   // widget add-to-cart funnel event
 
     // Phase 6 generation-pipeline taxonomy. Each step of the money path leaves a trace.
     public const KIND_GENERATION_REQUESTED = 'generation_requested';   // StartGeneration created the row

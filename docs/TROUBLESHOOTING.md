@@ -999,7 +999,123 @@ The lookup axis. File each entry under exactly one category; cross-link the rest
 
 ## widget/storefront
 
-_No recorded issues yet._
+### TS-WIDGET-001 — the signed widget API must bind the tenant for the WHOLE request (run $next INSIDE Tenant::run), and resolve site_key BEFORE binding via an integer-only router
+- **Date:** 2026-06-25
+- **Category:** widget/storefront
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `widget-api`, `tenant-context`, `middleware`, `site-key-routing`, `belongs-to-account`, `global-scope`, `phase-7a`
+
+- **SYMPTOM (design tension, no live bug):** Building the Phase-7a widget-auth middleware,
+  two coupled problems: (1) `Site` is `BelongsToAccount` (fail-closed -> returns NOTHING
+  when no tenant is bound), but a widget request arrives with NO bound tenant, so
+  `Site::where('site_key', …)` cannot find the site to authenticate it — a chicken/egg
+  before binding. (2) The tenant must stay bound for the controller, but `Tenant::run()`
+  clears in `finally`; a naive `Tenant::run($id, fn () => $site)` returning the site would
+  UNBIND before the controller runs, leaving the controller with no tenant (or, worse,
+  tempting an ambient `Tenant::set()` that leaks into the next request).
+- **CONTEXT / TRIGGER:** Phase 7a, `ResolveWidgetSite` middleware for `/widget/v1/*`. Every
+  route resolves the site from the PUBLIC `site_key` + Origin allow-list, then binds the
+  tenant for the request lifecycle.
+- **ROOT CAUSE:** The fail-closed global scope is all-or-nothing per query — exactly the
+  safety we want everywhere EXCEPT the single "which tenant owns this site_key?" routing
+  step that by definition runs before a tenant is known. And the request lifecycle is a
+  scope: the bind must span $next, not just a resolve closure.
+- **SOLUTION:** Mirror the TS-CREDITS-004 webhook-router pattern + bind across $next.
+  (1) `app/Http/Widget/SiteRouter.php::accountIdForSiteKey()` does ONE
+  `DB::table('sites')->where('site_key', $key)->value('account_id')` — returns ONLY the
+  integer account_id (a routing fact; never the widget_secret / row data), keyed by the
+  globally-unique public site_key. (2) The middleware then runs the REST of the pipeline —
+  re-read the full `Site` through the NORMAL fail-closed global scope, Origin check, HMAC,
+  AND `$next($request)` — all INSIDE the `Tenant::run($accountId, fn () => …)` closure, so
+  the tenant is bound for the entire request and cleared in `finally` (never ambient,
+  never `withoutGlobalScopes()`). VERIFIED by `tests/Feature/Widget/WidgetAuthTest.php`
+  (unknown key -> 401, bad Origin -> 403, HMAC paths) + `WidgetIsolationTest.php`
+  (back-to-back two-site requests don't leak; `Tenant::check()` is false after the request;
+  end user B can't read A's generation/gallery; bootstrap for A never returns B's product).
+- **PREVENTION:** For any tenant-less inbound that must authenticate against a tenant model
+  (widget request, webhook): resolve ONLY the account_id via a single named, integer-only
+  router keyed by a value YOU minted (the public site_key), then `Tenant::run()` and do ALL
+  real work — including running the downstream pipeline/controller — INSIDE that closure so
+  the bind spans the whole request and self-clears. Never `withoutGlobalScopes()` a tenant
+  model to read its data; never `Tenant::set()` from a middleware (it would leak).
+- **RELATED:** [[laravel-backend]], [[TS-CREDITS-004]], [[TS-TENANCY-001]],
+  [[app/Http/Middleware/ResolveWidgetSite.php]], [[app/Http/Widget/SiteRouter.php]],
+  [[tests/Feature/Widget/WidgetAuthTest.php]], [[tests/Feature/Widget/WidgetIsolationTest.php]]
+
+### TS-WIDGET-002 — gate denials at the widget boundary must run as a PRE-DISPATCH check (no generation row / no job / no charge), and a denied generate is NEVER a 500
+- **Date:** 2026-06-25
+- **Category:** widget/storefront
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `widget-api`, `lead-gate`, `credit-gate`, `usage-gate`, `gate-denial`, `no-charge`, `typed-json`, `phase-7a`
+
+- **SYMPTOM (contract gap to close, not a bug):** Phase-7a spec requires
+  `POST /widget/v1/generations` to return a TYPED gate denial (out-of-credits /
+  signup-required / rate-limited) WITHOUT a charge and WITHOUT an OpenRouter call. But
+  `StartGeneration::handle()` does NOT run the LeadGate/CreditGate — those run
+  authoritatively inside `GenerateTryOnJob` on the worker (the row-locked money path). If
+  the controller just called `StartGeneration`, an out-of-credits shopper would get a
+  `pending` generation row + a dispatched job that only later cancels — not the immediate
+  typed denial the widget needs, and a needless row/job per denied click.
+- **CONTEXT / TRIGGER:** Phase 7a, the widget `GenerationController::store`. The two gates
+  are independent (LeadGate end-user, CreditGate merchant) and must both pass; a denial is
+  a typed result, never a 500 (ARCHITECTURE.md two-gates contract).
+- **ROOT CAUSE:** The gates live on the worker by design (defense in depth on the money
+  path). The HTTP boundary needs a FAST, friendly short-circuit that mirrors them so a
+  denial costs nothing and renders the right screen — without duplicating or weakening the
+  authoritative worker gates.
+- **SOLUTION:** `app/Http/Widget/WidgetGateService::check()` runs the three independent
+  gates as a PRE-DISPATCH check at the boundary: `UsageGate` (rate cap -> typed 429),
+  `CreditGate` (estimate from the DB-managed AI bag via `AiOperationResolver` +
+  `CreditEstimator`, never a literal -> 402 out-of-credits), `LeadGate` (-> 200 + signup
+  form). A denial returns a typed `WidgetResponse::gate(...)` and NEVER calls
+  `StartGeneration` — so NO generation row, NO job, NO OpenRouter call, NO charge. On pass
+  the controller calls `StartGeneration`, and `GenerateTryOnJob` STILL re-runs the gates on
+  the worker (defense in depth — this is a short-circuit, not the only guard). Gate
+  precedence on a both-block: the credit wall (402) is surfaced over signup (flows.md
+  decision — registering can't produce a try-on the merchant can't pay for). VERIFIED by
+  `tests/Feature/Widget/WidgetGatesTest.php` (out-of-credits -> 402 + `Http::assertNothingSent`
+  + 0 generation rows + 0 charge rows; free-tries-exhausted -> signup_required + no
+  OpenRouter; gate re-opens after `POST /leads`; both-block shows the credit wall).
+- **PREVENTION:** At an HTTP boundary in front of a worker-gated money path, run the gates
+  as a pre-dispatch typed check that short-circuits a denial BEFORE creating any row /
+  dispatching any job / calling the paid API — but keep the authoritative gates on the
+  worker (defense in depth). A gate denial is a typed JSON result (402/200/429), never a
+  500 and never a charge. The estimate for the credit gate comes from the resolver bag ×
+  the config/DB markup, never a literal at the call site.
+- **RELATED:** [[laravel-backend]], [[saas-credits-billing]], [[TS-CREDITS-005]],
+  [[app/Http/Widget/WidgetGateService.php]], [[app/Http/Controllers/Widget/GenerationController.php]],
+  [[tests/Feature/Widget/WidgetGatesTest.php]]
+
+### TS-WIDGET-003 — PHP array-union (`+`) keeps the LEFT operand on key collision; default site state silently overrode a test's per-case override
+- **Date:** 2026-06-25
+- **Category:** widget/storefront
+- **Severity:** minor (test-fixture ergonomics; not a code bug)
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `php`, `array-union`, `test-fixtures`, `factory-state`, `phase-7a`
+
+- **SYMPTOM:** Two `WidgetGatesTest` cases that passed `['free_generations_before_signup' => 0]`
+  to the site fixture got `free_generations_before_signup = 2` (the default) instead, so
+  the lead gate did NOT block and the assertions failed (expected a 200 signup-required,
+  got a 201 created).
+- **CONTEXT / TRIGGER:** Phase 7a, `WidgetApiTestSupport::makeSiteContext($siteState)`,
+  which built the site state as `['allowed_origins' => …, 'free_generations_before_signup' => 2] + $siteState`.
+- **ROOT CAUSE:** PHP's array `+` (union) operator keeps the value from the LEFT operand
+  for any duplicate key — the opposite of `array_merge`. So the hardcoded default `2` on
+  the left WON over the caller's `0` on the right; the per-case override was silently
+  dropped.
+- **SOLUTION:** Flip the operands so the caller's override wins:
+  `$siteState + ['allowed_origins' => …, 'free_generations_before_signup' => 2]` (defaults
+  on the RIGHT, only fill keys the caller didn't set). VERIFIED: the gate suite went green
+  (signup-required + re-open-after-signup cases pass).
+- **PREVENTION:** With PHP `+` on arrays, put DEFAULTS on the right and OVERRIDES on the
+  left (`$override + $defaults`) — or use `array_merge($defaults, $override)`. Never put a
+  hardcoded default on the left of `+` when the right side is a caller-supplied override.
+- **RELATED:** [[laravel-backend]], [[tests/Feature/Widget/WidgetApiTestSupport.php]]
 
 ## infra/railway/horizon
 
@@ -1188,6 +1304,58 @@ _No recorded issues yet._
   [[tests/Feature/Leads/MarketingConsentDefaultTest.php]], [[TS-BUILD-003]]
 
 ## build/deploy
+
+### TS-BUILD-004 — generation-suite determinism: `Sleep` is `Illuminate\Support\Sleep` (not `…\Facades\Sleep`), and a later `Http::fake([…])` does NOT override an earlier empty `Http::fake()`
+- **Date:** 2026-06-25
+- **Category:** build/deploy
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `flaky-tests`, `sleep-fake`, `http-fake`, `test-isolation`, `money-path`, `determinism`, `phase-6`
+
+- **SYMPTOM:** Closing the Phase-6 determinism blocker (the consumer side of
+  TS-OPENROUTER-003), two test-harness traps cost real time:
+  (1) `use Illuminate\Support\Facades\Sleep;` → fatal `Class
+  "Illuminate\Support\Facades\Sleep" not found` (18 generation tests errored at
+  `setUp`). (2) After fixing the import, 6 money-path tests failed with the WRONG
+  outcome (e.g. `ai_call_failed`/`cost_unavailable` instead of a charge, balance
+  unchanged at $5): the per-test `Http::fake([...])` success/outage stub was being
+  ignored and an EMPTY 200 returned for `/chat/completions`.
+- **CONTEXT / TRIGGER:** Phase 6. The generation/money-path tests exercise the REAL
+  `OpenRouterClient` (only the HTTP transport is faked), so the suite must `Sleep::fake()`
+  the client's backoff. A shared `GenerationTestSupport::bootGenerationEnv()` set up the
+  env, including (mistakenly) a pre-emptive empty `Http::fake()` "to isolate fakes."
+- **ROOT CAUSE:**
+  (1) Laravel's fakeable sleep helper lives at `Illuminate\Support\Sleep` (it is a
+  real class with a `fake()`/`assertSleptTimes()` API, NOT under `Support\Facades`);
+  the OpenRouterClient imports it from there. The test trait guessed the `Facades`
+  namespace by analogy with `Http`/`Storage`.
+  (2) In this Laravel version, `Http::fake()` (empty, a catch-all returning an empty
+  200) followed by a later `Http::fake([url => response])` does NOT replace the
+  catch-all — the empty stub WINS and swallows every request. Proven in a 6-line repl:
+  `Http::fake(); Http::fake(['…/x' => Http::response(['ok'=>true])]); Http::get('…/x')`
+  → empty body, `json('ok') === null`. The pre-emptive empty fake therefore masked
+  every per-test stub.
+- **SOLUTION:** (1) Import `use Illuminate\Support\Sleep;` and call `Sleep::fake()` in
+  `bootGenerationEnv()` so the real retry/cost-lookup backoff runs instantly. (2) Do
+  NOT pre-install an empty `Http::fake()`; each test installs its OWN COMPLETE
+  `Http::fake([...])` via a `fake*` helper before it dispatches, and the HTTP factory is
+  reset between tests, so there is no cross-test bleed under any `--filter` ordering.
+  VERIFIED: `php artisan test --filter Generation` 20/20 all-green + 10/10 under
+  `--order-by=random`; full `php artisan test` 20/20 all-green (281 passed, 834
+  assertions every run, 0 failures across all 40 runs).
+- **PREVENTION:**
+  - The fakeable sleep is `Illuminate\Support\Sleep` — never `…\Facades\Sleep`. Any
+    suite that exercises a class with `Sleep`-based backoff must `Sleep::fake()` in
+    `setUp` (mirror the AI suite). A quick `php -r` import check catches the namespace.
+  - Do NOT stack `Http::fake()` calls expecting the later one to override; an empty
+    catch-all installed first WINS. Install ONE complete fake per test (or reset
+    explicitly), and verify override behavior in a repl before relying on it.
+  - When a money-path test "passes the gate but charges nothing / balance unchanged,"
+    suspect the HTTP stub is being swallowed before suspecting the pipeline.
+- **RELATED:** [[laravel-backend]], [[ai-openrouter]], [[TS-OPENROUTER-003]],
+  [[tests/Feature/Generation/GenerationTestSupport.php]],
+  [[tests/Feature/Generation/GenerateTryOnJobTest.php]]
 
 ### TS-BUILD-003 — Phase-2 `sites.free_generations_before_signup` was NOT NULL; the lead gate's `null` ("signup never required") could not be stored
 - **Date:** 2026-06-25
