@@ -2,6 +2,10 @@
 
 namespace App\Domain\Ai;
 
+use App\Domain\Ai\Preview\OperationPreview;
+use App\Domain\Ai\Preview\ResolutionStep;
+use App\Domain\Ai\Preview\ResolutionTrace;
+use App\Domain\Ai\Preview\ResolvedOperation;
 use App\Models\AiModel;
 use App\Models\AiOperation;
 use App\Models\Prompt;
@@ -48,6 +52,17 @@ final class AiOperationResolver
     private const PROMPT_ORDER_COLUMN = 'version';
     private const PROMPT_TIEBREAK_COLUMN = 'id';
 
+    // Trace kinds (for the read-only preview): which decision a ResolutionTrace
+    // describes. Non-sensitive descriptors only — no secrets ever enter a trace.
+    private const TRACE_KIND_MODEL = 'model';
+    private const TRACE_KIND_PROMPT = 'prompt';
+
+    // Model-resolution trace levels (mirror resolveModel's precedence).
+    private const MODEL_LEVEL_SITE_OVERRIDE = 'site_override';
+    private const MODEL_LEVEL_ACCOUNT_OVERRIDE = 'account_override';
+    private const MODEL_LEVEL_OPERATION_DEFAULT = 'operation_default';
+    private const MODEL_LEVEL_CATALOG_DEFAULT = 'catalog_default';
+
     /**
      * Resolve the full AI-config bag for an operation.
      *
@@ -57,6 +72,46 @@ final class AiOperationResolver
      */
     public function for(string $operationKey, ?Site $site = null, ?string $productType = null): OperationConfig
     {
+        return $this->resolveInternal($operationKey, $site, $productType)->config;
+    }
+
+    /**
+     * READ-ONLY preview: "which prompt + which model wins, and why" — WITHOUT
+     * running a generation. Makes NO OpenRouter HTTP call and writes NOTHING.
+     *
+     * Reuses the EXACT SAME resolution precedence as for() (the shared
+     * resolveInternal() core), so the winner it reports is byte-for-byte the
+     * winner the real pipeline would pick. It additionally surfaces the
+     * per-level resolution traces for the prompts editor (Phase 8c).
+     *
+     * @param  string  $operationKey  one of AiOperation::KEYS
+     * @param  Site|null  $site  the site the call would run for (drives site/account overrides)
+     * @param  string|null  $productType  feeds the product_type prompt leg
+     */
+    public function preview(string $operationKey, ?Site $site = null, ?string $productType = null): OperationPreview
+    {
+        $resolved = $this->resolveInternal($operationKey, $site, $productType);
+
+        return OperationPreview::fromConfig(
+            config: $resolved->config,
+            siteId: $site?->getKey(),
+            accountId: $site?->account_id !== null ? (int) $site->account_id : null,
+            productType: $productType,
+            winningPromptId: $resolved->winningPrompt->getKey(),
+            winningPromptLevel: $resolved->winningPrompt->scope,
+            modelTrace: $resolved->modelTrace,
+            promptTrace: $resolved->promptTrace,
+        );
+    }
+
+    /**
+     * The SINGLE shared resolution core. Both for() and preview() call this, so
+     * they can never drift: the winning model + prompt are decided here exactly
+     * once. Building the traces is side-effect-free (only SELECTs) and identical
+     * whether or not the caller consumes them — for() simply ignores them.
+     */
+    private function resolveInternal(string $operationKey, ?Site $site, ?string $productType): ResolvedOperation
+    {
         $operation = AiOperation::query()
             ->where('operation_key', $operationKey)
             ->first();
@@ -65,11 +120,14 @@ final class AiOperationResolver
             throw new RuntimeException(sprintf(self::NO_OPERATION_MESSAGE, $operationKey));
         }
 
-        $model = $this->resolveModel($operation, $site);
+        $modelTrace = [];
+        $model = $this->resolveModel($operation, $site, $modelTrace);
         $fallback = $this->resolveFallback($operation);
-        $prompt = $this->resolvePrompt($operationKey, $site, $productType);
 
-        return new OperationConfig(
+        $promptTrace = [];
+        $prompt = $this->resolvePrompt($operationKey, $site, $productType, $promptTrace);
+
+        $config = new OperationConfig(
             operationKey: $operationKey,
             model: $model,
             fallbackModel: $fallback,
@@ -85,21 +143,47 @@ final class AiOperationResolver
             estimatedCostMicroUsd: $operation->estimated_cost_micro_usd,
             inputSchema: $operation->input_schema,
         );
+
+        return new ResolvedOperation(
+            config: $config,
+            winningPrompt: $prompt,
+            modelTrace: new ResolutionTrace(self::TRACE_KIND_MODEL, $modelTrace),
+            promptTrace: new ResolutionTrace(self::TRACE_KIND_PROMPT, $promptTrace),
+        );
     }
 
     /**
      * MODEL: site override -> account override -> operation default -> catalog default.
      * A tenant override is honoured only if it is in the operation's ai_models
      * allow-list (a tenant cannot point at an unlisted/retired model).
+     *
+     * The winner-selection logic is unchanged from the original resolve path;
+     * the &$trace out-parameter merely records each level considered for the
+     * read-only preview. for() ignores the trace; preview() surfaces it.
+     *
+     * @param  list<ResolutionStep>  $trace  out: the model-resolution walk
      */
-    private function resolveModel(AiOperation $operation, ?Site $site): string
+    private function resolveModel(AiOperation $operation, ?Site $site, array &$trace = []): string
     {
         $allowed = $this->allowedModelIds($operation->operation_key);
 
-        $override = $site?->ai_model ?? $this->accountModelOverride($operation, $site);
+        $siteOverride = $site?->ai_model;
+        $accountOverride = $this->accountModelOverride($operation, $site);
+        $override = $siteOverride ?? $accountOverride;
+        $overrideLevel = $siteOverride !== null
+            ? self::MODEL_LEVEL_SITE_OVERRIDE
+            : self::MODEL_LEVEL_ACCOUNT_OVERRIDE;
 
         if ($override !== null) {
             if (in_array($override, $allowed, true)) {
+                $trace[] = new ResolutionStep(
+                    level: $overrideLevel,
+                    outcome: ResolutionStep::OUTCOME_WON,
+                    detail: 'Tenant model override is allow-listed for this operation; it wins.',
+                    considered: ['requested_model' => $override, 'allow_listed' => true],
+                    winningId: $override,
+                );
+
                 return $override;
             }
 
@@ -107,13 +191,40 @@ final class AiOperationResolver
             // (a tenant can't point at an unlisted/retired model) but tell them so,
             // masked/non-sensitive — a model id + operation key are not secrets.
             $this->warnOverrideDropped($operation, $site, $override);
+            $trace[] = new ResolutionStep(
+                level: $overrideLevel,
+                outcome: ResolutionStep::OUTCOME_NO_MATCH,
+                detail: 'Tenant model override is NOT in the ai_models allow-list; dropped.',
+                considered: ['requested_model' => $override, 'allow_listed' => false],
+            );
+        } else {
+            $trace[] = new ResolutionStep(
+                level: $overrideLevel,
+                outcome: ResolutionStep::OUTCOME_NO_MATCH,
+                detail: 'No tenant model override configured.',
+                considered: ['requested_model' => null],
+            );
         }
 
         // The operation's own default is trusted even if the catalog is sparse
         // (it is platform-set, not tenant-set).
         if ($operation->default_model !== null) {
+            $trace[] = new ResolutionStep(
+                level: self::MODEL_LEVEL_OPERATION_DEFAULT,
+                outcome: ResolutionStep::OUTCOME_WON,
+                detail: 'ai_operations.default_model supplied the model.',
+                considered: ['default_model' => $operation->default_model],
+                winningId: $operation->default_model,
+            );
+
             return $operation->default_model;
         }
+
+        $trace[] = new ResolutionStep(
+            level: self::MODEL_LEVEL_OPERATION_DEFAULT,
+            outcome: ResolutionStep::OUTCOME_NO_MATCH,
+            detail: 'ai_operations.default_model is not set.',
+        );
 
         $catalogDefault = AiModel::query()
             ->forOperation($operation->operation_key)
@@ -121,8 +232,22 @@ final class AiOperationResolver
             ->value('model_id');
 
         if ($catalogDefault !== null) {
+            $trace[] = new ResolutionStep(
+                level: self::MODEL_LEVEL_CATALOG_DEFAULT,
+                outcome: ResolutionStep::OUTCOME_WON,
+                detail: 'ai_models is_default row supplied the model (catalog floor).',
+                considered: ['catalog_default' => $catalogDefault],
+                winningId: $catalogDefault,
+            );
+
             return $catalogDefault;
         }
+
+        $trace[] = new ResolutionStep(
+            level: self::MODEL_LEVEL_CATALOG_DEFAULT,
+            outcome: ResolutionStep::OUTCOME_NO_MATCH,
+            detail: 'No ai_models is_default row exists for this operation.',
+        );
 
         throw new RuntimeException(sprintf(self::NO_MODEL_MESSAGE, $operation->operation_key));
     }
@@ -180,45 +305,116 @@ final class AiOperationResolver
      * lowest id — so two competing same-leg rows always resolve the same way, even
      * before the unique constraint rejects them.
      */
-    private function resolvePrompt(string $operationKey, ?Site $site, ?string $productType): Prompt
+    private function resolvePrompt(string $operationKey, ?Site $site, ?string $productType, array &$trace = []): Prompt
     {
+        $winner = null;
+
         if ($site !== null) {
             $sitePrompt = $this->firstDeterministic(
                 Prompt::query()->siteScoped((int) $site->account_id, (int) $site->getKey(), $operationKey)
             );
+            $this->recordPromptLeg($trace, Prompt::SCOPE_SITE, $sitePrompt, $winner, [
+                'account_id' => (int) $site->account_id,
+                'site_id' => (int) $site->getKey(),
+            ]);
+            $winner ??= $sitePrompt;
 
-            if ($sitePrompt !== null) {
-                return $sitePrompt;
-            }
-
-            $accountPrompt = $this->firstDeterministic(
+            $accountPrompt = $winner !== null ? null : $this->firstDeterministic(
                 Prompt::query()->accountScoped((int) $site->account_id, $operationKey)
             );
-
-            if ($accountPrompt !== null) {
-                return $accountPrompt;
-            }
+            $this->recordPromptLeg($trace, Prompt::SCOPE_ACCOUNT, $accountPrompt, $winner, [
+                'account_id' => (int) $site->account_id,
+            ]);
+            $winner ??= $accountPrompt;
+        } else {
+            $this->recordSkippedLeg($trace, Prompt::SCOPE_SITE, 'No site in scope; site prompt leg skipped.');
+            $this->recordSkippedLeg($trace, Prompt::SCOPE_ACCOUNT, 'No site in scope; account prompt leg skipped.');
         }
 
         if ($productType !== null) {
-            $typePrompt = $this->firstDeterministic(
+            $typePrompt = $winner !== null ? null : $this->firstDeterministic(
                 Prompt::query()->productTypeScoped($productType, $operationKey)
             );
-
-            if ($typePrompt !== null) {
-                return $typePrompt;
-            }
+            $this->recordPromptLeg($trace, Prompt::SCOPE_PRODUCT_TYPE, $typePrompt, $winner, [
+                'product_type' => $productType,
+            ]);
+            $winner ??= $typePrompt;
+        } else {
+            $this->recordSkippedLeg($trace, Prompt::SCOPE_PRODUCT_TYPE, 'No product type supplied; product_type prompt leg skipped.');
         }
 
-        $global = $this->firstDeterministic(
+        $global = $winner !== null ? null : $this->firstDeterministic(
             Prompt::query()->globalScoped($operationKey)
         );
+        $this->recordPromptLeg($trace, Prompt::SCOPE_GLOBAL, $global, $winner, [], isFloor: true);
+        $winner ??= $global;
 
-        if ($global === null) {
+        if ($winner === null) {
             throw new RuntimeException(sprintf(self::NO_GLOBAL_PROMPT_MESSAGE, $operationKey));
         }
 
-        return $global;
+        return $winner;
+    }
+
+    /**
+     * Append one prompt-leg step to the trace. If a winner is already chosen this
+     * leg was NOT_REACHED (the real resolver short-circuited before it); else the
+     * row (if any) WON this leg, otherwise NO_MATCH. Marking already-won legs as
+     * NOT_REACHED keeps the trace faithful: the real resolver never queries them.
+     *
+     * @param  list<ResolutionStep>  $trace
+     * @param  array<string,mixed>  $considered
+     */
+    private function recordPromptLeg(array &$trace, string $level, ?Prompt $found, ?Prompt $existingWinner, array $considered, bool $isFloor = false): void
+    {
+        if ($existingWinner !== null) {
+            $trace[] = new ResolutionStep(
+                level: $level,
+                outcome: ResolutionStep::OUTCOME_NOT_REACHED,
+                detail: 'A more specific leg already won; this leg was never queried.',
+                considered: $considered,
+            );
+
+            return;
+        }
+
+        if ($found !== null) {
+            $trace[] = new ResolutionStep(
+                level: $level,
+                outcome: ResolutionStep::OUTCOME_WON,
+                detail: $isFloor
+                    ? 'The global prompt (the guaranteed floor) supplied the winner.'
+                    : sprintf('A %s-scoped prompt matched and won.', $level),
+                considered: $considered + ['prompt_version' => (int) $found->version],
+                winningId: $found->getKey(),
+            );
+
+            return;
+        }
+
+        $trace[] = new ResolutionStep(
+            level: $level,
+            outcome: ResolutionStep::OUTCOME_NO_MATCH,
+            detail: $isFloor
+                ? 'No global prompt exists for this operation (the loud-failure floor).'
+                : sprintf('No active %s-scoped prompt for this operation.', $level),
+            considered: $considered,
+        );
+    }
+
+    /**
+     * Append a SKIPPED step for a leg whose input was absent (no site / no
+     * product type), so the trace shows the leg was deliberately not considered.
+     *
+     * @param  list<ResolutionStep>  $trace
+     */
+    private function recordSkippedLeg(array &$trace, string $level, string $detail): void
+    {
+        $trace[] = new ResolutionStep(
+            level: $level,
+            outcome: ResolutionStep::OUTCOME_SKIPPED,
+            detail: $detail,
+        );
     }
 
     /**

@@ -1,0 +1,59 @@
+/* ============================================================================
+ * Tray On — PLATFORM panel theme (Super-Admin control plane). Brand: Indigo.
+ * ----------------------------------------------------------------------------
+ * Imports the locked shared token base + the shared component classes, then
+ * declares ONLY this panel's brand accent override (--toa-accent set) and remaps
+ * Filament's own --primary-* scale onto the brand so native components inherit it.
+ * No --to-* / structural value is declared here — that is tokens.css's job.
+ * Registered via PlatformPanelProvider->viteTheme().
+ *
+ * TOKENS CONSUMED: --toa-accent --toa-accent-hover --toa-accent-soft --toa-bg
+ *   --toa-surface --toa-border --to-font (+ everything the shared components use)
+ * ==========================================================================*/
+
+@import '/vendor/filament/filament/resources/css/theme.css';
+@import '../../to/tokens.css';
+@import '../shared/components/base.css';
+@import '../shared/components/badge.css';
+@import '../shared/components/kpi-card.css';
+@import '../shared/components/buttons.css';
+@import '../shared/components/data-table.css';
+@import '../shared/components/empty-state.css';
+
+@config 'tailwind.config.js';
+
+:root {
+    /* Platform brand = Indigo. Overrides ONLY the adapt-able admin accent set;
+       all structural tokens stay locked in tokens.css. (Values chosen here —
+       see the handoff report's open-token note.) */
+    --toa-accent: #4f46e5;        /* indigo-600 */
+    --toa-accent-hover: #4338ca;  /* indigo-700 */
+    --toa-accent-soft: #eef2ff;   /* indigo-50 — selected rows, active nav bg */
+    --toa-focus: rgb(79 70 229 / 35%);
+
+    /* Re-map Filament's own primary scale onto the brand so native buttons,
+       links, toggles, badges, and active states inherit Indigo for free. */
+    --primary-50: 238 242 255;
+    --primary-100: 224 231 255;
+    --primary-200: 199 210 254;
+    --primary-300: 165 180 252;
+    --primary-400: 129 140 248;
+    --primary-500: 99 102 241;
+    --primary-600: 79 70 229;
+    --primary-700: 67 56 202;
+    --primary-800: 55 48 163;
+    --primary-900: 49 46 129;
+    --primary-950: 30 27 75;
+}
+
+/* Heebo carries Hebrew + Latin in one stack so HE never falls back. */
+.fi-body {
+    font-family: var(--to-font);
+    background-color: var(--toa-bg);
+}
+
+/* RTL — layout uses logical properties everywhere, so no per-rule flip is
+   needed; only the sidebar text anchor is asserted for clarity. */
+[dir="rtl"] .fi-sidebar-nav {
+    text-align: start;
+}

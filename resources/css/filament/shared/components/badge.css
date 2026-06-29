@@ -1,0 +1,61 @@
+/* ============================================================================
+ * A2 — Status badge (pill). Tone classes map onto design-tokens.md §5; the tone
+ * is chosen by App\Support\Ui\StatusBadge (the CONST map), never inline.
+ * Always carries text (a11y) — never color-only.
+ * TOKENS: --to-r-pill --toa-type-caption-size --to-fw-medium --to-track-label
+ *   --to-success/-bg --to-warn/-bg --to-danger/-bg --to-info/-bg
+ *   --to-ink --to-ink-muted --to-rule-soft --to-space-1 --to-space-2
+ * ==========================================================================*/
+
+.to-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-1);
+    padding-block: var(--to-space-1);
+    padding-inline: var(--to-space-2);
+    border-radius: var(--to-r-pill);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.to-badge__dot {
+    inline-size: var(--to-space-1);
+    block-size: var(--to-space-1);
+    border-radius: var(--to-r-pill);
+    background: currentColor;
+}
+
+.to-badge--success {
+    color: var(--to-success);
+    background: var(--to-success-bg);
+}
+
+.to-badge--warn {
+    color: var(--to-warn);
+    background: var(--to-warn-bg);
+}
+
+.to-badge--danger {
+    color: var(--to-danger);
+    background: var(--to-danger-bg);
+}
+
+.to-badge--info {
+    color: var(--to-info);
+    background: var(--to-info-bg);
+}
+
+/* Neutral covers cancelled / charge / new / incomplete-as-neutral — ink text on
+   the soft rule wash. */
+.to-badge--neutral {
+    color: var(--to-ink-muted);
+    background: var(--to-rule-soft);
+}
+
+/* The ink-emphasis neutral (ledger charge, lead added_to_cart) uses full ink. */
+.to-badge--ink {
+    color: var(--to-ink);
+    background: var(--to-rule-soft);
+}

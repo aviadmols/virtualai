@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Account;
 use App\Observers\AccountObserver;
+use BezhanSalleh\FilamentLanguageSwitch\LanguageSwitch;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -31,5 +32,19 @@ class AppServiceProvider extends ServiceProvider
         if (str_starts_with((string) config('app.url'), 'https://')) {
             URL::forceScheme('https');
         }
+
+        // EN/HE language switch shown in the topbar of BOTH Filament panels.
+        // The chosen locale persists in the session; HtmlDirection reads it and
+        // sets app locale + dir before render so every __() string and Filament's
+        // own dir="rtl" resolve. A missing HE mirror is a release blocker — the
+        // catalog (lang/en + lang/he) mirrors 1:1.
+        LanguageSwitch::configureUsing(function (LanguageSwitch $switch): void {
+            $switch
+                ->locales(['en', 'he'])
+                ->labels([
+                    'en' => 'English',
+                    'he' => 'עברית',
+                ]);
+        });
     }
 }

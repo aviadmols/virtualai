@@ -1,0 +1,32 @@
+/* ============================================================================
+ * Shared admin base — typography + density overrides for both panels.
+ * Imported by platform/theme.css + merchant/theme.css. Variable-backed only.
+ * TOKENS: --to-font --toa-bg --toa-surface --toa-border --toa-gutter
+ *   --toa-type-body-size --toa-type-h-size --to-fw-medium --toa-radius-card
+ * ==========================================================================*/
+
+/* Heebo everywhere — single bilingual stack so Hebrew never falls back. */
+.fi-main,
+.fi-sidebar,
+.fi-topbar,
+.fi-modal {
+    font-family: var(--to-font);
+}
+
+/* Calm canvas behind cards. */
+.fi-main-ctn {
+    background-color: var(--toa-bg);
+}
+
+/* Section headings adopt the admin heading weight. */
+.fi-header-heading {
+    font-weight: var(--to-fw-medium);
+}
+
+/* Cards/sections pick up the admin card radius + calm shadow (density reads
+   friendlier with a soft lift, not the widget's dramatic layered shadow). */
+.fi-section,
+.fi-wi-stats-overview-stat {
+    border-radius: var(--toa-radius-card);
+    box-shadow: var(--toa-shadow-card);
+}

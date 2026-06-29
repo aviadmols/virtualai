@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Http\Middleware\HtmlDirection;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -21,18 +22,32 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
  * Merchant panel = the account owner's workspace (sites, scans, generations,
  * leads, credits view). Resources land here in Phase 8; this is the shell.
  * Marked default so the bare "/" of an authenticated merchant resolves here.
+ * Brand: Amber. Theme + tokens are in resources/css/filament/merchant/theme.css.
  */
 class MerchantPanelProvider extends PanelProvider
 {
     // === CONSTANTS ===
     private const PANEL_ID = 'merchant';
     private const PANEL_PATH = 'merchant';
+    private const THEME = 'resources/css/filament/merchant/theme.css';
     private const RESOURCE_NS = 'App\\Filament\\Merchant\\Resources';
     private const PAGE_NS = 'App\\Filament\\Merchant\\Pages';
     private const WIDGET_NS = 'App\\Filament\\Merchant\\Widgets';
     private const RESOURCE_DIR = 'Filament/Merchant/Resources';
     private const PAGE_DIR = 'Filament/Merchant/Pages';
     private const WIDGET_DIR = 'Filament/Merchant/Widgets';
+
+    /**
+     * Nav group order for the merchant workspace (resources land in 8c–8g and
+     * attach to these groups). Order is data, not scattered sorts. Labels
+     * resolve via __() from the nav lang file.
+     */
+    private const NAV_GROUPS = [
+        'nav.sites',
+        'nav.leads',
+        'nav.credits',
+        'nav.settings',
+    ];
 
     public function panel(Panel $panel): Panel
     {
@@ -44,6 +59,9 @@ class MerchantPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Amber,
             ])
+            ->viteTheme(self::THEME)
+            ->sidebarCollapsibleOnDesktop()
+            ->navigationGroups(self::navigationGroups())
             ->discoverResources(in: app_path(self::RESOURCE_DIR), for: self::RESOURCE_NS)
             ->discoverPages(in: app_path(self::PAGE_DIR), for: self::PAGE_NS)
             ->pages([
@@ -60,9 +78,19 @@ class MerchantPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+                HtmlDirection::class,
             ])
             ->authMiddleware([
                 Authenticate::class,
             ]);
+    }
+
+    /** Translated nav-group labels in the locked workspace order. */
+    private static function navigationGroups(): array
+    {
+        return array_map(
+            static fn (string $key): string => __($key),
+            self::NAV_GROUPS,
+        );
     }
 }

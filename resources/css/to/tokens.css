@@ -1,0 +1,178 @@
+/* ============================================================================
+ * Tray On — design tokens (the SINGLE declaration site for every custom property)
+ * ----------------------------------------------------------------------------
+ * Source of VALUES: docs/ux/design-tokens.md (owned by product-ux-architect).
+ * This file turns each spec token into exactly one CSS custom property. No
+ * component, page, or Blade partial may declare a --to-* / --toa-* / --tow-*
+ * anywhere else, and no raw color/radius/shadow/space literal may appear outside
+ * this file (the per-panel brand accent override is the only exception, and lives
+ * in each panel theme.css). Three layers, one base — never duplicate a value:
+ *   --to-*   shared Tabuzzco anchor (locked: ink/paper/rule, Heebo, radius,
+ *            shadow, motion, status colors). Both families derive from it.
+ *   --toa-*  admin family — clean/dense functional SaaS (KPI density, calm chrome).
+ *   --tow-*  widget family — premium, Tabuzzco-grounded, host-adaptive.
+ * Family layers REFERENCE the base (var(--to-…)); they never restate a value.
+ * ==========================================================================*/
+
+:root {
+    /* ---- 1.1 Shared color — monochrome anchor + status (LOCKED) -------- */
+    --to-ink: #000000;
+    --to-paper: #ffffff;
+    --to-rule: #bcbcbc;
+    --to-rule-soft: #efefef;
+    --to-ink-muted: #6b7280;
+    --to-ink-subtle: #9ca3af;
+
+    --to-success: #2d8a5a;
+    --to-success-bg: #e7f2ec;
+    --to-warn: #c77700;
+    --to-warn-bg: #fbf1e0;
+    --to-danger: #c4452d;
+    --to-danger-bg: #fbe9e9;
+    --to-info: #2d6a8a;
+    --to-info-bg: #e5eff4;
+
+    /* ---- 1.2 Typography — Heebo, the only typeface -------------------- */
+    --to-font: "Heebo", system-ui, sans-serif;
+    --to-fw-thin: 100;
+    --to-fw-extralight: 200;
+    --to-fw-light: 300;
+    --to-fw-regular: 400;
+    --to-fw-medium: 500;
+    --to-fw-semibold: 600;
+    --to-fw-bold: 700;
+    --to-fw-extrabold: 800;
+    --to-fw-black: 900;
+
+    --to-lh-body: 1.75;
+    --to-lh-display: 0.95;
+    --to-lh-medium: 1.2;
+    --to-track-tight: -0.01em;
+    --to-track-zero: 0;
+    --to-track-label: 3px;
+    --to-track-eyebrow: 4px;
+    --to-track-button: 2px;
+    --to-track-he: 2px;
+    --to-track-en: 5px;
+
+    /* ---- 1.3 Spacing scale ------------------------------------------- */
+    --to-space-1: 4px;
+    --to-space-2: 8px;
+    --to-space-3: 12px;
+    --to-space-4: 16px;
+    --to-space-5: 20px;
+    --to-space-6: 24px;
+    --to-space-8: 32px;
+    --to-space-10: 40px;
+    --to-space-12: 48px;
+    --to-space-16: 64px;
+    --to-space-20: 80px;
+    --to-space-24: 96px;
+    --to-space-32: 128px;
+
+    /* ---- 1.4 Radius -------------------------------------------------- */
+    --to-r-none: 0;
+    --to-r-card: 7px;
+    --to-r-pill: 999px;
+
+    /* ---- 1.5 Shadows (layered soft — SIGNATURE) ---------------------- */
+    --to-shadow-card: rgb(0 0 0 / 16%) 0 47px 46px -27px, rgb(0 0 0 / 6%) 0 2px 12px 0;
+    --to-shadow-hover: rgb(0 0 0 / 16%) 0 47px 46px -27px, rgb(0 0 0 / 16%) 0 2px 12px 0;
+    --to-shadow-soft: 0 5px 10px rgb(0 0 0 / 10%);
+
+    /* ---- 1.6 Motion (slow / calm — SIGNATURE) ------------------------ */
+    --to-t-fast: 0.3s ease;
+    --to-t-base: 0.5s ease;
+    --to-t-slow: 0.7s ease;
+
+    /* ---- 1.7 Borders ------------------------------------------------- */
+    --to-bw-input: 1px;
+    --to-bw-input-focus: 2px;
+    --to-bw-button: 1px;
+
+    /* ---- 1.8 Z-index scale ------------------------------------------- */
+    --to-z-base: 0;
+    --to-z-sticky: 100;
+    --to-z-dropdown: 200;
+    --to-z-widget-btn: 9000;
+    --to-z-overlay: 2147483000;
+    --to-z-modal: 2147483001;
+    --to-z-toast: 2147483002;
+
+    /* ========================================================================
+     * 2. Admin family — --toa-* (clean functional SaaS)
+     * --toa-accent / --toa-accent-hover are the ONLY adapt-able admin tokens;
+     * each panel theme.css overrides them to its brand (platform Indigo,
+     * merchant Amber). Everything else here is locked and shared by both panels.
+     * ======================================================================*/
+
+    /* 2.1 Admin color — default accent is the calm near-black anchor; panels
+       override --toa-accent/-hover. The rest are locked. */
+    --toa-accent: #111111;
+    --toa-accent-hover: #000000;
+    --toa-accent-soft: #f0f0ee;          /* selected-row / active-nav tint; panels override */
+    --toa-accent-on: var(--to-paper);    /* text/icon on the accent fill */
+    --toa-bg: #f8f8f5;
+    --toa-surface: var(--to-paper);
+    --toa-surface-alt: #fbfbf9;
+    --toa-border: #e6e6e1;
+    --toa-focus: rgb(17 17 17 / 35%);    /* panels override the rgb to their brand */
+
+    /* 2.2 Admin typography (density-tuned) */
+    --toa-type-kpi-size: 28px;
+    --toa-type-kpi-weight: var(--to-fw-black);
+    --toa-type-h-size: 18px;
+    --toa-type-h-weight: var(--to-fw-medium);
+    --toa-type-body-size: 14px;
+    --toa-type-body-weight: var(--to-fw-regular);
+    --toa-type-body-strong-weight: var(--to-fw-semibold);
+    --toa-type-caption-size: 12px;
+    --toa-type-caption-weight: var(--to-fw-medium);
+
+    /* 2.3 Admin radius (softer than widget — density reads friendlier) */
+    --toa-radius-card: 12px;
+    --toa-radius-control: 8px;
+    --toa-radius-field: 8px;
+
+    /* 2.4 Admin shadow / spacing aliases */
+    --toa-shadow-card: 0 1px 3px rgb(0 0 0 / 6%), 0 1px 2px rgb(0 0 0 / 4%);
+    --toa-gutter: var(--to-space-6);
+
+    /* ========================================================================
+     * 3. Widget family — --tow-* (premium, Tabuzzco-grounded, host-adaptive)
+     * In the storefront these live scoped to the widget root, NOT :root of the
+     * host page (the Shadow DOM contract with widget-embed). They are declared
+     * here so the token language is single-sourced; widget.css (Phase 9) scopes
+     * them to the widget root. Only --tow-accent (+ derived --tow-accent-on) is
+     * adapt-able; everything else is locked Tabuzzco.
+     * ======================================================================*/
+
+    /* 3.1 Widget color */
+    --tow-accent: var(--to-ink);
+    --tow-accent-on: var(--to-paper);
+    --tow-surface: var(--to-paper);
+    --tow-overlay: rgb(0 0 0 / 55%);
+    --tow-hairline: var(--to-rule-soft);
+
+    /* 3.2 Widget typography (the premium moments) */
+    --tow-type-display: 36px;
+    --tow-type-display-lg: 60px;
+    --tow-type-eyebrow-size: 14px;
+    --tow-type-body-size: 16px;
+    --tow-type-button-size: 13px;
+    --tow-type-caption-size: 13px;
+
+    /* 3.3 Widget radius / motion (locked Tabuzzco) */
+    --tow-radius-button: var(--to-r-none);
+    --tow-radius-image: var(--to-r-card);
+    --tow-radius-chip: var(--to-r-pill);
+    --tow-t-button: var(--to-t-base);
+    --tow-t-modal: var(--to-t-slow);
+
+    /* 3.4 Widget layout */
+    --tow-modal-w: 560px;
+    --tow-modal-radius: var(--to-r-card);
+    --tow-result-aspect: 3 / 4;
+    --tow-tile-w: 120px;
+    /* --tow-btn-w is inherited from the host add-to-cart at mount time (widget-embed). */
+}

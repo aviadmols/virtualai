@@ -1,0 +1,71 @@
+/* ============================================================================
+ * A3 — Data-table density + the "add filter" pill. Skins Filament's stable
+ * table classes (we do NOT re-template Filament's table Blade). Hairline rules,
+ * brand-soft selected-row tint, compact rows, sticky header, brand filter pill.
+ * TOKENS: --toa-border --toa-surface --toa-surface-alt --toa-accent-soft
+ *   --toa-accent --to-rule-soft --to-z-sticky --toa-type-caption-size
+ *   --to-track-label --to-fw-medium --to-ink-muted --to-space-2..6
+ *   --toa-radius-control --to-bw-input --to-t-fast
+ * ==========================================================================*/
+
+/* hairline rules + calm zebra. */
+.fi-ta-row {
+    transition: background-color var(--to-t-fast);
+}
+.fi-ta-row:nth-child(even) {
+    background-color: var(--toa-surface-alt);
+}
+.fi-ta-row:hover {
+    background-color: var(--toa-accent-soft);
+}
+
+/* selected row uses the brand-soft tint. */
+.fi-ta-row.fi-selected,
+.fi-ta-row:has(.fi-checkbox-input:checked) {
+    background-color: var(--toa-accent-soft);
+}
+
+/* header cells: uppercase tracked caption, sticky at the sticky z-layer. */
+.fi-ta-header-cell {
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    letter-spacing: var(--to-track-label);
+    text-transform: uppercase;
+    color: var(--to-ink-muted);
+}
+.fi-ta-header {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: var(--to-z-sticky);
+    background: var(--toa-surface);
+    border-block-end: var(--to-bw-input) solid var(--toa-border);
+}
+
+/* compact row height for dense lists. */
+.fi-ta-cell {
+    padding-block: var(--to-space-3);
+}
+
+/* numeric / currency columns align to the inline-end so digits line up in both
+   LTR and RTL (HE digits still align right). Applied via a Filament alignment
+   class the resources set; logical so it flips correctly. */
+.fi-ta-cell.fi-align-end .fi-ta-text {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+/* the "+ Add filter" control → a brand pill (dashed outline, brand on hover). */
+.to-add-filter,
+.fi-ta-filters-trigger .fi-icon-btn {
+    border: var(--to-bw-input) dashed var(--toa-border);
+    border-radius: var(--toa-radius-control);
+    color: var(--to-ink-muted);
+    padding-block: var(--to-space-1);
+    padding-inline: var(--to-space-3);
+    transition: border-color var(--to-t-fast), color var(--to-t-fast);
+}
+.to-add-filter:hover,
+.fi-ta-filters-trigger .fi-icon-btn:hover {
+    border-color: var(--toa-accent);
+    color: var(--toa-accent);
+}
