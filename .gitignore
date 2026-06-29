@@ -21,3 +21,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Playwright MCP debug artifacts (screenshots, snapshots, console logs)
+.playwright-mcp/
+/platform-dashboard-loggedin.png
