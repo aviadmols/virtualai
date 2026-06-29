@@ -15,8 +15,13 @@ RUN apk add --no-cache php83 php83-phar php83-mbstring php83-openssl php83-json 
     && ln -sf /usr/bin/php83 /usr/local/bin/php
 
 # Install PHP deps first (better layer caching).
+# --ignore-platform-reqs: this stage runs on alpine PHP 8.3, but composer.lock
+# requires PHP 8.4 + several extensions (intl, simplexml, fileinfo, …). This
+# vendor/ is NEVER executed here — it only gives Vite the Filament CSS files to
+# import. The real runtime vendor/ is installed in the FrankPHP 8.4 stage below
+# (with all extensions), so skipping the platform check here is safe.
 COPY composer.json composer.lock* ./
-RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist
+RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --ignore-platform-reqs
 
 # Install JS deps (separate layer so JS cache is not busted by PHP changes).
 COPY package.json package-lock.json* ./
