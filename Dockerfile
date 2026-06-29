@@ -7,9 +7,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-# Copy only the files Vite needs to compile.
-COPY vite.config.js ./
-COPY resources/ ./resources/
+# Copy the full app source so Vite has access to vendor files (e.g. Filament CSS).
+COPY . .
 
 # Compile assets into public/build/ (generates the manifest Vite requires).
 RUN npm run build
