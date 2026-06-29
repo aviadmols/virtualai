@@ -1,5 +1,22 @@
-# FrankPHP (PHP 8.4) image for the web service. Worker/scheduler services reuse
-# this same image and override the start command via the Procfile.
+# ── Stage 1: Node — build Vite/Tailwind frontend assets ─────────────────────
+FROM node:20-alpine AS node-builder
+
+WORKDIR /app
+
+# Install JS deps first (better layer caching).
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Copy only the files Vite needs to compile.
+COPY vite.config.js ./
+COPY resources/ ./resources/
+
+# Compile assets into public/build/ (generates the manifest Vite requires).
+RUN npm run build
+
+# ── Stage 2: FrankPHP (PHP 8.4) — production image ───────────────────────────
+# Worker/scheduler services reuse this same image and override the start
+# command via the Procfile.
 FROM dunglas/frankenphp:1-php8.4
 
 # System packages required by the PHP extensions below.
@@ -25,6 +42,12 @@ RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --opti
 
 # App source.
 COPY . .
+
+# Drop in the compiled frontend assets from the Node stage. This provides the
+# Vite manifest (public/build/manifest.json) that Laravel requires at runtime —
+# without it every page that calls vite() throws a 500.
+COPY --from=node-builder /app/public/build ./public/build
+
 RUN composer run-script post-autoload-dump --no-interaction 2>/dev/null || true
 
 # Publish Filament's CSS/JS into public/ so the panels are styled. Without this
