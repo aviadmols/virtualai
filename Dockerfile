@@ -27,6 +27,10 @@ RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --opti
 COPY . .
 RUN composer run-script post-autoload-dump --no-interaction 2>/dev/null || true
 
+# Publish Filament's CSS/JS into public/ so the panels are styled. Without this
+# /css/filament/* and /js/filament/* 404 in the browser (unstyled login/dashboard).
+RUN php artisan filament:assets
+
 ENV DB_CONNECTION=pgsql
 
 # CRITICAL: a config cache baked at build time (no OPENROUTER_API_KEY / APP_KEY /
