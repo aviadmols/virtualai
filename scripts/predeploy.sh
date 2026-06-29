@@ -21,6 +21,10 @@ php artisan trayon:predeploy-check
 # RAILWAY_SERVICE_NAME is unset (local) so local deploys still migrate.
 if [ "$SERVICE" = "web" ]; then
     php artisan migrate --force
+
+    # Bootstrap/refresh the platform super-admin from env, if provided. No-op when
+    # TRAYON_SUPERADMIN_EMAIL / TRAYON_SUPERADMIN_PASSWORD are unset. Idempotent; web-only.
+    php artisan trayon:make-super-admin
 else
     echo "predeploy: $SERVICE — skipping migrate (web is the canonical migrator)"
 fi

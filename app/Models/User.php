@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,13 +21,15 @@ use Illuminate\Notifications\Notifiable;
  * panel/query layer via the forAccount() query scope, not via the global
  * tenant scope.
  */
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
     // === CONSTANTS ===
     public const COLUMN_ACCOUNT_ID = 'account_id';
+    private const PANEL_PLATFORM = 'platform';
+    private const PANEL_MERCHANT = 'merchant';
 
     /**
      * The attributes that are mass assignable.
@@ -86,5 +90,18 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return (bool) $this->is_super_admin;
+    }
+
+    /**
+     * Panel access gate (required by Filament in non-local environments).
+     * Platform = super-admins only; Merchant = account-scoped owners only.
+     */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return match ($panel->getId()) {
+            self::PANEL_PLATFORM => $this->isSuperAdmin(),
+            self::PANEL_MERCHANT => ! $this->isSuperAdmin() && $this->account_id !== null,
+            default => false,
+        };
     }
 }
