@@ -1,0 +1,254 @@
+[     567ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform/login' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/forms/forms.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform/login:45
+[     567ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform/login' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/support/support.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform/login:50
+[     567ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform/login' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/filament/app.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform/login:61
+[     593ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform/login' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/notifications/notifications.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform/login:0
+[     593ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform/login' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/support/support.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform/login:0
+[     593ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform/login' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/filament/echo.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform/login:0
+[     593ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform/login' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/filament/app.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform/login:0
+[   43121ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/forms/forms.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:45
+[   43122ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/support/support.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:50
+[   43122ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/filament/app.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:61
+[   43123ms] [WARNING] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over a secure connection, but contains a form that targets an insecure endpoint 'http://web-production-25c4a8.up.railway.app/platform/logout'. This endpoint should be made available over a secure connection. @ https://web-production-25c4a8.up.railway.app/platform:287
+[   43126ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/notifications/notifications.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   43126ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/support/support.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   43126ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/filament/echo.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   43127ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/filament/app.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   43151ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "! $store.sidebar.isOpen"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   43152ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "$store.sidebar.isOpen"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   43152ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "$store.sidebar.isOpen"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   43152ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "
+                $store.sidebar.isOpen
+                    ? 'fi-sidebar-open w-[--sidebar-width] translate-x-0 shadow-xl ring-1 ring-gray-950\/5 dark:ring-white\/10 rtl:-translate-x-0 lg:sticky'                    : 'w-[--sidebar-width] -translate-x-full rtl:translate-x-full lg:sticky'
+            "
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   43169ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] ! $store.sidebar.isOpen (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:49)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37079
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at Function.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37073)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   43169ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] $store.sidebar.isOpen (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:47)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37079
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at Function.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37073)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   43169ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] $store.sidebar.isOpen (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:47)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37079
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at Function.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37073)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   43170ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] 
+                $store.sidebar.isOpen
+                    ? 'fi-sidebar-open w-[--sidebar-width] translate-x-0 shadow-xl ring-1 ring-gray-950\/5 dark:ring-white\/10 rtl:-translate-x-0 lg:sticky'                    : 'w-[--sidebar-width] -translate-x-full rtl:translate-x-full lg:sticky'
+             (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:4:32)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:35637
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at ga (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:35631)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   52976ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/forms/forms.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:45
+[   52976ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/support/support.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:50
+[   52976ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/filament/app.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:61
+[   52978ms] [WARNING] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over a secure connection, but contains a form that targets an insecure endpoint 'http://web-production-25c4a8.up.railway.app/platform/logout'. This endpoint should be made available over a secure connection. @ https://web-production-25c4a8.up.railway.app/platform:287
+[   52979ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/notifications/notifications.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   52979ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/support/support.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   52979ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/filament/echo.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   52979ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/filament/app.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   52997ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "! $store.sidebar.isOpen"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   52997ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "$store.sidebar.isOpen"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   52997ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "$store.sidebar.isOpen"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   52997ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "
+                $store.sidebar.isOpen
+                    ? 'fi-sidebar-open w-[--sidebar-width] translate-x-0 shadow-xl ring-1 ring-gray-950\/5 dark:ring-white\/10 rtl:-translate-x-0 lg:sticky'                    : 'w-[--sidebar-width] -translate-x-full rtl:translate-x-full lg:sticky'
+            "
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   53000ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] ! $store.sidebar.isOpen (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:49)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37079
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at Function.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37073)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   53000ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] $store.sidebar.isOpen (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:47)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37079
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at Function.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37073)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   53002ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] $store.sidebar.isOpen (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:47)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37079
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at Function.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37073)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   53002ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] 
+                $store.sidebar.isOpen
+                    ? 'fi-sidebar-open w-[--sidebar-width] translate-x-0 shadow-xl ring-1 ring-gray-950\/5 dark:ring-white\/10 rtl:-translate-x-0 lg:sticky'                    : 'w-[--sidebar-width] -translate-x-full rtl:translate-x-full lg:sticky'
+             (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:4:32)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:35637
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at ga (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:35631)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   61547ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'close')
+
+Expression: "window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   61554ms] TypeError: Cannot read properties of undefined (reading 'close')
+    at [Alpine] window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close() (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:99)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:40450
+    at o (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:29027)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:29911
+    at HTMLAnchorElement.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:29049)
+[   61854ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/forms/forms.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:45
+[   61854ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/support/support.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:50
+[   61854ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure stylesheet 'http://web-production-25c4a8.up.railway.app/css/filament/filament/app.css?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:61
+[   61855ms] [WARNING] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over a secure connection, but contains a form that targets an insecure endpoint 'http://web-production-25c4a8.up.railway.app/platform/logout'. This endpoint should be made available over a secure connection. @ https://web-production-25c4a8.up.railway.app/platform:287
+[   61856ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/notifications/notifications.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   61856ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/support/support.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   61857ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/filament/echo.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   61857ms] [ERROR] Mixed Content: The page at 'https://web-production-25c4a8.up.railway.app/platform' was loaded over HTTPS, but requested an insecure script 'http://web-production-25c4a8.up.railway.app/js/filament/filament/app.js?v=3.3.54.0'. This request has been blocked; the content must be served over HTTPS. @ https://web-production-25c4a8.up.railway.app/platform:0
+[   61870ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "! $store.sidebar.isOpen"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   61870ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "$store.sidebar.isOpen"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   61870ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "$store.sidebar.isOpen"
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   61870ms] [WARNING] Alpine Expression Error: Cannot read properties of undefined (reading 'isOpen')
+
+Expression: "
+                $store.sidebar.isOpen
+                    ? 'fi-sidebar-open w-[--sidebar-width] translate-x-0 shadow-xl ring-1 ring-gray-950\/5 dark:ring-white\/10 rtl:-translate-x-0 lg:sticky'                    : 'w-[--sidebar-width] -translate-x-full rtl:translate-x-full lg:sticky'
+            "
+
+ JSHandle@node @ https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:0
+[   61877ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] ! $store.sidebar.isOpen (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:49)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37079
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at Function.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37073)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   61878ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] $store.sidebar.isOpen (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:47)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37079
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at Function.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37073)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   61878ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] $store.sidebar.isOpen (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:3:47)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37079
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at Function.<anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:37073)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)
+[   61878ms] TypeError: Cannot read properties of undefined (reading 'isOpen')
+    at [Alpine] 
+                $store.sidebar.isOpen
+                    ? 'fi-sidebar-open w-[--sidebar-width] translate-x-0 shadow-xl ring-1 ring-gray-950\/5 dark:ring-white\/10 rtl:-translate-x-0 lg:sticky'                    : 'w-[--sidebar-width] -translate-x-full rtl:translate-x-full lg:sticky'
+             (eval at <anonymous> (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:747), <anonymous>:4:32)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:1163
+    at iu (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:17658)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:35637
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19520)
+    at Object.pc [as effect] (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:19307)
+    at Ue (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12795)
+    at https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:1:12909
+    at ga (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:35631)
+    at r (https://web-production-25c4a8.up.railway.app/livewire/livewire.min.js?id=e949cd11:5:3087)

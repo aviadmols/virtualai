@@ -26,7 +26,10 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        // Trust Railway's edge proxy so X-Forwarded-Proto/Host are honored: the app
+        // sees the request as HTTPS, so secure cookies, the widget Origin checks,
+        // and signed-URL generation behave correctly behind TLS termination.
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // The widget API must answer TYPED JSON, never an HTML error page, on any
