@@ -4,16 +4,23 @@ namespace App\Filament\Platform\Resources;
 
 use App\Domain\Credits\CreditMath;
 use App\Domain\Platform\PlatformCreditAdjustment;
+use App\Filament\Platform\Resources\AccountResource\Pages\CreateAccount;
+use App\Filament\Platform\Resources\AccountResource\Pages\EditAccount;
 use App\Filament\Platform\Resources\AccountResource\Pages\ListAccounts;
 use App\Filament\Platform\Resources\AccountResource\Pages\ViewAccount;
 use App\Models\Account;
+use App\Models\User;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\ActionGroup;
+use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -62,6 +69,9 @@ class AccountResource extends Resource
     private const ACTION_RESTORE = 'restore';
     private const ACTION_ADJUST = 'adjust';
 
+    // Locales the account may use (en is the default; he is the RTL mirror).
+    private const LOCALES = ['en', 'he'];
+
     public static function getModelLabel(): string
     {
         return __(self::LABEL_SINGULAR);
@@ -75,6 +85,64 @@ class AccountResource extends Resource
     public static function getNavigationGroup(): ?string
     {
         return __(self::$navigationGroup);
+    }
+
+    /**
+     * Create/edit form. On CREATE the owner-login section is shown and provisions the
+     * account's first user (PlatformAccountProvisioner) so the merchant can sign in; on
+     * EDIT only the account fields are editable. Status is never set here — it stays on
+     * the audited suspend/restore actions. No balance/reserved field (money safety).
+     */
+    public static function form(Form $form): Form
+    {
+        return $form->schema([
+            Section::make(__('platform.accounts.create.section'))
+                ->columns(2)
+                ->schema([
+                    TextInput::make('name')
+                        ->label(__('platform.accounts.field.name'))
+                        ->required()
+                        ->maxLength(255)
+                        ->columnSpanFull(),
+                    TextInput::make('company_name')
+                        ->label(__('platform.accounts.field.company'))
+                        ->maxLength(255),
+                    TextInput::make('billing_email')
+                        ->label(__('platform.accounts.field.billing_email'))
+                        ->email()
+                        ->maxLength(255),
+                    Select::make('locale')
+                        ->label(__('platform.accounts.field.locale'))
+                        ->options(self::localeOptions())
+                        ->default(Account::DEFAULT_LOCALE)
+                        ->required(),
+                ]),
+            Section::make(__('platform.accounts.create.owner_section'))
+                ->description(__('platform.accounts.create.owner_help'))
+                ->columns(2)
+                ->visibleOn('create')
+                ->schema([
+                    TextInput::make('owner_name')
+                        ->label(__('platform.accounts.create.owner_name'))
+                        ->required()
+                        ->maxLength(255),
+                    TextInput::make('owner_email')
+                        ->label(__('platform.accounts.create.owner_email'))
+                        ->email()
+                        ->required()
+                        ->maxLength(255)
+                        ->unique(table: User::class, column: 'email'),
+                    TextInput::make('owner_password')
+                        ->label(__('platform.accounts.create.owner_password'))
+                        ->helperText(__('platform.accounts.create.owner_password_help'))
+                        ->password()
+                        ->revealable()
+                        ->required()
+                        ->minLength(8)
+                        ->maxLength(255)
+                        ->columnSpanFull(),
+                ]),
+        ]);
     }
 
     public static function table(Table $table): Table
@@ -122,6 +190,8 @@ class AccountResource extends Resource
             ])
             ->actions([
                 ActionGroup::make([
+                    EditAction::make()
+                        ->label(__('platform.accounts.edit.label')),
                     self::adjustAction(),
                     self::suspendAction(),
                     self::restoreAction(),
@@ -138,7 +208,9 @@ class AccountResource extends Resource
     {
         return [
             'index' => ListAccounts::route('/'),
+            'create' => CreateAccount::route('/create'),
             'view' => ViewAccount::route('/{record}'),
+            'edit' => EditAccount::route('/{record}/edit'),
         ];
     }
 
@@ -270,6 +342,18 @@ class AccountResource extends Resource
 
         foreach (Account::STATUSES as $status) {
             $options[$status] = __('platform.accounts.status.'.$status);
+        }
+
+        return $options;
+    }
+
+    /** Supported locales → localised label options, for the create/edit select. */
+    private static function localeOptions(): array
+    {
+        $options = [];
+
+        foreach (self::LOCALES as $locale) {
+            $options[$locale] = __('platform.accounts.locale.'.$locale);
         }
 
         return $options;

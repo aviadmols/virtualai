@@ -7,6 +7,7 @@ return [
     'singular' => 'Site',
     'add' => 'Add site',
     'saved' => 'Site added',
+    'updated' => 'Site saved',
     'empty' => 'Add your first site to get started',
     'empty_sub' => 'A site is one storefront where the Tray On widget runs.',
     'field' => [
@@ -29,6 +30,7 @@ return [
         'pending' => 'Setup pending',
     ],
     'action' => [
+        'edit' => 'Edit',
         'embed' => 'Install code',
         'products' => 'Products',
         'review' => 'Review',

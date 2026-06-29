@@ -3,6 +3,7 @@
 namespace App\Filament\Merchant\Resources;
 
 use App\Filament\Merchant\Resources\SiteResource\Pages\CreateSite;
+use App\Filament\Merchant\Resources\SiteResource\Pages\EditSite;
 use App\Filament\Merchant\Resources\SiteResource\Pages\ListSites;
 use App\Filament\Merchant\Resources\SiteResource\Pages\ViewSite;
 use App\Models\Site;
@@ -10,6 +11,7 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -109,6 +111,10 @@ class SiteResource extends Resource
                     ->sortable()
                     ->alignEnd(),
             ])
+            ->actions([
+                EditAction::make()
+                    ->label(__('sites.action.edit')),
+            ])
             ->recordUrl(static fn (Site $record): string => ViewSite::getUrl(['record' => $record]))
             ->emptyStateHeading(__('sites.empty'))
             ->emptyStateDescription(__('sites.empty_sub'))
@@ -128,6 +134,7 @@ class SiteResource extends Resource
             'index' => ListSites::route('/'),
             'create' => CreateSite::route('/create'),
             'view' => ViewSite::route('/{record}'),
+            'edit' => EditSite::route('/{record}/edit'),
         ];
     }
 

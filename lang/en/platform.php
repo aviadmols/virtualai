@@ -51,6 +51,7 @@ return [
     'accounts' => [
         'title' => 'Accounts',
         'singular' => 'Account',
+        'add' => 'Add account',
         'col' => [
             'name' => 'Account',
             'status' => 'Status',
@@ -70,10 +71,29 @@ return [
             'meta' => 'Details',
         ],
         'field' => [
+            'name' => 'Account name',
             'company' => 'Company',
             'billing_email' => 'Billing email',
             'locale' => 'Locale',
             'spendable' => 'Spendable',
+        ],
+        'locale' => [
+            'en' => 'English',
+            'he' => 'Hebrew',
+        ],
+        'create' => [
+            'section' => 'Account',
+            'owner_section' => 'Owner login',
+            'owner_help' => 'The owner signs in to the merchant panel with these.',
+            'owner_name' => 'Owner name',
+            'owner_email' => 'Owner email',
+            'owner_password' => 'Temporary password',
+            'owner_password_help' => 'At least 8 characters. Share it with the owner so they can sign in.',
+            'saved' => 'Account created',
+        ],
+        'edit' => [
+            'label' => 'Edit',
+            'saved' => 'Account updated',
         ],
         'empty' => 'No accounts yet',
         'empty_sub' => 'Merchant accounts appear here as they sign up.',
@@ -116,10 +136,22 @@ return [
         ],
     ],
 
-    // P3 — Sites (cross-account, read).
+    // P3 — Sites (cross-account, full CRUD via audited seams).
     'sites' => [
         'title' => 'Sites',
         'singular' => 'Site',
+        'add' => 'Add site',
+        'edit' => 'Edit',
+        'saved' => 'Site created',
+        'updated' => 'Site saved',
+        'field' => [
+            'account' => 'Account',
+            'name' => 'Site name',
+            'domain' => 'Domain',
+            'domain_placeholder' => 'https://shop.example.com',
+            'origins' => 'Allowed origins',
+            'origins_help' => 'The widget only runs on these origins.',
+        ],
         'col' => [
             'name' => 'Site',
             'account' => 'Account',
