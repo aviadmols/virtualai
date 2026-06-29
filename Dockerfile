@@ -3,7 +3,22 @@ FROM node:20-alpine AS node-builder
 
 WORKDIR /app
 
-# Install JS deps first (better layer caching).
+# Install Composer so we can populate vendor/ before Vite runs.
+# Filament (and other packages) ship CSS/JS inside vendor/, and Vite imports
+# those files at build time — without vendor/ the npm build fails with a
+# "file not found" error for e.g. vendor/filament/filament/resources/css/theme.css.
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Composer requires PHP; install a minimal runtime (no extensions needed here).
+RUN apk add --no-cache php83 php83-phar php83-mbstring php83-openssl php83-json \
+        php83-tokenizer php83-xml php83-xmlwriter php83-dom php83-curl \
+    && ln -sf /usr/bin/php83 /usr/local/bin/php
+
+# Install PHP deps first (better layer caching).
+COPY composer.json composer.lock* ./
+RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist
+
+# Install JS deps (separate layer so JS cache is not busted by PHP changes).
 COPY package.json package-lock.json* ./
 RUN npm ci
 
