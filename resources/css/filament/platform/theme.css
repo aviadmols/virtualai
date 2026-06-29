@@ -19,6 +19,8 @@
 @import '../shared/components/buttons.css';
 @import '../shared/components/data-table.css';
 @import '../shared/components/empty-state.css';
+@import '../shared/components/costs-summary.css';
+@import '../shared/components/resolver-preview.css';
 
 @config 'tailwind.config.js';
 

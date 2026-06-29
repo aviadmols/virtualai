@@ -1,0 +1,331 @@
+/* ============================================================================
+ * A4 — Scan-review form. The merchant's confirm/correct surface: per product
+ * field a confidence chip + an editable value; per page selector the detected
+ * selector + a manual-entry input + a pick trigger + a test action with its
+ * outcome feedback. Row tone keys off the bucketed ConfidenceLevel (the §5 scan
+ * scale) — a low / not_detected row reads as "needs your eyes" at a glance.
+ * Pure layout + token-backed classes; ALL behaviour is Livewire/Alpine, ALL
+ * status logic is the ScanReview/ConfirmGate contract. No raw values, no inline.
+ *
+ * TOKENS: --toa-surface --toa-surface-alt --toa-border --toa-radius-card
+ *   --toa-radius-field --toa-shadow-card --to-ink --to-ink-muted --to-ink-subtle
+ *   --to-rule-soft --to-success --to-success-bg --to-warn --to-warn-bg
+ *   --to-danger --to-danger-bg --to-info --to-info-bg --to-space-1..8
+ *   --toa-type-h-size --toa-type-body-size --toa-type-caption-size
+ *   --to-fw-medium --to-fw-semibold --to-track-label --to-r-pill --to-r-card
+ *   --to-bw-input --to-bw-input-focus --to-t-fast --toa-accent --toa-accent-soft
+ *   --toa-focus --to-font
+ * ==========================================================================*/
+
+/* --- the page-level grid: two sectioned groups + a sticky confirm bar. --- */
+.to-scan {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-8);
+}
+
+.to-scan__group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-4);
+}
+
+.to-scan__group-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-1);
+}
+.to-scan__group-title {
+    color: var(--to-ink);
+    font-size: var(--toa-type-h-size);
+    font-weight: var(--to-fw-semibold);
+}
+.to-scan__group-sub {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+}
+
+/* --- one review row (field OR selector) --------------------------------- */
+.to-scan-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-3);
+    background: var(--toa-surface);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-card);
+    box-shadow: var(--toa-shadow-card);
+    padding: var(--to-space-5);
+    /* a leading tone accent on the inline-start edge — flips in RTL. */
+    border-inline-start: var(--to-space-1) solid var(--toa-border);
+    transition: border-color var(--to-t-fast), box-shadow var(--to-t-fast);
+}
+
+/* row tone by confidence level (the §5 scan scale, not a status machine). */
+.to-scan-row--high { border-inline-start-color: var(--to-success); }
+.to-scan-row--medium { border-inline-start-color: var(--to-warn); }
+.to-scan-row--low { border-inline-start-color: var(--to-danger); }
+.to-scan-row--not_detected { border-inline-start-color: var(--to-ink-subtle); }
+
+/* a row the merchant still must touch reads slightly louder (medium/low/none). */
+.to-scan-row--needs-review {
+    background: var(--toa-surface-alt);
+}
+/* once reviewed/acknowledged the row calms to a confirmed tint. */
+.to-scan-row--reviewed {
+    border-inline-start-color: var(--to-success);
+}
+
+.to-scan-row__head {
+    display: flex;
+    align-items: center;
+    gap: var(--to-space-3);
+    flex-wrap: wrap;
+}
+.to-scan-row__label {
+    color: var(--to-ink);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-medium);
+    flex: 1 1 auto;
+    min-inline-size: 0;
+}
+.to-scan-row__flags {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-2);
+}
+
+/* --- confidence chip — its own visual scale (high/mid/low/none). --------- */
+.to-conf {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-1);
+    padding-block: var(--to-space-1);
+    padding-inline: var(--to-space-3);
+    border-radius: var(--to-r-pill);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    letter-spacing: var(--to-track-label);
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.to-conf__dot {
+    inline-size: var(--to-space-2);
+    block-size: var(--to-space-2);
+    border-radius: var(--to-r-pill);
+    background: currentColor;
+}
+.to-conf--high { color: var(--to-success); background: var(--to-success-bg); }
+.to-conf--medium { color: var(--to-warn); background: var(--to-warn-bg); }
+.to-conf--low { color: var(--to-danger); background: var(--to-danger-bg); }
+.to-conf--not_detected { color: var(--to-ink-muted); background: var(--to-rule-soft); }
+
+/* an "optional" hint pill (variants / dimensions never block confirm). */
+.to-scan-row__optional {
+    display: inline-flex;
+    align-items: center;
+    padding-block: var(--to-space-1);
+    padding-inline: var(--to-space-3);
+    border-radius: var(--to-r-pill);
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-ink-muted);
+    border: var(--to-bw-input) solid var(--toa-border);
+}
+
+/* a "reviewed" acknowledgement badge. */
+.to-scan-row__reviewed-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-1);
+    color: var(--to-success);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+}
+.to-scan-row__reviewed-glyph {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+
+/* --- the value / selector body ------------------------------------------ */
+.to-scan-row__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-3);
+}
+
+/* token-backed input (underline-leaning, in the spirit of Aviad's forms). */
+.to-field {
+    inline-size: 100%;
+    background: var(--toa-surface);
+    color: var(--to-ink);
+    font-family: var(--to-font);
+    font-size: var(--toa-type-body-size);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-field);
+    padding-block: var(--to-space-2);
+    padding-inline: var(--to-space-3);
+    text-align: start;
+    transition: border-color var(--to-t-fast), box-shadow var(--to-t-fast);
+}
+.to-field::placeholder { color: var(--to-ink-subtle); }
+.to-field:focus {
+    outline: none;
+    border-color: var(--toa-accent);
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-focus);
+}
+textarea.to-field {
+    min-block-size: var(--to-space-16);
+    resize: vertical;
+    line-height: 1.5;
+}
+/* monospace for the selector inputs — code reads as code. */
+.to-field--mono {
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    font-size: var(--toa-type-caption-size);
+}
+
+.to-scan-row__hint {
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-caption-size);
+}
+
+/* --- selector row specifics --------------------------------------------- */
+.to-selector__detected {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-1);
+}
+.to-selector__detected-label,
+.to-selector__manual-label {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    letter-spacing: var(--to-track-label);
+    text-transform: uppercase;
+}
+/* the detected selector is shown read-only in a calm code chip. */
+.to-selector__detected-value {
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-ink);
+    background: var(--to-rule-soft);
+    border-radius: var(--toa-radius-field);
+    padding-block: var(--to-space-2);
+    padding-inline: var(--to-space-3);
+    overflow-x: auto;
+    white-space: nowrap;
+    text-align: start;
+    direction: ltr; /* selectors are always LTR code, even in a RTL page. */
+}
+.to-selector__detected-value--empty { color: var(--to-ink-subtle); }
+
+.to-selector__manual {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-1);
+}
+
+.to-selector__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--to-space-2);
+    flex-wrap: wrap;
+}
+
+/* test-outcome feedback line under the selector actions. */
+.to-selector__test {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-2);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+}
+.to-selector__test-glyph {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+.to-selector__test--matched { color: var(--to-success); }
+.to-selector__test--multiple { color: var(--to-warn); }
+.to-selector__test--not_found { color: var(--to-danger); }
+.to-selector__test--error { color: var(--to-danger); }
+.to-selector__test--testing { color: var(--to-ink-muted); }
+
+/* a spinner glyph for the testing state (reuses the button spin keyframe). */
+.to-selector__spinner {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+    border: var(--to-bw-input-focus) solid currentColor;
+    border-block-start-color: transparent;
+    border-radius: var(--to-r-pill);
+    animation: to-btn-spin 0.7s linear infinite;
+}
+
+/* --- variants summary (read-only chips inside the variants row) --------- */
+.to-scan-variants {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--to-space-2);
+}
+.to-scan-variant {
+    display: inline-flex;
+    align-items: center;
+    padding-block: var(--to-space-1);
+    padding-inline: var(--to-space-3);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-pill);
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-ink);
+    background: var(--toa-surface-alt);
+}
+
+/* --- the sticky confirm bar — gate-driven --------------------------------*/
+.to-scan-confirm {
+    position: sticky;
+    inset-block-end: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--to-space-4);
+    flex-wrap: wrap;
+    background: var(--toa-surface);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-card);
+    box-shadow: var(--toa-shadow-card);
+    padding: var(--to-space-5);
+    z-index: var(--to-z-sticky);
+}
+.to-scan-confirm__reason {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-2);
+    color: var(--to-warn);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-medium);
+}
+.to-scan-confirm__reason--ok { color: var(--to-success); }
+.to-scan-confirm__reason-glyph {
+    inline-size: var(--to-space-5);
+    block-size: var(--to-space-5);
+    flex: none;
+}
+.to-scan-confirm__blocking {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--to-space-2);
+    margin-block-start: var(--to-space-2);
+}
+.to-scan-confirm__blocking-chip {
+    display: inline-flex;
+    align-items: center;
+    padding-block: var(--to-space-1);
+    padding-inline: var(--to-space-3);
+    border-radius: var(--to-r-pill);
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-danger);
+    background: var(--to-danger-bg);
+}
+
+/* directional glyphs (the back chevron in the header) mirror in RTL — glyph
+   only, never text. The page header back link uses this hook. */
+[dir="rtl"] .to-scan__back-glyph {
+    transform: scaleX(-1);
+}

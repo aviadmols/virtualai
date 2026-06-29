@@ -23,28 +23,55 @@ class ActivityEvent extends Model
 
     // Actors.
     public const ACTOR_SYSTEM = 'system';
+
     public const ACTOR_MERCHANT = 'merchant';
+
     public const ACTOR_END_USER = 'end_user';
+
     public const ACTOR_WEBHOOK = 'webhook';
 
     // The typed kinds Phase 5a emits.
     public const KIND_OPENING_GRANT = 'opening_grant';
+
     public const KIND_CREDIT_GRANT = 'credit_grant';
+
     public const KIND_CREDIT_CHARGED = 'credit_charged';
+
     public const KIND_CREDIT_REFUNDED = 'credit_refunded';
+
     public const KIND_CREDIT_ADJUSTED = 'credit_adjusted';
+
     public const KIND_CREDIT_RESERVATION_RELEASED = 'credit_reservation_released';
+
     public const KIND_CREDIT_GATE_BLOCKED = 'credit_gate_blocked';
+
     public const KIND_LEAD_GATE_BLOCKED = 'lead_gate_blocked';
+
     public const KIND_LEAD_REGISTERED = 'lead_registered';
+
     public const KIND_LEAD_ADDED_TO_CART = 'lead_added_to_cart';   // widget add-to-cart funnel event
+
+    // Platform control-plane account actions (super-admin).
+    public const KIND_ACCOUNT_SUSPENDED = 'account_suspended';
+
+    public const KIND_ACCOUNT_RESTORED = 'account_restored';
+
+    // Site control-plane actions (merchant / platform admin).
+    public const KIND_SITE_KEY_REGENERATED = 'site_key_regenerated';
+
+    public const KIND_SITE_SETTINGS_UPDATED = 'site_settings_updated';
 
     // Phase 6 generation-pipeline taxonomy. Each step of the money path leaves a trace.
     public const KIND_GENERATION_REQUESTED = 'generation_requested';   // StartGeneration created the row
+
     public const KIND_GENERATION_RESERVED = 'generation_reserved';     // credit reserved, before the model call
+
     public const KIND_GENERATION_PROCESSING = 'generation_processing'; // model call in flight
+
     public const KIND_GENERATION_SUCCEEDED = 'generation_succeeded';   // result stored + charged
+
     public const KIND_GENERATION_FAILED = 'generation_failed';         // released, NO charge
+
     public const KIND_GENERATION_CANCELLED = 'generation_cancelled';
 
     protected $fillable = [

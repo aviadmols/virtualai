@@ -16,9 +16,17 @@
 @import '../shared/components/base.css';
 @import '../shared/components/badge.css';
 @import '../shared/components/kpi-card.css';
+@import '../shared/components/kpi-grid.css';
+@import '../shared/components/credit-banner.css';
+@import '../shared/components/lead-card.css';
 @import '../shared/components/buttons.css';
 @import '../shared/components/data-table.css';
 @import '../shared/components/empty-state.css';
+@import '../shared/components/scan-review.css';
+@import '../shared/components/embed-code.css';
+@import '../shared/components/buy-credits.css';
+@import '../shared/components/gallery.css';
+@import '../shared/components/settings-form.css';
 
 @config 'tailwind.config.js';
 

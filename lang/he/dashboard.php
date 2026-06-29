@@ -5,7 +5,11 @@
 return [
     'title' => 'סקירה',
     'kpi' => [
-        'balance' => 'יתרת קרדיטים',
+        'balance' => 'קרדיט זמין',
+        'sites' => 'אתרים',
+        'products' => 'מוצרים מאושרים',
+        'generations' => 'תמונות (30 ימים)',
+        'success_rate' => 'אחוז הצלחה',
         'generations_today' => 'תמונות היום',
         'generations_total' => 'סך התמונות',
         'leads' => 'לידים',

@@ -2,12 +2,13 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Merchant\Pages\Dashboard;
+use App\Http\Middleware\BindMerchantAccount;
 use App\Http\Middleware\HtmlDirection;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -65,7 +66,7 @@ class MerchantPanelProvider extends PanelProvider
             ->discoverResources(in: app_path(self::RESOURCE_DIR), for: self::RESOURCE_NS)
             ->discoverPages(in: app_path(self::PAGE_DIR), for: self::PAGE_NS)
             ->pages([
-                Pages\Dashboard::class,
+                Dashboard::class,
             ])
             ->discoverWidgets(in: app_path(self::WIDGET_DIR), for: self::WIDGET_NS)
             ->middleware([
@@ -80,8 +81,13 @@ class MerchantPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
                 HtmlDirection::class,
             ])
+            // BindMerchantAccount runs in authMiddleware, AFTER Authenticate, so
+            // the account-owner is resolved and the Tenant is bound to their
+            // account for the whole request (auto-scoping every BelongsToAccount
+            // query). It clears in finally and fails closed with no account.
             ->authMiddleware([
                 Authenticate::class,
+                BindMerchantAccount::class,
             ]);
     }
 

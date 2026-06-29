@@ -7,5 +7,6 @@ return [
         'low' => "You're running low on credits",
         'empty' => "You're out of credits. Buy more to keep generating try-ons.",
         'buy_cta' => 'Buy credits',
+        'balance_meta' => 'Spendable balance: :amount',
     ],
 ];

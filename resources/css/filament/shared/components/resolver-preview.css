@@ -1,0 +1,224 @@
+/* ============================================================================
+ * P5 — Resolver-preview panel (.to-rp). The read-only "which model + prompt wins,
+ * and why" surface on the prompt edit page: inputs, the model + prompt traces, the
+ * strtr substitution (a mono code surface on --toa-surface-alt), and the resolved
+ * config. Logical properties only (RTL-safe). No value literals — token-backed.
+ * TOKENS: --toa-surface --toa-surface-alt --toa-border --toa-radius-card
+ *   --toa-radius-control --toa-radius-field --toa-shadow-card --to-rule-soft
+ *   --to-space-1..8 --to-ink --to-ink-muted --to-fw-medium/semibold --to-font
+ *   --toa-type-h-size --toa-type-body-size --toa-type-caption-size --to-track-label
+ *   --toa-accent --toa-accent-on --toa-accent-hover --to-danger --to-danger-bg
+ *   --to-warn --to-warn-bg --to-t-fast --to-bw-input
+ * ==========================================================================*/
+
+.to-rp {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-6);
+    margin-block-start: var(--to-space-8);
+    background: var(--toa-surface);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-card);
+    box-shadow: var(--toa-shadow-card);
+    padding: var(--to-space-8);
+}
+
+.to-rp__title {
+    font-size: var(--toa-type-h-size);
+    font-weight: var(--to-fw-semibold);
+    color: var(--to-ink);
+}
+
+.to-rp__sub {
+    margin-block-start: var(--to-space-1);
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-ink-muted);
+}
+
+/* ---- inputs -------------------------------------------------------------- */
+.to-rp__inputs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--to-space-4);
+}
+
+.to-rp__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+    flex: 1 1 14rem;
+}
+
+.to-rp__label {
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    letter-spacing: var(--to-track-label);
+    text-transform: uppercase;
+    color: var(--to-ink-muted);
+    text-align: start;
+}
+
+.to-rp__select,
+.to-rp__input {
+    font-family: var(--to-font);
+    font-size: var(--toa-type-body-size);
+    color: var(--to-ink);
+    background: var(--toa-surface);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-field);
+    padding-block: var(--to-space-2);
+    padding-inline: var(--to-space-3);
+    text-align: start;
+    transition: border-color var(--to-t-fast);
+}
+
+.to-rp__select:focus,
+.to-rp__input:focus {
+    border-color: var(--toa-accent);
+    outline: none;
+}
+
+.to-rp__run {
+    flex: 0 0 auto;
+    font-family: var(--to-font);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-medium);
+    color: var(--toa-accent-on);
+    background: var(--toa-accent);
+    border: var(--to-bw-button) solid var(--toa-accent);
+    border-radius: var(--toa-radius-control);
+    padding-block: var(--to-space-2);
+    padding-inline: var(--to-space-5);
+    cursor: pointer;
+    transition: background-color var(--to-t-fast);
+}
+
+.to-rp__run:hover {
+    background: var(--toa-accent-hover);
+    border-color: var(--toa-accent-hover);
+}
+
+.to-rp__run:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+/* ---- alerts / empty states ---------------------------------------------- */
+.to-rp__alert {
+    font-size: var(--toa-type-body-size);
+    border-radius: var(--toa-radius-control);
+    padding-block: var(--to-space-3);
+    padding-inline: var(--to-space-4);
+}
+
+.to-rp__alert--idle {
+    color: var(--to-ink-muted);
+    background: var(--toa-surface-alt);
+    border: var(--to-bw-input) solid var(--toa-border);
+}
+
+.to-rp__alert--error {
+    color: var(--to-danger);
+    background: var(--to-danger-bg);
+    border: var(--to-bw-input) solid var(--to-danger);
+}
+
+/* ---- blocks (model / prompt / substitution / config) -------------------- */
+.to-rp__block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-3);
+    border-block-start: var(--to-bw-input) solid var(--to-rule-soft);
+    padding-block-start: var(--to-space-6);
+}
+
+.to-rp__block-title {
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-semibold);
+    letter-spacing: var(--to-track-label);
+    text-transform: uppercase;
+    color: var(--to-ink-muted);
+}
+
+/* ---- key/value rows ------------------------------------------------------ */
+.to-rp__kv {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+}
+
+.to-rp__kv-row {
+    display: grid;
+    grid-template-columns: 10rem 1fr;
+    gap: var(--to-space-4);
+    align-items: baseline;
+}
+
+.to-rp__kv-key {
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-ink-muted);
+    text-align: start;
+}
+
+.to-rp__kv-val {
+    font-size: var(--toa-type-body-size);
+    color: var(--to-ink);
+    text-align: start;
+}
+
+.to-rp__mono {
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    font-size: var(--toa-type-caption-size);
+}
+
+.to-rp__floor {
+    margin-inline-start: var(--to-space-2);
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-warn);
+}
+
+/* ---- the resolution trace ----------------------------------------------- */
+.to-rp__trace {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+    margin-block-start: var(--to-space-2);
+}
+
+.to-rp__trace-step {
+    display: flex;
+    align-items: center;
+    gap: var(--to-space-3);
+    flex-wrap: wrap;
+    font-size: var(--toa-type-caption-size);
+}
+
+.to-rp__trace-level {
+    min-inline-size: 8rem;
+    font-weight: var(--to-fw-medium);
+    color: var(--to-ink);
+    text-align: start;
+}
+
+.to-rp__trace-detail {
+    color: var(--to-ink-muted);
+    flex: 1 1 16rem;
+    text-align: start;
+}
+
+/* ---- the strtr substitution (read-only mono surface) -------------------- */
+.to-rp__code {
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    font-size: var(--toa-type-caption-size);
+    line-height: var(--to-lh-medium);
+    color: var(--to-ink);
+    background: var(--toa-surface-alt);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-field);
+    padding: var(--to-space-4);
+    white-space: pre-wrap;
+    word-break: break-word;
+    text-align: start;
+    overflow-x: auto;
+}

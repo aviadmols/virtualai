@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\EncryptedString;
 use App\Models\Concerns\BelongsToAccount;
+use Database\Factories\SiteFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,19 +20,28 @@ use Illuminate\Support\Str;
  */
 class Site extends Model
 {
-    /** @use HasFactory<\Database\Factories\SiteFactory> */
+    /** @use HasFactory<SiteFactory> */
     use BelongsToAccount, HasFactory;
 
     // === CONSTANTS ===
     // Public key sent by the widget in the browser. Random URL-safe token.
     private const SITE_KEY_PREFIX = 'site_';
+
     private const SITE_KEY_RANDOM_BYTES = 24;
 
     // Server-side HMAC secret, never sent to the browser.
     private const WIDGET_SECRET_RANDOM_BYTES = 32;
 
     public const DEFAULT_FREE_GENERATIONS_BEFORE_SIGNUP = 2;
+
     public const DEFAULT_RETENTION_DAYS = 30;
+
+    // Retention windows the merchant may choose (days). NULL is the "until manual
+    // delete" sentinel — no auto-purge window; media is kept until the merchant
+    // deletes it. The RetentionPurgeJob (Phase 9) skips a site whose window is null.
+    public const RETENTION_DAYS_ALLOWED = [7, 30, 90];
+
+    public const RETENTION_UNTIL_DELETE = null;
 
     protected $fillable = [
         'name',

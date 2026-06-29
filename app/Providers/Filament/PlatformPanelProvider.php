@@ -2,12 +2,12 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Platform\Pages\Dashboard;
 use App\Http\Middleware\HtmlDirection;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -65,7 +65,7 @@ class PlatformPanelProvider extends PanelProvider
             ->discoverResources(in: app_path(self::RESOURCE_DIR), for: self::RESOURCE_NS)
             ->discoverPages(in: app_path(self::PAGE_DIR), for: self::PAGE_NS)
             ->pages([
-                Pages\Dashboard::class,
+                Dashboard::class,
             ])
             ->discoverWidgets(in: app_path(self::WIDGET_DIR), for: self::WIDGET_NS)
             ->middleware([

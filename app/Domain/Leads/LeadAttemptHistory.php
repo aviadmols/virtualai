@@ -52,8 +52,12 @@ final class LeadAttemptHistory
         $hasResult = $generation->result_image_path !== null
             && $generation->result_image_path !== '';
 
-        // A succeeded generation whose result bytes are no longer on disk has been purged.
-        $objectExists = $hasResult && $this->media->exists($generation->result_image_path);
+        // A succeeded generation whose result bytes are no longer reachable on disk has
+        // been purged (retention) — or the disk is momentarily unreachable. Either way it
+        // degrades to the placeholder, never a broken image and never a 500.
+        [$objectExists, $thumbnailUrl] = $this->resolveThumbnail(
+            $hasResult ? $generation->result_image_path : null,
+        );
         $purged = $generation->isSucceeded() && ! $objectExists;
 
         return new LeadAttempt(
@@ -61,11 +65,36 @@ final class LeadAttemptHistory
             status: (string) $generation->status,
             productName: $generation->product?->name,
             variantOptions: $this->variantOptions($generation),
-            resultThumbnailUrl: $objectExists ? $this->media->signedUrl($generation->result_image_path) : null,
+            resultThumbnailUrl: $thumbnailUrl,
             purged: $purged,
             failureCode: $generation->failure_code,
             createdAt: $generation->created_at?->toIso8601String(),
         );
+    }
+
+    /**
+     * Resolve the result thumbnail defensively: returns [objectExists, signedUrl|null].
+     * Any media-disk failure — a purged object, or a misconfigured/unreachable disk in
+     * dev — collapses to [false, null] so the lead card shows the purged placeholder
+     * instead of surfacing a 500 from the storage driver.
+     *
+     * @return array{0:bool,1:?string}
+     */
+    private function resolveThumbnail(?string $path): array
+    {
+        if ($path === null || $path === '') {
+            return [false, null];
+        }
+
+        try {
+            if (! $this->media->exists($path)) {
+                return [false, null];
+            }
+
+            return [true, $this->media->signedUrl($path)];
+        } catch (\Throwable) {
+            return [false, null];
+        }
     }
 
     /**

@@ -836,6 +836,44 @@ The lookup axis. File each entry under exactly one category; cross-link the rest
 
 ## pdp-scan
 
+### TS-PDPSCAN-005 — A4 scan-review i18n keys: the read model references 5 keys not yet in lang/*/scan.php
+- **Date:** 2026-06-29
+- **Category:** pdp-scan
+- **Severity:** minor
+- **Recurrence:** 1
+- **Status:** open (UI/i18n agent must add the keys; pdp-scanner owns the contract, not lang/)
+- **Tags:** `i18n`, `scan-review`, `phase-8e`, `contract`, `a4`
+
+- **SYMPTOM:** The Phase-8e scan-review READ model (`app/Domain/Scan/Review/ScanReview.php`)
+  emits per-row `label_key` / `confidence_i18n_key` the A4 form binds to. Five referenced
+  keys are NOT yet in `lang/en/scan.php` (+ `lang/he`), so a literal `__()` of them would
+  render the raw key until the UI agent adds them.
+- **CONTEXT / TRIGGER:** Phase 8 Wave 2 (8e). pdp-scanner OWNS the scan boundary + the
+  contract shape but does NOT edit `lang/` (a UI/product-ux agent owns the catalog).
+  The read model added `product_type` + `main_image` field rows (the scan extracts
+  both), the sixth `description` SELECTOR role (only 5 were catalogued), and two extra
+  selector-test outcomes (`multiple`, `error`) beyond `test_ok`/`test_fail`.
+- **ROOT CAUSE:** The i18n catalog was specced before the field/selector/test-outcome
+  list was finalised by the scanner. The contract is now the source of truth.
+- **SOLUTION (for the UI/i18n agent — add to BOTH `lang/en/scan.php` and `lang/he/scan.php`,
+  mirrored 1:1, and the `docs/ux/i18n-catalog.md` table):**
+  - `scan.field.product_type` — "Product type" / "סוג מוצר"
+  - `scan.field.main_image` — "Main image" / "תמונה ראשית"
+  - `scan.selector.description` — "Description element" / "רכיב התיאור"
+  - `scan.selector.test_multiple` — "Matches several elements — narrow it" / "מתאים למספר רכיבים — צמצמו"
+  - `scan.selector.test_error` — "Could not test — see the scan error" / "הבדיקה נכשלה — ראו שגיאת סריקה"
+  The four confidence-level keys (`scan.confidence.high|medium|low|none`) already exist
+  and the bucketing is the single `ConfidenceLevel` value object — no new confidence keys.
+- **PREVENTION:** When an agent owns a CONTRACT but not its i18n catalog, it must LIST the
+  exact keys the contract needs and log them here rather than silently editing another
+  agent's `lang/`. The level→key map is `ScanConstants::LEVEL_I18N_KEY`; the row label keys
+  are `ScanReview::FIELD_LABEL_KEYS` + `scan.selector.{role}`; the test-outcome keys are in
+  `SelectorTestResult`.
+- **RELATED:** [[pdp-scanner]], [[admin-design-system]], [[product-ux-architect]],
+  [[app/Domain/Scan/Review/ScanReview.php]], [[app/Domain/Scan/Review/ConfidenceLevel.php]],
+  [[app/Domain/Scan/Review/SelectorTestResult.php]], [[lang/en/scan.php]],
+  [[docs/ux/i18n-catalog.md]]
+
 ### TS-PDPSCAN-004 — SSRF: guard validated the host STRING only; resolved-IP / redirect / byte-cap gaps
 - **Date:** 2026-06-25
 - **Category:** pdp-scan

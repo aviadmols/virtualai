@@ -137,6 +137,10 @@
     /* 2.4 Admin shadow / spacing aliases */
     --toa-shadow-card: 0 1px 3px rgb(0 0 0 / 6%), 0 1px 2px rgb(0 0 0 / 4%);
     --toa-gutter: var(--to-space-6);
+    /* min KPI-card track width before the band wraps (A1 auto-fit grid). */
+    --toa-kpi-min: 200px;
+    /* lead-card result-thumbnail tile edge (A7 attempt history). */
+    --toa-thumb: 64px;
 
     /* ========================================================================
      * 3. Widget family — --tow-* (premium, Tabuzzco-grounded, host-adaptive)

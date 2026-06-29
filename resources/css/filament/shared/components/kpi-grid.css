@@ -1,0 +1,19 @@
+/* ============================================================================
+ * A1 layout — the KPI band. A responsive auto-fit grid the merchant Dashboard
+ * widget drops <x-to.kpi> cards into. Density (min track + gap) is token-backed
+ * so both panels read identically. Pure layout — no colour/value literals.
+ * TOKENS: --to-space-4 --to-space-5 --toa-kpi-min
+ * ==========================================================================*/
+
+.to-kpi-grid {
+    display: grid;
+    gap: var(--to-space-5);
+    grid-template-columns: repeat(auto-fit, minmax(var(--toa-kpi-min), 1fr));
+}
+
+/* a thin stack the banner + grid share so the dashboard breathes consistently. */
+.to-dashboard-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-5);
+}

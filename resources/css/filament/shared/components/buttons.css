@@ -98,3 +98,16 @@
 @keyframes to-btn-spin {
     to { transform: rotate(360deg); }
 }
+
+/* Leading glyph inside a button (sized to the label cap-height). */
+.to-btn__icon-glyph {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+
+/* A wrapping row of CTA links (e.g. the site-hub settings links). */
+.to-site-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--to-space-3);
+}

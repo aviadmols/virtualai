@@ -67,6 +67,45 @@ final class ScanConstants
 
     public const REVIEW_FLOOR = 0.7;
 
+    // === CONFIDENCE LEVELS (the A4 review-form contract) ===
+    // The four buckets the review UI + the badge map (design-tokens §5) key off:
+    // a numeric score becomes exactly one of these. The bucketing thresholds are a
+    // pdp-scanner decision (the token map keys the bucketed level, not the raw score).
+    // high (calm, ready) ≥ REVIEW_FLOOR; medium (please confirm) ≥ LEVEL_MEDIUM_FLOOR;
+    // low (must review) > 0; not_detected = nothing extracted (null value / 0 score).
+    public const LEVEL_HIGH = 'high';
+
+    public const LEVEL_MEDIUM = 'medium';
+
+    public const LEVEL_LOW = 'low';
+
+    public const LEVEL_NOT_DETECTED = 'not_detected';
+
+    public const CONFIDENCE_LEVELS = [
+        self::LEVEL_HIGH,
+        self::LEVEL_MEDIUM,
+        self::LEVEL_LOW,
+        self::LEVEL_NOT_DETECTED,
+    ];
+
+    // medium floor: at/above REVIEW_FLOOR is high; this floor splits medium vs low.
+    public const LEVEL_MEDIUM_FLOOR = 0.45;
+
+    // The badge i18n key per level (design-tokens §5: not_detected -> ".none").
+    public const LEVEL_I18N_KEY = [
+        self::LEVEL_HIGH => 'scan.confidence.high',
+        self::LEVEL_MEDIUM => 'scan.confidence.medium',
+        self::LEVEL_LOW => 'scan.confidence.low',
+        self::LEVEL_NOT_DETECTED => 'scan.confidence.none',
+    ];
+
+    // A level BLOCKS confirm until the merchant reviews/edits the row. high/medium
+    // are pre-confirmable; low + not_detected must be touched (the no-auto-approve gate).
+    public const LEVELS_BLOCKING_CONFIRM = [
+        self::LEVEL_LOW,
+        self::LEVEL_NOT_DETECTED,
+    ];
+
     // A selector that resolves to exactly one element gets full verification
     // weight; a 0/>1 match is penalised hard and flagged.
     public const SELECTOR_MATCH_ONE_WEIGHT = 1.0;

@@ -5,7 +5,11 @@
 return [
     'title' => 'Overview',
     'kpi' => [
-        'balance' => 'Credit balance',
+        'balance' => 'Spendable credit',
+        'sites' => 'Sites',
+        'products' => 'Confirmed products',
+        'generations' => 'Try-ons (30d)',
+        'success_rate' => 'Success rate',
         'generations_today' => 'Try-ons today',
         'generations_total' => 'Try-ons total',
         'leads' => 'Leads',

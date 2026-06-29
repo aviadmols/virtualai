@@ -1,0 +1,178 @@
+/* ============================================================================
+ * M9 / A13 — Settings form primitives: field (label + control + help + error),
+ * select, number input, and a token-backed toggle. Logical properties so the form
+ * mirrors in HE (label/help/error align to start; the toggle thumb slides to the
+ * inline-end when checked). Pure layout + token colour; no literals.
+ * TOKENS: --toa-surface --toa-surface-alt --toa-border --toa-accent --toa-accent-on
+ *   --toa-focus --to-ink --to-ink-muted --to-danger --to-rule --toa-radius-field
+ *   --to-r-pill --to-space-1 --to-space-2 --to-space-3 --to-space-4 --to-space-6
+ *   --to-t-fast --toa-type-body-size --toa-type-caption-size --to-fw-medium --to-fw-semibold
+ * ==========================================================================*/
+
+.to-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-6);
+    max-inline-size: 38rem;
+}
+
+.to-form__actions {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.to-form__saving {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-2);
+}
+
+/* ---- Field (label + control + help + error) ---- */
+.to-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+}
+
+.to-field__label {
+    color: var(--to-ink);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-semibold);
+}
+
+.to-field__control {
+    inline-size: 100%;
+    padding-block: var(--to-space-2);
+    padding-inline: var(--to-space-3);
+    background: var(--toa-surface);
+    color: var(--to-ink);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-field);
+    font-family: var(--to-font);
+    font-size: var(--toa-type-body-size);
+    transition: border-color var(--to-t-fast), box-shadow var(--to-t-fast);
+}
+
+.to-field__control:focus {
+    outline: none;
+    border-color: var(--toa-accent);
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-focus);
+}
+
+/* Native select: strip the OS chrome so only one custom caret shows. The select +
+   caret live in an inline-block wrapper so the caret anchors to the control box
+   (not the whole field), and flips to the inline-start side in RTL automatically. */
+.to-select {
+    position: relative;
+    display: block;
+}
+
+select.to-field__control {
+    appearance: none;
+    background-image: none;
+    padding-inline-end: var(--to-space-8);
+    cursor: pointer;
+}
+
+.to-select__caret {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-end: var(--to-space-3);
+    inline-size: var(--to-space-3);
+    block-size: var(--to-space-3);
+    transform: translateY(-50%);
+    pointer-events: none;
+    background: var(--to-ink-muted);
+    clip-path: polygon(0 25%, 50% 75%, 100% 25%, 100% 40%, 50% 90%, 0 40%);
+}
+
+/* Numeric inputs read end-aligned (currency/count convention). */
+.to-field__control--number {
+    text-align: end;
+    max-inline-size: 12rem;
+}
+
+.to-field__help {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    margin: 0;
+}
+
+.to-field__error {
+    color: var(--to-danger);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    margin: 0;
+}
+
+/* ---- Toggle (checkbox styled as a switch) ---- */
+.to-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--to-space-3);
+    cursor: pointer;
+}
+
+/* The real checkbox drives state but is visually replaced by the track/thumb. It
+   stays in the label so a click/keypress on the switch toggles it; sized to zero +
+   transparent so only the styled track shows (no raw dimension literal). */
+.to-toggle__input {
+    position: absolute;
+    opacity: 0;
+    inline-size: 0;
+    block-size: 0;
+    margin: 0;
+}
+
+.to-toggle__track {
+    position: relative;
+    flex: 0 0 auto;
+    inline-size: var(--to-space-10);
+    block-size: var(--to-space-6);
+    background: var(--to-rule);
+    border-radius: var(--to-r-pill);
+    transition: background-color var(--to-t-fast);
+}
+
+.to-toggle__thumb {
+    position: absolute;
+    inset-block-start: var(--to-space-1);
+    inset-inline-start: var(--to-space-1);
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+    background: var(--toa-surface);
+    border-radius: var(--to-r-pill);
+    box-shadow: var(--to-shadow-soft);
+    transition: inset-inline-start var(--to-t-fast);
+}
+
+/* Checked: track turns accent, thumb slides to the inline-end (RTL-safe). */
+.to-toggle__input:checked + .to-toggle__track {
+    background: var(--toa-accent);
+}
+
+.to-toggle__input:checked + .to-toggle__track .to-toggle__thumb {
+    inset-inline-start: calc(var(--to-space-10) - var(--to-space-4) - var(--to-space-1));
+}
+
+.to-toggle__input:focus-visible + .to-toggle__track {
+    outline: none;
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-focus);
+}
+
+.to-toggle__text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-1);
+}
+
+.to-toggle__label {
+    color: var(--to-ink);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-toggle__help {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+}

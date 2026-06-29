@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Domain\Activity\ActivityRecorder;
+use App\Support\Tenant;
+use Database\Factories\AccountFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,11 +18,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Account extends Model
 {
-    /** @use HasFactory<\Database\Factories\AccountFactory> */
+    /** @use HasFactory<AccountFactory> */
     use HasFactory;
 
     // === CONSTANTS ===
     public const STATUS_ACTIVE = 'active';
+
     public const STATUS_SUSPENDED = 'suspended';
 
     public const STATUSES = [
@@ -28,6 +32,9 @@ class Account extends Model
     ];
 
     public const DEFAULT_LOCALE = 'en';
+
+    // Activity-detail key carrying the optional super-admin reason on a suspend.
+    private const META_REASON = 'reason';
 
     // The money columns are DELIBERATELY NOT fillable (S4): only CreditLedgerService
     // and ReservationManager mutate them, and only via forceFill() under a row lock.
@@ -74,5 +81,71 @@ class Account extends Model
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->status === self::STATUS_SUSPENDED;
+    }
+
+    /**
+     * Suspend the account (super-admin control-plane action). IDEMPOTENT: a no-op on an
+     * already-suspended account (no second status write, no duplicate trace). On a real
+     * change, writes the status and records an account_suspended event.
+     *
+     * A suspended account is already DENIED at generation start: CreditGate.isActive()
+     * is false, so GenerateTryOnJob cancels with the typed ACCOUNT_INACTIVE failure code
+     * (never a 500). This method only flips the gate input — no extra wiring needed.
+     *
+     * @return bool true if the status changed; false if already suspended (no-op)
+     */
+    public function suspend(?string $reason = null): bool
+    {
+        if ($this->isSuspended()) {
+            return false;
+        }
+
+        $this->forceFill(['status' => self::STATUS_SUSPENDED])->save();
+        $this->recordStatusEvent(ActivityEvent::KIND_ACCOUNT_SUSPENDED, [self::META_REASON => $reason]);
+
+        return true;
+    }
+
+    /**
+     * Restore a suspended account to active. IDEMPOTENT: a no-op on an already-active
+     * account. On a real change, writes the status and records an account_restored event;
+     * the next generation passes the CreditGate again.
+     *
+     * @return bool true if the status changed; false if already active (no-op)
+     */
+    public function restore(): bool
+    {
+        if ($this->isActive()) {
+            return false;
+        }
+
+        $this->forceFill(['status' => self::STATUS_ACTIVE])->save();
+        $this->recordStatusEvent(ActivityEvent::KIND_ACCOUNT_RESTORED, []);
+
+        return true;
+    }
+
+    /**
+     * Trace an account status change on the timeline. ActivityEvent is BelongsToAccount,
+     * so it is recorded INSIDE the account's own bound tenant (the trace is best-effort;
+     * ActivityRecorder swallows its own errors and never blocks the status write).
+     *
+     * @param  array<string,mixed>  $details
+     */
+    private function recordStatusEvent(string $kind, array $details): void
+    {
+        Tenant::run($this, function () use ($kind, $details): void {
+            app(ActivityRecorder::class)->record(
+                kind: $kind,
+                subject: $this,
+                details: $details,
+                actor: ActivityEvent::ACTOR_SYSTEM,
+            );
+        });
     }
 }
