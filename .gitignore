@@ -25,3 +25,5 @@ yarn-error.log
 # Playwright MCP debug artifacts (screenshots, snapshots, console logs)
 .playwright-mcp/
 /platform-dashboard-loggedin.png
+/public/css/filament
+/public/js/filament
