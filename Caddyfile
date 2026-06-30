@@ -20,12 +20,20 @@
 	root * public/
 	encode zstd gzip
 
-	# Long-cache fingerprinted local assets (widget bundle + Filament build).
-	# Try-on images are served by the CDN in front of S3/R2, NOT from here.
+	# Long-cache FINGERPRINTED local assets (Filament build — hashed filenames).
+	# The widget loader is excluded: it lives at a STABLE, unhashed URL
+	# (/widget/v1/widget.js) embedded on merchant stores, so it must NOT be immutable
+	# or a bug fix would never reach shoppers. Try-on images come from the CDN, not here.
 	@static {
 		path *.css *.js *.svg *.png *.jpg *.jpeg *.gif *.ico *.woff *.woff2 *.ttf
+		not path /widget/v1/*
 	}
 	header @static Cache-Control "public, max-age=31536000, immutable"
+
+	# The embedded widget loader: short cache + revalidate so fixes propagate fast
+	# (the per-site config the widget needs is fetched live via /widget/v1/bootstrap).
+	@widget path /widget/v1/*
+	header @widget Cache-Control "public, max-age=300, must-revalidate"
 
 	php_server
 }
