@@ -20,7 +20,12 @@ use App\Models\Site;
  * After signup (registered_at set) the site's post_signup_grant decides:
  *  - {type:'unlimited'}        -> always allowed.
  *  - {type:'limited', amount:M}-> allowed up to free_before + M total generations.
- *  - {type:'none'} / absent    -> the free-tries count still applies (no extra).
+ *  - ABSENT (null)             -> defaults to UNLIMITED: signing up UNLOCKS continued
+ *                                 try-ons (gated by the merchant's CreditGate) — the value
+ *                                 exchange for the lead. A dead-end here would loop the
+ *                                 signup form forever for an already-registered user.
+ *  - explicit {type:'none'}    -> no extra (a merchant who deliberately wants the free
+ *                                 count to be the hard cap even after signup).
  *
  * The gate is read-only and returns a TYPED LeadDecision — never throws for the
  * signup-required path, never a 500. The widget renders the signup form on a deny.
@@ -89,7 +94,9 @@ final class LeadGate
     private function decideRegistered(int $freeBefore, int $used): LeadDecision
     {
         $grant = $this->site->post_signup_grant ?? [];
-        $type = $grant[self::GRANT_TYPE_KEY] ?? self::GRANT_TYPE_NONE;
+        // An ABSENT grant defaults to UNLIMITED (signup unlocks continued use); only an
+        // EXPLICIT {type:'none'} keeps the free count as the hard cap.
+        $type = $grant[self::GRANT_TYPE_KEY] ?? self::GRANT_TYPE_UNLIMITED;
 
         if ($type === self::GRANT_TYPE_UNLIMITED) {
             return LeadDecision::allow();

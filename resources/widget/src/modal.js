@@ -293,6 +293,9 @@ async function onSubmit(cta, errorBox) {
     case OUTCOME.signupRequired:
       renderSignup();
       break;
+    case OUTCOME.postSignupLimit:
+      renderState('state.limit_reached', 'state.limit_reached_body');
+      break;
     case OUTCOME.outOfCredits:
       renderState('state.out_of_credits', 'unavailable.body');
       break;
@@ -388,10 +391,12 @@ async function onSubmitDirect() {
   if (out.outcome === OUTCOME.succeeded) {
     state.lastResult = { generationId: out.generationId, resultUrl: out.resultUrl, variant: state.variant };
     renderResult(out.resultUrl);
-  } else if (out.outcome === OUTCOME.signupRequired) {
-    renderSignup();
   } else if (out.outcome === OUTCOME.outOfCredits) {
     renderState('state.out_of_credits', 'unavailable.body');
+  } else if (out.outcome === OUTCOME.postSignupLimit || out.outcome === OUTCOME.signupRequired) {
+    // We JUST registered — never re-show the signup form (that is the infinite loop).
+    // A wall here means the post-signup cap is reached: show a terminal message.
+    renderState('state.limit_reached', 'state.limit_reached_body');
   } else {
     renderError('result.error');
   }

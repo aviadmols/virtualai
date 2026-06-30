@@ -24,6 +24,7 @@ export const OUTCOME = {
   failed: 'failed',
   timeout: 'timeout',
   signupRequired: 'signup_required',
+  postSignupLimit: 'post_signup_limit', // registered, but out of post-signup tries — NOT a signup loop
   outOfCredits: 'out_of_credits',
   rateLimited: 'rate_limited',
   network: 'network',
@@ -121,8 +122,11 @@ export function cancelPoll() {
 function mapGate(data, status) {
   switch (data.reason) {
     case GATE_REASON.signupRequired:
-    case GATE_REASON.postSignupLimit:
       return { outcome: OUTCOME.signupRequired };
+    // A REGISTERED user who hit the post-signup cap: a distinct terminal state, never the
+    // signup form again (that would loop — the user already signed up).
+    case GATE_REASON.postSignupLimit:
+      return { outcome: OUTCOME.postSignupLimit };
     case GATE_REASON.insufficientCredits:
     case GATE_REASON.accountInactive:
       return { outcome: OUTCOME.outOfCredits };

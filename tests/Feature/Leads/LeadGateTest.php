@@ -103,8 +103,9 @@ class LeadGateTest extends TestCase
         $this->assertSame(LeadDecision::REASON_POST_SIGNUP_LIMIT, $blocked->reason);
     }
 
-    public function test_registered_with_no_grant_falls_back_to_free_count(): void
+    public function test_registered_with_EXPLICIT_none_grant_falls_back_to_free_count(): void
     {
+        // A merchant who deliberately sets {type:'none'} keeps the free count as the cap.
         $site = $this->site(2, ['type' => LeadGate::GRANT_TYPE_NONE]);
         $endUser = EndUser::factory()->forSite($site)->registered()->withGenerationsUsed(2)->create();
 
@@ -112,5 +113,18 @@ class LeadGateTest extends TestCase
 
         $this->assertTrue($decision->denied());
         $this->assertSame(LeadDecision::REASON_POST_SIGNUP_LIMIT, $decision->reason);
+    }
+
+    public function test_registered_with_ABSENT_grant_defaults_to_unlimited(): void
+    {
+        // The COMMON case: no post_signup_grant configured. Signing up must UNLOCK
+        // continued try-ons (else the widget loops the signup form forever).
+        $site = $this->site(2); // post_signup_grant = [] (absent)
+        $endUser = EndUser::factory()->forSite($site)->registered()->withGenerationsUsed(50)->create();
+
+        $decision = LeadGate::for($site, $endUser)->assertCanTry();
+
+        $this->assertTrue($decision->allowed);
+        $this->assertFalse($decision->signupRequired);
     }
 }
