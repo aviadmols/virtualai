@@ -2,6 +2,7 @@
 
 namespace App\Filament\Merchant\Resources\SiteResource\Pages;
 
+use App\Domain\Scan\ScanProductJob;
 use App\Domain\Sites\SiteKeyRegenerator;
 use App\Filament\Merchant\Pages\Gallery;
 use App\Filament\Merchant\Pages\PrivacySettings;
@@ -9,6 +10,8 @@ use App\Filament\Merchant\Pages\ReviewProduct;
 use App\Filament\Merchant\Resources\SiteResource;
 use App\Models\Product;
 use App\Models\Site;
+use Filament\Actions\Action;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Support\Collection;
@@ -40,11 +43,52 @@ class ViewSite extends ViewRecord
     private const NOTIFY_REGENERATED = 'embed.regenerated';
     private const NOTIFY_ERROR = 'embed.errors.regenerate';
 
+    // Max length of a pasted product URL (guards the scan input).
+    private const SCAN_URL_MAX = 2048;
+
     /** The two-step destructive confirm + the in-flight/error states (Alpine-free,
         Livewire-driven so the server owns the rotation). */
     public bool $confirmingRegenerate = false;
 
     public bool $regenerateError = false;
+
+    /**
+     * Site-hub header actions. "Scan a product" is the entry point the merchant uses
+     * after installing the header snippet: paste a product-page URL → dispatch the
+     * (queued) ScanProductJob → the scanned product lands DRAFT in the products list
+     * below, where it links to the A4 review/confirm form. account_id is passed
+     * explicitly to the job (never inferred), per the tenancy contract.
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('scan')
+                ->label(__('sites.scan.label'))
+                ->icon('heroicon-o-magnifying-glass')
+                ->modalHeading(__('sites.scan.heading'))
+                ->modalDescription(__('sites.scan.sub'))
+                ->modalSubmitActionLabel(__('sites.scan.submit'))
+                ->form([
+                    TextInput::make('url')
+                        ->label(__('sites.scan.url'))
+                        ->placeholder(__('sites.scan.url_placeholder'))
+                        ->url()
+                        ->required()
+                        ->maxLength(self::SCAN_URL_MAX),
+                ])
+                ->action(function (array $data): void {
+                    $site = $this->getRecord();
+
+                    ScanProductJob::dispatch((int) $site->account_id, (int) $site->getKey(), $data['url']);
+
+                    Notification::make()
+                        ->success()
+                        ->title(__('sites.scan.queued'))
+                        ->body(__('sites.scan.queued_body'))
+                        ->send();
+                }),
+        ];
+    }
 
     /** The full widget.js src for the embed snippet (public site_key carried in the
         data attribute by the component, never here). */

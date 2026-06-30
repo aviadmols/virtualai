@@ -8,6 +8,16 @@ return [
     'add' => 'Add site',
     'saved' => 'Site added',
     'updated' => 'Site saved',
+    'scan' => [
+        'label' => 'Scan a product',
+        'heading' => 'Scan a product page',
+        'sub' => 'Paste a product-page URL. We read its details and variants; you confirm before it goes live.',
+        'url' => 'Product page URL',
+        'url_placeholder' => 'https://shop.example.com/products/your-product',
+        'submit' => 'Scan',
+        'queued' => 'Scanning your product page',
+        'queued_body' => 'This takes a few moments — the product appears below to review when it is ready.',
+    ],
     'empty' => 'Add your first site to get started',
     'empty_sub' => 'A site is one storefront where the Tray On widget runs.',
     'field' => [
