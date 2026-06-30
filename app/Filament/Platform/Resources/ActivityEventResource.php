@@ -5,7 +5,9 @@ namespace App\Filament\Platform\Resources;
 use App\Domain\Platform\PlatformActivityQuery;
 use App\Filament\Platform\Resources\ActivityEventResource\Pages\ListActivityEvents;
 use App\Models\ActivityEvent;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -112,6 +114,28 @@ class ActivityEventResource extends Resource
                     ->label(__('platform.logs.filter.actor'))
                     ->options(self::actorOptions()),
             ])
+            ->actions([
+                // Per-event detail so a super-admin can SEE why something happened (e.g. a
+                // failed generation's failure_code + provider_status + message). The details
+                // are recorder-curated, non-secret scalars — never a hydrated payload.
+                ViewAction::make()
+                    ->label(__('platform.logs.view'))
+                    ->modalHeading(static fn (ActivityEvent $r): string => self::kindLabel($r->kind))
+                    ->infolist([
+                        TextEntry::make('account.name')->label(__('platform.logs.col.account')),
+                        TextEntry::make('kind')->label(__('platform.logs.col.kind'))
+                            ->formatStateUsing(static fn (string $state): string => self::kindLabel($state)),
+                        TextEntry::make('actor')->label(__('platform.logs.col.actor'))
+                            ->formatStateUsing(static fn (string $state): string => __(self::ACTOR_PREFIX.$state)),
+                        TextEntry::make('subject')->label(__('platform.logs.col.subject'))
+                            ->state(static fn (ActivityEvent $r): string => self::subject($r)),
+                        TextEntry::make('created_at')->label(__('platform.logs.col.date'))->dateTime(),
+                        TextEntry::make('details')->label(__('platform.logs.details_label'))
+                            ->state(static fn (ActivityEvent $r): string => self::detailsText($r))
+                            ->fontFamily('mono')
+                            ->copyable(),
+                    ]),
+            ])
             ->emptyStateHeading(__('platform.logs.empty'))
             ->emptyStateDescription(__('platform.logs.empty_sub'))
             ->emptyStateIcon('heroicon-o-clipboard-document-list')
@@ -147,6 +171,30 @@ class ActivityEventResource extends Resource
         $translated = __($key);
 
         return $translated === $key ? ucfirst(str_replace('_', ' ', $kind)) : $translated;
+    }
+
+    /**
+     * The event's curated details rendered as readable key: value lines (e.g.
+     * "failure_code: ai_call_failed", "provider_status: 404", "message: …"). Recorder
+     * details are non-secret scalars; nested values fall back to a compact JSON encode.
+     */
+    private static function detailsText(ActivityEvent $event): string
+    {
+        $details = $event->details ?? [];
+
+        if ($details === []) {
+            return __('platform.logs.details_empty');
+        }
+
+        $lines = [];
+        foreach ($details as $key => $value) {
+            $rendered = is_scalar($value) || $value === null
+                ? (string) ($value ?? '—')
+                : json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $lines[] = $key.': '.$rendered;
+        }
+
+        return implode("\n", $lines);
     }
 
     /** subject_type#subject_id (no payload) — never a hydrated row, never a secret. */

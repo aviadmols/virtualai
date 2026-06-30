@@ -444,6 +444,10 @@ return [
     'logs' => [
         'title' => 'יומן פעילות',
         'singular' => 'אירוע',
+        'view' => 'צפייה',
+        'details_heading' => 'פרטי האירוע',
+        'details_label' => 'פרטים',
+        'details_empty' => 'אין פרטים נוספים לאירוע זה.',
         'col' => [
             'account' => 'חשבון',
             'kind' => 'אירוע',

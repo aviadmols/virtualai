@@ -449,7 +449,9 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
 
         $generation->transitionTo(Generation::STATUS_FAILED, ['failure_code' => $code] + $details);
 
-        $this->recordActivity(ActivityEvent::KIND_GENERATION_FAILED, $generation, ['failure_code' => $code] + $details);
+        // Carry the human message into the activity trace so a super-admin can SEE the
+        // cause in the event log (e.g. an OpenRouter 404/auth message), not just a code.
+        $this->recordActivity(ActivityEvent::KIND_GENERATION_FAILED, $generation, ['failure_code' => $code, 'message' => $message] + $details);
     }
 
     /**

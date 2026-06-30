@@ -445,6 +445,10 @@ return [
     'logs' => [
         'title' => 'Activity log',
         'singular' => 'Event',
+        'view' => 'View',
+        'details_heading' => 'Event details',
+        'details_label' => 'Details',
+        'details_empty' => 'No extra details for this event.',
         'col' => [
             'account' => 'Account',
             'kind' => 'Event',

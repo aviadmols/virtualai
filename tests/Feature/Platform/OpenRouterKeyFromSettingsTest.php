@@ -63,4 +63,26 @@ class OpenRouterKeyFromSettingsTest extends TestCase
 
         Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer env-fallback-key'));
     }
+
+    public function test_a_placeholder_key_fails_fast_with_a_clear_message_and_no_http_call(): void
+    {
+        // The shipped default OPENROUTER_API_KEY=REPLACE_WITH_REAL_OPENROUTER_KEY must NOT
+        // reach the provider (it returns an opaque 404); fail fast with a readable cause.
+        config()->set('services.openrouter.key', 'REPLACE_WITH_REAL_OPENROUTER_KEY');
+
+        try {
+            $this->callChat();
+            $this->fail('Expected an OpenRouterException for the placeholder key.');
+        } catch (\App\Domain\Ai\OpenRouterException $e) {
+            $this->assertSame(\App\Domain\Ai\OpenRouterException::CODE_BAD_REQUEST, $e->errorCode);
+            $this->assertStringContainsString('not configured', $e->getMessage());
+        }
+
+        Http::assertNothingSent();
+
+        // And the setup checklist must report it as NOT configured (no false "✓").
+        $this->assertFalse(app(PlatformSettings::class)->isConfigured(PlatformSettings::OPENROUTER_API_KEY));
+        $this->assertTrue(PlatformSettings::looksLikePlaceholder('REPLACE_WITH_REAL_OPENROUTER_KEY'));
+        $this->assertFalse(PlatformSettings::looksLikePlaceholder('sk-or-v1-real'));
+    }
 }

@@ -82,10 +82,23 @@ final class PlatformSettings
         );
     }
 
-    /** True if a usable value exists for the key (DB OR env fallback). */
+    // A value left at the shipped env placeholder (e.g. OPENROUTER_API_KEY=
+    // REPLACE_WITH_REAL_OPENROUTER_KEY) is NOT a real secret — treat it as unconfigured
+    // so the setup checklist tells the truth instead of a false "configured".
+    private const PLACEHOLDER_PREFIX = 'REPLACE';
+
+    /** True if a REAL value exists for the key (DB OR env fallback, not the placeholder). */
     public function isConfigured(string $key): bool
     {
-        return filled($this->resolve($key));
+        $value = $this->resolve($key);
+
+        return filled($value) && ! self::looksLikePlaceholder($value);
+    }
+
+    /** A shipped "REPLACE_WITH_…" placeholder is not a usable secret. */
+    public static function looksLikePlaceholder(?string $value): bool
+    {
+        return $value !== null && str_starts_with(strtoupper(trim($value)), self::PLACEHOLDER_PREFIX);
     }
 
     /** True if the value was entered in the UI (a DB row with a value), vs only env. */

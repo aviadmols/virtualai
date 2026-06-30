@@ -72,6 +72,8 @@ final class OpenRouterClient
     {
         $model = (string) ($body['model'] ?? 'unknown');
 
+        $this->assertKeyConfigured($operationKey, $model);
+
         try {
             $response = $this->request()->post(self::CHAT_PATH, $body);
         } catch (ConnectionException $e) {
@@ -211,6 +213,28 @@ final class OpenRouterClient
     private function apiKey(): string
     {
         return (string) app(PlatformSettings::class)->resolve(PlatformSettings::OPENROUTER_API_KEY);
+    }
+
+    /**
+     * Fail fast with a CLEAR message when the bearer key is missing or still the shipped
+     * "REPLACE_WITH_…" placeholder. Otherwise the provider returns an opaque 404 and the
+     * real cause — no API key set in the Settings page — is invisible in the event log.
+     */
+    private function assertKeyConfigured(string $operationKey, string $model): void
+    {
+        $key = $this->apiKey();
+
+        if ($key !== '' && ! PlatformSettings::looksLikePlaceholder($key)) {
+            return;
+        }
+
+        $this->logOutcome($operationKey, $model, 'not_configured', null, null, null);
+
+        throw OpenRouterException::make(
+            OpenRouterException::CODE_BAD_REQUEST,
+            'OpenRouter API key is not configured — set a real key in the platform Settings page.',
+            modelUsed: $model,
+        );
     }
 
     /**
