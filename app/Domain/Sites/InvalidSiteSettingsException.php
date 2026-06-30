@@ -21,6 +21,8 @@ final class InvalidSiteSettingsException extends RuntimeException
 
     public const REASON_NOT_AN_OBJECT = 'invalid_json_object';
 
+    public const REASON_INVALID_APPEARANCE = 'invalid_widget_appearance';
+
     public function __construct(
         public readonly string $field,
         public readonly string $reason,
@@ -53,6 +55,15 @@ final class InvalidSiteSettingsException extends RuntimeException
             $field,
             self::REASON_NOT_AN_OBJECT,
             $field.' must be a JSON object (associative array).',
+        );
+    }
+
+    public static function appearance(string $field, string $detail): self
+    {
+        return new self(
+            $field,
+            self::REASON_INVALID_APPEARANCE,
+            'widget appearance "'.$field.'" is invalid: '.$detail,
         );
     }
 }

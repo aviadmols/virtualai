@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Widget;
 
+use App\Domain\Sites\WidgetAppearance;
 use App\Http\Widget\EndUserResolver;
 use App\Http\Widget\Resources\ProductPayload;
 use App\Http\Widget\WidgetContext;
@@ -50,6 +51,8 @@ final class BootstrapController
                 'gallery' => $site->gallery_settings ?? [],
                 'privacy' => $site->privacy_config ?? [],
                 'free_generations_before_signup' => $site->free_generations_before_signup,
+                // Resolved with defaults so the widget always gets a complete, valid look.
+                'appearance' => WidgetAppearance::resolve($site->widget_appearance),
             ],
             'lead' => [
                 'registered' => $endUser?->isRegistered() ?? false,

@@ -34,11 +34,14 @@ final class SiteSettingsService
 
     public const KEY_FREE_GENERATIONS = 'free_generations_before_signup';
 
+    public const KEY_WIDGET_APPEARANCE = 'widget_appearance';
+
     private const WRITABLE_KEYS = [
         self::KEY_RETENTION_DAYS,
         self::KEY_PRIVACY_CONFIG,
         self::KEY_GALLERY_SETTINGS,
         self::KEY_FREE_GENERATIONS,
+        self::KEY_WIDGET_APPEARANCE,
     ];
 
     public function __construct(
@@ -92,6 +95,7 @@ final class SiteSettingsService
                 self::KEY_FREE_GENERATIONS => $this->validFreeGenerations($patch[$key]),
                 self::KEY_PRIVACY_CONFIG => $this->validObject(self::KEY_PRIVACY_CONFIG, $patch[$key]),
                 self::KEY_GALLERY_SETTINGS => $this->validObject(self::KEY_GALLERY_SETTINGS, $patch[$key]),
+                self::KEY_WIDGET_APPEARANCE => WidgetAppearance::sanitize($this->validObject(self::KEY_WIDGET_APPEARANCE, $patch[$key])),
             };
         }
 
