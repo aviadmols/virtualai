@@ -48,7 +48,9 @@ export async function submit(inputs) {
     photo: inputs.photo,
     height: inputs.height,
     productId: state.product.id,
-    variantId: state.variant.id,
+    // A single-SKU product has no variant (state.variant is null) — send 0; the server
+    // treats it as "no variant" and generates against the product's main image.
+    variantId: state.variant ? state.variant.id : 0,
     clientRequestId: state.clientRequestId,
     consent: true,
     anonToken: state.anonToken,
