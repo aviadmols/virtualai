@@ -22,6 +22,12 @@ php artisan trayon:predeploy-check
 if [ "$SERVICE" = "web" ]; then
     php artisan migrate --force
 
+    # Seed the GLOBAL AI control plane (operations / models / global prompts) so the
+    # AiOperationResolver works out of the box and the admin AI screens are populated.
+    # Idempotent (updateOrCreate); web-only. NOT the full DatabaseSeeder — that also
+    # seeds tenant DEMO data, which must never land in a real environment.
+    php artisan db:seed --class=AiControlPlaneSeeder --force
+
     # Bootstrap/refresh the platform super-admin from env, if provided. No-op when
     # TRAYON_SUPERADMIN_EMAIL / TRAYON_SUPERADMIN_PASSWORD are unset. Idempotent; web-only.
     php artisan trayon:make-super-admin
