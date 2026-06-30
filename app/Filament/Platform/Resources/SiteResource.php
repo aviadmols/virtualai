@@ -4,6 +4,7 @@ namespace App\Filament\Platform\Resources;
 
 use App\Domain\Platform\PlatformSiteQuery;
 use App\Domain\Platform\PlatformSiteWriter;
+use App\Domain\Scan\ScanProductJob;
 use App\Domain\Sites\WidgetAppearance;
 use App\Filament\Platform\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Platform\Resources\SiteResource\Pages\EditSite;
@@ -142,6 +143,7 @@ class SiteResource extends Resource
                     ->alignEnd(),
             ])
             ->actions([
+                self::scanAction(),
                 self::appearanceAction(),
                 self::embedAction(),
                 EditAction::make()
@@ -176,6 +178,40 @@ class SiteResource extends Resource
     private static function setupState(Site $site): string
     {
         return ! empty($site->selectors) ? self::STATE_READY : self::STATE_PENDING;
+    }
+
+    /**
+     * "Scan a product" — the setup entry point: paste a product-page URL and dispatch
+     * the (queued) ScanProductJob with the site's explicit account_id (the job binds the
+     * tenant on the worker). The scanned product lands DRAFT for review/confirm; once a
+     * product is confirmed the site flips Setup → Ready and the widget button goes live.
+     */
+    private static function scanAction(): Action
+    {
+        return Action::make('scan')
+            ->label(__('sites.scan.label'))
+            ->icon('heroicon-o-magnifying-glass')
+            ->color('primary')
+            ->modalHeading(__('sites.scan.heading'))
+            ->modalDescription(__('sites.scan.sub'))
+            ->modalSubmitActionLabel(__('sites.scan.submit'))
+            ->form([
+                TextInput::make('url')
+                    ->label(__('sites.scan.url'))
+                    ->placeholder(__('sites.scan.url_placeholder'))
+                    ->url()
+                    ->required()
+                    ->maxLength(2048),
+            ])
+            ->action(static function (Site $record, array $data): void {
+                ScanProductJob::dispatch((int) $record->account_id, (int) $record->getKey(), $data['url']);
+
+                Notification::make()
+                    ->success()
+                    ->title(__('sites.scan.queued'))
+                    ->body(__('sites.scan.queued_body'))
+                    ->send();
+            });
     }
 
     /**
