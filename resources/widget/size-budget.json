@@ -1,0 +1,5 @@
+{
+  "comment": "Gzipped size budget for the storefront widget entry bundle. The entry must stay lean (widget weight is a feature). The lazy modal/result chunk is loaded only on first button click and is budgeted separately.",
+  "maxGzipBytes": 25600,
+  "maxLazyGzipBytes": 20480
+}

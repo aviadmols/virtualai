@@ -2,7 +2,8 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vite build",
+        "build": "vite build && npm run build:widget",
+        "build:widget": "node resources/widget/build.config.mjs",
         "dev": "vite"
     },
     "devDependencies": {

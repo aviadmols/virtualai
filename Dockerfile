@@ -67,6 +67,12 @@ COPY . .
 # without it every page that calls vite() throws a 500.
 COPY --from=node-builder /app/public/build ./public/build
 
+# Drop in the built storefront widget (public/widget/v1/widget.js). It is a STATIC
+# file served directly by FrankenPHP/Caddy at /widget/v1/widget.js, bypassing the
+# /widget/v1 API auth middleware (a <script src> can't send the site_key header).
+# Built by `npm run build` (build:widget) in the node stage; gitignored like build/.
+COPY --from=node-builder /app/public/widget ./public/widget
+
 RUN composer run-script post-autoload-dump --no-interaction 2>/dev/null || true
 
 # Publish Filament's CSS/JS into public/ so the panels are styled. Without this

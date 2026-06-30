@@ -1155,6 +1155,45 @@ The lookup axis. File each entry under exactly one category; cross-link the rest
   hardcoded default on the left of `+` when the right side is a caller-supplied override.
 - **RELATED:** [[laravel-backend]], [[tests/Feature/Widget/WidgetApiTestSupport.php]]
 
+### TS-WIDGET-004 — a `cloneNode()` SPA re-render copies the mount SENTINEL but NOT the shadow root → a dead button shell blocks re-injection
+- **Date:** 2026-06-30
+- **Category:** widget/storefront
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `widget`, `mount-engine`, `mutation-observer`, `shadow-dom`, `clonenode`, `spa-remount`, `sentinel`, `phase-7b`
+
+- **SYMPTOM:** The Phase-7b widget mount engine passed the "re-injected, still exactly one"
+  count after an SPA re-render, but the next step (open the modal by clicking the button)
+  threw `TypeError: Cannot read properties of null (reading 'querySelector')` — the
+  sentinel-bearing wrapper had a `null` shadowRoot, so `wrapper.shadowRoot.querySelector('.ton-button')`
+  blew up. The button was present by attribute but DEAD (no shadow root, no clickable button).
+- **CONTEXT / TRIGGER:** Phase 7b verification harness, the SPA-re-render gate, which
+  simulates a theme re-render via `main.replaceWith(main.cloneNode(true))`. The button is
+  injected into the HOST DOM inside its OWN small shadow root (so host CSS can't reach it),
+  and the wrapper carries `data-trayon-mounted` so injection is idempotent.
+- **ROOT CAUSE:** `Node.cloneNode(true)` copies element ATTRIBUTES (so the
+  `data-trayon-mounted` sentinel survives) but per spec does NOT clone an attached shadow
+  root. The cloned wrapper therefore looked "mounted" to a naive
+  `document.querySelector('[sentinel]')` guard, so `inject()` short-circuited and never
+  rebuilt a working button — leaving a dead shell that the count-only assertion happily
+  counted as "one".
+- **SOLUTION:** Make the idempotency guard verify a LIVE mount, not just the attribute.
+  `resources/widget/src/mount.js::inject()` now iterates every `[data-trayon-mounted]` node,
+  keeps the FIRST one whose `node.shadowRoot?.querySelector('.ton-button')` is truthy
+  (a live button), and REMOVES every other (dead clones + any duplicate). Only if a live
+  one is found does it return early; otherwise it rebuilds + re-places the button. The
+  harness also waits for a live button (`shadowRoot && .ton-button`) before clicking, since
+  the observer is debounced (150 ms) and re-injects asynchronously. VERIFIED:
+  `node tests/widget/verify.mjs` — the SPA-re-render + modal-open gates pass EN + HE; exactly
+  one LIVE button after `cloneNode` re-render.
+- **PREVENTION:** A self-healing mount whose marker lives on a shadow HOST must guard on a
+  LIVE check (the shadow root + the expected child exists), never on the sentinel attribute
+  alone — `cloneNode`/`innerHTML` re-renders duplicate attributes but drop shadow roots. A
+  "count === 1" assertion is insufficient; assert the surviving node is functional (clickable).
+- **RELATED:** [[widget-embed]], [[resources/widget/src/mount.js]], [[resources/widget/src/button.js]],
+  [[tests/widget/verify.mjs]], [[TS-WIDGET-001]]
+
 ## infra/railway/horizon
 
 ### TS-INFRA-001 — `laravel/horizon` install fails on Windows: missing ext-pcntl / ext-posix
@@ -1342,6 +1381,48 @@ _No recorded issues yet._
   [[tests/Feature/Leads/MarketingConsentDefaultTest.php]], [[TS-BUILD-003]]
 
 ## build/deploy
+
+### TS-BUILD-005 — the storefront widget must be a CLASSIC-script IIFE on a STABLE static path, not an ESM/hashed Vite asset (a `<script src>` can't send the site_key header, and the locked embed snippet has no `type=module`)
+- **Date:** 2026-06-30
+- **Category:** build/deploy
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `widget`, `esbuild`, `iife`, `vite`, `static-asset`, `code-splitting`, `dockerfile`, `phase-7b`
+
+- **SYMPTOM / DESIGN TENSION (no live bug):** Building the Phase-7b widget bundle, two
+  traps: (1) the embed snippet is locked as a CLASSIC `<script src="…/widget/v1/widget.js"
+  data-site-key="…" async>` (no `type="module"`), so an ESM output with top-level
+  `import`/`export` — or an esbuild `format:'esm'` + `splitting:true` build that emits a
+  dynamic-import chunk — would NOT execute on the host page. (2) The widget must load via a
+  `<script src>`, which cannot send the `X-Tray-Site-Key` header; if served through the
+  `/widget/v1` API (behind `ResolveWidgetSite`) it would 401. And a Vite-hashed filename
+  (`widget-AbC123.js`) breaks the stable embed URL.
+- **CONTEXT / TRIGGER:** Phase 7b, wiring `resources/widget/build.config.mjs` into
+  `npm run build` + the Dockerfile node stage.
+- **ROOT CAUSE:** Classic scripts can't run ESM and can't send custom auth headers; the
+  static-asset path must bypass PHP routing/middleware entirely; the URL must be stable.
+- **SOLUTION:** Build with esbuild `format:'iife'` (a single self-contained file, no
+  import/export — verified `grep -cE '^import |^export ' dist == 0`), minified, to the
+  STABLE NON-HASHED path `public/widget/v1/widget.js`. FrankenPHP/Caddy serves it as a
+  static file from `public/` BEFORE PHP routing, so it bypasses the `/widget/v1` API auth
+  (no header needed) and never collides with the API routes (`/bootstrap`,
+  `/generations/{id}`, …) — none is `/widget.js`. The widget is small enough (~11.8 KB
+  gzipped, budget 25.6 KB) that bundling the modal in (rather than ESM code-splitting) is
+  the reliable choice; the modal DOM is still only CONSTRUCTED on first button click, so
+  first paint stays cheap. Wired: `package.json` `build` runs `vite build && build:widget`;
+  the Dockerfile node stage runs `npm run build` and the final image
+  `COPY --from=node-builder /app/public/widget ./public/widget`; `/public/widget` is
+  gitignored like `/public/build`. A mechanical size-budget gate (gzip vs
+  `size-budget.json`) exits non-zero over budget. VERIFIED: `node tests/widget/verify.mjs`
+  boots the bundle from a real origin and passes every gate EN + HE.
+- **PREVENTION:** A storefront/embed script that ships via a classic `<script src>` is an
+  IIFE on a stable, non-hashed static path served straight from `public/`, never an ESM
+  module, never behind header-based API auth, never a hashed Vite entry. Keep the size-budget
+  gate in the build so weight regressions fail the build, not review.
+- **RELATED:** [[widget-embed]], [[railway-infra]], [[resources/widget/build.config.mjs]],
+  [[Dockerfile]], [[package.json]], [[resources/views/components/to/embed-code.blade.php]],
+  [[app/Http/Middleware/ResolveWidgetSite.php]]
 
 ### TS-BUILD-004 — generation-suite determinism: `Sleep` is `Illuminate\Support\Sleep` (not `…\Facades\Sleep`), and a later `Http::fake([…])` does NOT override an earlier empty `Http::fake()`
 - **Date:** 2026-06-25

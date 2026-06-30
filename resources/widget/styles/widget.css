@@ -1,0 +1,395 @@
+/*
+  Tray On storefront widget styles. Scoped INSIDE the Shadow root — host CSS can't bleed
+  in and these can't bleed out. Structural classes only; the dynamic per-site values
+  (button bg/text, popup accent, theme) arrive as CSS custom properties set on :host by
+  shell.js (e.g. --ton-button-bg). No raw colors are hardcoded for the configurable
+  surfaces; the few neutral structural tokens below are widget-internal defaults.
+
+  RTL: logical properties only (margin-inline, inset-inline, text-align:start). The widget
+  inherits the host `dir`; HE mirrors automatically. Directional glyphs flip via [dir=rtl].
+*/
+
+:host {
+  /* Widget-internal structural tokens (neutral; not the merchant's brand). */
+  --ton-radius: 14px;
+  --ton-radius-sm: 8px;
+  --ton-gap: 12px;
+  --ton-pad: 20px;
+  --ton-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --ton-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+  --ton-overlay: rgba(0, 0, 0, 0.55);
+  --ton-z: 2147483000;
+
+  /* Theme surfaces — overridden by [data-theme] below; accent comes from config. */
+  --ton-surface: #ffffff;
+  --ton-text: #14141a;
+  --ton-muted: #6b6b76;
+  --ton-border: #e6e6ec;
+  --ton-field-bg: #f7f7f9;
+
+  /* Defaults; shell.js overrides with the per-site appearance config. */
+  --ton-button-bg: #111111;
+  --ton-button-text: #ffffff;
+  --ton-accent: #111111;
+
+  all: initial;
+  font-family: var(--ton-font);
+  line-height: 1.45;
+}
+
+.ton-root[data-theme='dark'] {
+  --ton-surface: #1b1b22;
+  --ton-text: #f4f4f7;
+  --ton-muted: #a6a6b3;
+  --ton-border: #34343e;
+  --ton-field-bg: #26262f;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* ---- Injected button (lives on the host page, under add-to-cart) ---- */
+.ton-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-block-start: 10px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: var(--ton-radius-sm);
+  background: var(--ton-button-bg);
+  color: var(--ton-button-text);
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.06s ease;
+}
+
+.ton-button:hover {
+  filter: brightness(1.08);
+}
+
+.ton-button:active {
+  transform: translateY(1px);
+}
+
+.ton-button--fixed {
+  position: fixed;
+  inset-block-end: 20px;
+  width: auto;
+  margin: 0;
+  box-shadow: var(--ton-shadow);
+  z-index: var(--ton-z);
+}
+
+.ton-button--fixed-end {
+  inset-inline-end: 20px;
+}
+
+.ton-button--fixed-start {
+  inset-inline-start: 20px;
+}
+
+.ton-button__glyph {
+  font-size: 17px;
+  line-height: 1;
+}
+
+/* ---- Modal overlay + panel ---- */
+.ton-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--ton-overlay);
+  z-index: var(--ton-z);
+  animation: ton-fade 0.16s ease;
+}
+
+.ton-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: var(--ton-pad);
+  border-radius: var(--ton-radius);
+  background: var(--ton-surface);
+  color: var(--ton-text);
+  box-shadow: var(--ton-shadow);
+  text-align: start;
+}
+
+.ton-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-end: var(--ton-gap);
+}
+
+.ton-modal__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.ton-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ton-field-bg);
+  color: var(--ton-text);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.ton-modal__chip {
+  display: inline-block;
+  margin-block-end: var(--ton-gap);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--ton-field-bg);
+  color: var(--ton-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---- Form fields ---- */
+.ton-field {
+  margin-block-end: var(--ton-gap);
+}
+
+.ton-label {
+  display: block;
+  margin-block-end: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ton-input,
+.ton-select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--ton-border);
+  border-radius: var(--ton-radius-sm);
+  background: var(--ton-field-bg);
+  color: var(--ton-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.ton-input:focus,
+.ton-select:focus {
+  outline: 2px solid var(--ton-accent);
+  outline-offset: 1px;
+}
+
+/* ---- Photo upload ---- */
+.ton-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 22px;
+  border: 1.5px dashed var(--ton-border);
+  border-radius: var(--ton-radius-sm);
+  background: var(--ton-field-bg);
+  color: var(--ton-muted);
+  text-align: center;
+  cursor: pointer;
+}
+
+.ton-upload__prompt {
+  font-weight: 600;
+  color: var(--ton-text);
+}
+
+.ton-upload__hint {
+  font-size: 12px;
+}
+
+.ton-upload__file {
+  display: none;
+}
+
+.ton-preview {
+  position: relative;
+  border-radius: var(--ton-radius-sm);
+  overflow: hidden;
+}
+
+.ton-preview__img {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  background: var(--ton-field-bg);
+}
+
+.ton-preview__replace {
+  margin-block-start: 8px;
+  background: none;
+  border: 0;
+  color: var(--ton-accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: start;
+}
+
+/* ---- Consent ---- */
+.ton-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-block: var(--ton-gap);
+  font-size: 13px;
+}
+
+.ton-consent__box {
+  margin-block-start: 2px;
+  accent-color: var(--ton-accent);
+}
+
+.ton-consent__link {
+  display: inline-block;
+  margin-block-start: 4px;
+  color: var(--ton-accent);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+/* ---- Primary action ---- */
+.ton-cta {
+  width: 100%;
+  margin-block-start: 4px;
+  padding: 13px 18px;
+  border: 0;
+  border-radius: var(--ton-radius-sm);
+  background: var(--ton-accent);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.ton-cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ton-error {
+  margin-block-start: 8px;
+  color: #d23a3a;
+  font-size: 13px;
+}
+
+/* ---- Loading + result ---- */
+.ton-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-block: 28px;
+  text-align: center;
+}
+
+.ton-spinner {
+  width: 38px;
+  height: 38px;
+  border: 3px solid var(--ton-border);
+  border-top-color: var(--ton-accent);
+  border-radius: 50%;
+  animation: ton-spin 0.8s linear infinite;
+}
+
+.ton-result__frame {
+  /* Reserve a box so the image landing causes no layout shift. */
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--ton-radius-sm);
+  overflow: hidden;
+  background: var(--ton-field-bg);
+}
+
+.ton-result__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.ton-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-block-start: var(--ton-gap);
+}
+
+.ton-action {
+  padding: 11px 12px;
+  border: 1px solid var(--ton-border);
+  border-radius: var(--ton-radius-sm);
+  background: var(--ton-surface);
+  color: var(--ton-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ton-action--primary {
+  grid-column: 1 / -1;
+  background: var(--ton-accent);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.ton-toast {
+  margin-block-start: 8px;
+  padding: 8px 12px;
+  border-radius: var(--ton-radius-sm);
+  background: var(--ton-field-bg);
+  color: var(--ton-text);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Directional glyph mirroring for RTL (e.g. a back arrow). */
+[dir='rtl'] .ton-glyph--directional {
+  transform: scaleX(-1);
+}
+
+@keyframes ton-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ton-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

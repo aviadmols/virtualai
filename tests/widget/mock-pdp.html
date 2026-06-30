@@ -1,0 +1,57 @@
+<!doctype html>
+<!--
+  Mock merchant product page (PDP) for the Tray On widget verification harness. Carries a
+  title, a product image, a #add-to-cart button, a variant <select>, and the embed snippet.
+  The harness intercepts /widget/v1/* so no real backend is needed. Aggressive host CSS is
+  applied on purpose so the Shadow-DOM bleed gate is meaningful.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aviad Linen Tee — Mock Store</title>
+    <style>
+      /* Aggressive host styles that MUST NOT bleed into the widget shadow root. */
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Georgia, 'Times New Roman', serif;
+        color: rebeccapurple;
+        background: #fafafa;
+      }
+      /* A host rule deliberately targeting our class name to prove isolation. */
+      .ton-button { background: lime !important; color: red !important; font-size: 40px !important; }
+      button { background: orange; color: white; border: 3px dashed green; padding: 14px 22px; }
+      .product { max-width: 720px; margin: 40px auto; padding: 0 20px; }
+      .product__title { font-size: 28px; }
+      .product__image { width: 100%; max-width: 360px; height: auto; background: #ddd; }
+      .product__price { font-size: 20px; font-weight: bold; }
+      label { display: block; margin: 16px 0 6px; }
+    </style>
+  </head>
+  <body>
+    <main class="product">
+      <h1 class="product__title">Aviad Linen Tee</h1>
+      <img
+        class="product__image"
+        src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='480'><rect width='100%25' height='100%25' fill='%23cccccc'/><text x='50%25' y='50%25' font-size='20' text-anchor='middle' fill='%23555'>Product</text></svg>"
+        alt="Aviad Linen Tee"
+      />
+      <p class="product__price">$89.00</p>
+
+      <label for="variant">Size</label>
+      <select id="variant" name="variant">
+        <option value="TEE-S">S</option>
+        <option value="TEE-M" selected>M</option>
+      </select>
+
+      <button id="add-to-cart" type="button" onclick="window.__hostCartClicks=(window.__hostCartClicks||0)+1;">
+        Add to cart
+      </button>
+    </main>
+
+    <!-- The embed snippet (classic async script), pointing at the built widget. -->
+    <script src="/widget/v1/widget.js" data-site-key="pk_test_mock" async></script>
+  </body>
+</html>
