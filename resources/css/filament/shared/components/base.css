@@ -30,3 +30,24 @@
     border-radius: var(--toa-radius-card);
     box-shadow: var(--toa-shadow-card);
 }
+
+/* ---- Horizon-style sidebar -------------------------------------------------
+   A calm, clean rail to match the Horizon reference: subtle uppercase group
+   labels, rounded nav items, and a clear brand "pill" behind the active item
+   (the per-panel --toa-accent-soft tint; the brand text/icon colour is already
+   applied by Filament via --primary). */
+.fi-sidebar-group-label {
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-semibold);
+    letter-spacing: var(--to-track-label);
+    text-transform: uppercase;
+    color: var(--to-ink-subtle);
+}
+
+.fi-sidebar-item-button {
+    border-radius: var(--toa-radius-control);
+}
+
+.fi-sidebar-item-active .fi-sidebar-item-button {
+    background-color: var(--toa-accent-soft);
+}
