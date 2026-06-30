@@ -3,6 +3,7 @@
 namespace App\Domain\Credits\Payments;
 
 use App\Domain\Credits\CreditMath;
+use App\Domain\Platform\PlatformSettings;
 use App\Models\Account;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
@@ -52,6 +53,16 @@ final class PayPlusProvider implements CreditPaymentProvider
     private const REFUNDED_CODES = ['refunded', 'refund'];
 
     private const CONFIG_KEY = 'services.payplus';
+
+    // Credential keys a super-admin may set in the platform Settings page (DB,
+    // encrypted) — these take precedence over the env var; everything else
+    // (base_url, currency, timeout) reads straight from config.
+    private const SETTING_KEYS = [
+        'api_key' => PlatformSettings::PAYPLUS_API_KEY,
+        'secret_key' => PlatformSettings::PAYPLUS_SECRET_KEY,
+        'page_uid' => PlatformSettings::PAYPLUS_PAGE_UID,
+        'webhook_secret' => PlatformSettings::PAYPLUS_WEBHOOK_SECRET,
+    ];
 
     public function name(): string
     {
@@ -217,6 +228,14 @@ final class PayPlusProvider implements CreditPaymentProvider
 
     private function cfg(string $key): mixed
     {
+        // A credential set in the Settings page (DB) wins; PlatformSettings::resolve
+        // itself falls back to the env var when the DB value is unset.
+        $settingKey = self::SETTING_KEYS[$key] ?? null;
+
+        if ($settingKey !== null) {
+            return app(PlatformSettings::class)->resolve($settingKey);
+        }
+
         return config(self::CONFIG_KEY.'.'.$key);
     }
 

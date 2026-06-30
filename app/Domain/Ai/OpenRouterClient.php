@@ -2,6 +2,7 @@
 
 namespace App\Domain\Ai;
 
+use App\Domain\Platform\PlatformSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
@@ -193,13 +194,23 @@ final class OpenRouterClient
         return $this->http
             ->baseUrl((string) config(self::CFG_BASE_URL))
             ->timeout((int) config(self::CFG_TIMEOUT))
-            ->withToken((string) config(self::CFG_KEY))
+            ->withToken($this->apiKey())
             ->withHeaders([
                 self::HEADER_REFERER => (string) config(self::CFG_REFERER),
                 self::HEADER_TITLE => (string) config(self::CFG_TITLE),
             ])
             ->acceptJson()
             ->asJson();
+    }
+
+    /**
+     * The OpenRouter bearer key: the value a super-admin entered in the platform
+     * Settings page (DB, encrypted) if present, else the OPENROUTER_API_KEY env var.
+     * Resolved per request so a key changed in the UI takes effect without a redeploy.
+     */
+    private function apiKey(): string
+    {
+        return (string) app(PlatformSettings::class)->resolve(PlatformSettings::OPENROUTER_API_KEY);
     }
 
     /**

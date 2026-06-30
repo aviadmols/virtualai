@@ -144,6 +144,11 @@ return [
         'edit' => 'Edit',
         'saved' => 'Site created',
         'updated' => 'Site saved',
+        'embed' => [
+            'label' => 'Install code',
+            'heading' => 'Install snippet',
+            'close' => 'Close',
+        ],
         'field' => [
             'account' => 'Account',
             'name' => 'Site name',
@@ -395,6 +400,32 @@ return [
             'kind' => 'Event',
             'actor' => 'Actor',
             'account' => 'Account',
+        ],
+    ],
+
+    // Controls — platform-wide settings (secrets managed from the UI).
+    'settings' => [
+        'nav' => 'Settings',
+        'title' => 'Platform settings',
+        'save' => 'Save settings',
+        'saved' => 'Settings saved',
+        'secret_help' => 'Leave blank to keep the current value. Stored encrypted; never shown again.',
+        'status' => [
+            'configured' => 'Configured',
+            'unset' => 'Not set',
+        ],
+        'openrouter' => [
+            'title' => 'OpenRouter',
+            'sub' => 'The server-side API key used for every product scan and try-on generation.',
+            'api_key' => 'OpenRouter API key',
+        ],
+        'payplus' => [
+            'title' => 'PayPlus (payments)',
+            'sub' => 'Credentials for the credit-purchase rail. Fill these in when you enable paid top-ups.',
+            'api_key' => 'API key',
+            'secret_key' => 'Secret key',
+            'page_uid' => 'Payment page UID',
+            'webhook_secret' => 'Webhook secret',
         ],
     ],
 ];

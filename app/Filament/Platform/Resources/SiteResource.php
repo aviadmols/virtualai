@@ -13,9 +13,11 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -53,6 +55,10 @@ class SiteResource extends Resource
     // Derived setup-state tokens + their plain-badge tones (not the §5 machine).
     private const STATE_READY = 'ready';
     private const STATE_PENDING = 'pending';
+
+    // The widget loader path the install snippet references (app.url + this).
+    private const WIDGET_SCRIPT_PATH = '/widget/v1/widget.js';
+    private const EMBED_MODAL_VIEW = 'filament.platform.resources.site.embed-modal';
 
     public static function getModelLabel(): string
     {
@@ -132,6 +138,7 @@ class SiteResource extends Resource
                     ->alignEnd(),
             ])
             ->actions([
+                self::embedAction(),
                 EditAction::make()
                     ->label(__('platform.sites.edit')),
             ])
@@ -164,5 +171,25 @@ class SiteResource extends Resource
     private static function setupState(Site $site): string
     {
         return ! empty($site->selectors) ? self::STATE_READY : self::STATE_PENDING;
+    }
+
+    /**
+     * "Install code" — shows the per-site install snippet (the <script> for the store
+     * header) in a read-only modal, reusing the shared embed-code component. Only the
+     * PUBLIC site_key is shown; key rotation stays the merchant's action.
+     */
+    private static function embedAction(): Action
+    {
+        return Action::make('embed')
+            ->label(__('platform.sites.embed.label'))
+            ->icon('heroicon-o-code-bracket')
+            ->color('gray')
+            ->modalHeading(__('platform.sites.embed.heading'))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel(__('platform.sites.embed.close'))
+            ->modalContent(static fn (Site $record): View => view(self::EMBED_MODAL_VIEW, [
+                'siteKey' => $record->site_key,
+                'scriptSrc' => rtrim((string) config('app.url'), '/').self::WIDGET_SCRIPT_PATH,
+            ]));
     }
 }

@@ -21,6 +21,7 @@
 @import '../shared/components/empty-state.css';
 @import '../shared/components/costs-summary.css';
 @import '../shared/components/resolver-preview.css';
+@import '../shared/components/embed-code.css';
 
 @config 'tailwind.config.js';
 
