@@ -92,7 +92,9 @@ final class GenerationController
                 variant: $variant,
                 photoBytes: $photo['bytes'],
                 photoMime: $photo['mime'],
-                userHeight: (int) $request->input(StartGenerationRequest::FIELD_HEIGHT),
+                userHeight: $request->filled(StartGenerationRequest::FIELD_HEIGHT)
+                    ? (int) $request->input(StartGenerationRequest::FIELD_HEIGHT)
+                    : null,
                 clientRequestId: (string) $request->input(StartGenerationRequest::FIELD_CLIENT_REQUEST_ID),
                 photoConsent: true, // FormRequest already required `consent` to be accepted
                 extraAttrs: $request->extraAttrs(),

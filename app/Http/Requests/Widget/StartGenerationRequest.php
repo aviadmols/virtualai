@@ -46,7 +46,9 @@ final class StartGenerationRequest extends FormRequest
         return [
             self::FIELD_PHOTO => ['required_without:'.self::FIELD_PHOTO_FILE, 'nullable', 'string'],
             self::FIELD_PHOTO_FILE => ['required_without:'.self::FIELD_PHOTO, 'nullable', 'file', 'mimetypes:image/jpeg,image/png,image/webp', 'max:'.(ImagePayload::MAX_IMAGE_BYTES / 1024)],
-            self::FIELD_HEIGHT => ['required', 'integer', 'between:'.self::HEIGHT_MIN_CM.','.self::HEIGHT_MAX_CM],
+            // Optional: a popup configured with ask_height=false (jewelry/furniture/etc.)
+            // sends no height. When present it must be a plausible human height.
+            self::FIELD_HEIGHT => ['nullable', 'integer', 'between:'.self::HEIGHT_MIN_CM.','.self::HEIGHT_MAX_CM],
             self::FIELD_PRODUCT_ID => ['required', 'integer'],
             // Optional: a single-SKU product (no variants) has no variant to select. When
             // present it must be a valid variant of the product (checked in the controller).

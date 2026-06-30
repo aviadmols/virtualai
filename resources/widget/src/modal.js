@@ -5,7 +5,7 @@
 // so it stays out of the entry bundle. Rendered inside the shared Shadow overlay mount;
 // structural classes only, dynamic per-site values via CSS vars. Object URLs are revoked.
 
-import { STEP, HEIGHT_MIN_CM, HEIGHT_MAX_CM } from './constants.js';
+import { STEP, HEIGHT_MIN_CM, HEIGHT_MAX_CM, APPEARANCE } from './constants.js';
 import { state, newIntent } from './state.js';
 import { t, tries } from './i18n.js';
 import { el, warn } from './dom.js';
@@ -20,6 +20,11 @@ let objectUrl = null;
 
 // The working draft for the current intent (kept across step changes / retries).
 let draft = { photo: null, height: '', extra: {}, consent: false };
+
+/** Does this site's popup ask for the shopper's height? (Off for jewelry/furniture/etc.) */
+function asksHeight() {
+  return state.config?.appearance?.[APPEARANCE.askHeight] !== false;
+}
 
 /** Open the modal. Captures the variant the shopper has RIGHT NOW (carried through the flow). */
 export function open() {
@@ -78,7 +83,7 @@ function renderForm() {
   const chip = triesChip();
 
   const upload = buildUpload(errorBox);
-  const height = buildHeight();
+  const height = asksHeight() ? buildHeight() : null;
   const details = buildDetails();
   const consent = buildConsent();
 
@@ -92,16 +97,18 @@ function renderForm() {
   // Re-evaluate the CTA enabled/label whenever an input changes.
   const refresh = () => updateCta(cta);
   upload.addEventListener('ton:change', refresh);
-  height.querySelector('.ton-input').addEventListener('input', () => {
-    draft.height = height.querySelector('.ton-input').value;
-    refresh();
-  });
+  if (height) {
+    height.querySelector('.ton-input').addEventListener('input', () => {
+      draft.height = height.querySelector('.ton-input').value;
+      refresh();
+    });
+  }
   consent.querySelector('.ton-consent__box').addEventListener('change', (e) => {
     draft.consent = e.target.checked;
     refresh();
   });
 
-  const body = el('div', {}, [upload, height, details, consent, cta, errorBox]);
+  const body = el('div', {}, [upload, height, details, consent, cta, errorBox].filter(Boolean));
   mount(panel('modal.title', body, chip));
   updateCta(cta);
 }
@@ -254,10 +261,11 @@ function buildConsent() {
   return wrap;
 }
 
-/** Enable submit only when photo + valid height + consent are all present. */
+/** Enable submit only when photo + valid height (if asked) + consent are all present. */
 function updateCta(cta) {
   const heightOk =
-    Number(draft.height) >= HEIGHT_MIN_CM && Number(draft.height) <= HEIGHT_MAX_CM;
+    !asksHeight() ||
+    (Number(draft.height) >= HEIGHT_MIN_CM && Number(draft.height) <= HEIGHT_MAX_CM);
 
   if (!draft.photo) {
     cta.disabled = true;
@@ -282,7 +290,7 @@ async function onSubmit(cta, errorBox) {
   cta.disabled = true; // UI double-submit guard (server is the real guard)
   renderLoading();
 
-  const out = await submit({ photo: draft.photo, height: Number(draft.height), extra: draft.extra });
+  const out = await submit({ photo: draft.photo, height: asksHeight() ? Number(draft.height) : null, extra: draft.extra });
 
   switch (out.outcome) {
     case OUTCOME.succeeded:
@@ -387,7 +395,7 @@ function onRegenerate() {
 }
 
 async function onSubmitDirect() {
-  const out = await submit({ photo: draft.photo, height: Number(draft.height), extra: draft.extra });
+  const out = await submit({ photo: draft.photo, height: asksHeight() ? Number(draft.height) : null, extra: draft.extra });
   if (out.outcome === OUTCOME.succeeded) {
     state.lastResult = { generationId: out.generationId, resultUrl: out.resultUrl, variant: state.variant };
     renderResult(out.resultUrl);

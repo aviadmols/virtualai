@@ -29,7 +29,8 @@ final readonly class GenerationRequest
         public ?ProductVariant $variant,
         public string $photoBytes,
         public string $photoMime,
-        public int $userHeight,
+        // Null when the site's popup doesn't ask for height (jewelry/furniture/etc.).
+        public ?int $userHeight,
         public string $clientRequestId,
         public bool $photoConsent,
         public array $extraAttrs = [],

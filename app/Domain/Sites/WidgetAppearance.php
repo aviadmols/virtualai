@@ -24,6 +24,9 @@ final class WidgetAppearance
     public const KEY_BUTTON_TEXT = 'button_text_color';
     public const KEY_POPUP_THEME = 'popup_theme';
     public const KEY_POPUP_ACCENT = 'popup_accent';
+    // Whether the popup asks the shopper for their height (cm). Off for jewelry / furniture
+    // / eyewear where height is irrelevant; on for clothing / footwear.
+    public const KEY_ASK_HEIGHT = 'ask_height';
 
     // Button placement relative to the store's add-to-cart (or a fixed screen corner).
     public const PLACEMENT_AFTER_ATC = 'after_add_to_cart';
@@ -54,6 +57,7 @@ final class WidgetAppearance
         self::KEY_BUTTON_TEXT => '#ffffff',
         self::KEY_POPUP_THEME => self::THEME_LIGHT,
         self::KEY_POPUP_ACCENT => '#111111',
+        self::KEY_ASK_HEIGHT => true,
     ];
 
     /** The complete default appearance. */
@@ -100,6 +104,10 @@ final class WidgetAppearance
 
         if (array_key_exists(self::KEY_POPUP_THEME, $input)) {
             $clean[self::KEY_POPUP_THEME] = self::validEnum(self::KEY_POPUP_THEME, $input[self::KEY_POPUP_THEME], self::THEMES);
+        }
+
+        if (array_key_exists(self::KEY_ASK_HEIGHT, $input)) {
+            $clean[self::KEY_ASK_HEIGHT] = (bool) $input[self::KEY_ASK_HEIGHT];
         }
 
         if (array_key_exists(self::KEY_LABEL, $input)) {

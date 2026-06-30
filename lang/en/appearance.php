@@ -22,6 +22,8 @@ return [
         'sub' => 'How the try-on popup looks when a shopper opens it.',
         'theme' => 'Theme',
         'accent' => 'Accent colour',
+        'ask_height' => 'Ask for the shopper’s height',
+        'ask_height_help' => 'Turn off for jewelry, furniture or anything where height is irrelevant. On for clothing and footwear.',
     ],
     'placement' => [
         'after_add_to_cart' => 'After “Add to cart”',

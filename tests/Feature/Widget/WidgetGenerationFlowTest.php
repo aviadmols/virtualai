@@ -169,6 +169,26 @@ final class WidgetGenerationFlowTest extends TestCase
         $this->assertNull($generation->product_variant_id);
     }
 
+    public function test_generation_without_height_succeeds_when_the_popup_does_not_ask(): void
+    {
+        // A jewelry/furniture popup runs with ask_height=false and sends NO height.
+        $this->fakeOpenRouterSuccess();
+        $ctx = $this->makeSiteContext();
+        $body = $this->body($ctx);
+        unset($body['height']);
+
+        Queue::fake();
+        $start = $this->withHeaders($this->widgetHeaders($ctx['site'], $ctx['origin']))
+            ->postJson('/widget/v1/generations', $body);
+        $start->assertStatus(201)->assertJson(['ok' => true]);
+
+        $generationId = $start->json('generation.id');
+        $this->runGeneration($ctx, $generationId);
+
+        $this->poll($ctx, $generationId)
+            ->assertOk()->assertJson(['generation' => ['status' => Generation::STATUS_SUCCEEDED]]);
+    }
+
     public function test_a_specified_variant_that_is_not_on_the_product_is_still_a_422(): void
     {
         Queue::fake();

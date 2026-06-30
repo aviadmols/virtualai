@@ -57,6 +57,7 @@ export const APPEARANCE = {
   buttonText: 'button_text_color',
   popupTheme: 'popup_theme',
   popupAccent: 'popup_accent',
+  askHeight: 'ask_height',
 };
 
 // Placement values (WidgetAppearance::PLACEMENT_*).

@@ -355,6 +355,9 @@ class SiteResource extends Resource
                 ColorPicker::make(WidgetAppearance::KEY_POPUP_ACCENT)
                     ->label(__('appearance.popup.accent'))
                     ->required(),
+                \Filament\Forms\Components\Toggle::make(WidgetAppearance::KEY_ASK_HEIGHT)
+                    ->label(__('appearance.popup.ask_height'))
+                    ->helperText(__('appearance.popup.ask_height_help')),
             ])
             ->action(static function (Site $record, array $data): void {
                 app(PlatformSiteWriter::class)->update($record, [

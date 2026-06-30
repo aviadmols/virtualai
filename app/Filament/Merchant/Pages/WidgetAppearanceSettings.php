@@ -10,6 +10,7 @@ use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
@@ -121,6 +122,10 @@ class WidgetAppearanceSettings extends Page implements HasForms
                         ColorPicker::make(WidgetAppearance::KEY_POPUP_ACCENT)
                             ->label(__('appearance.popup.accent'))
                             ->required(),
+                        Toggle::make(WidgetAppearance::KEY_ASK_HEIGHT)
+                            ->label(__('appearance.popup.ask_height'))
+                            ->helperText(__('appearance.popup.ask_height_help'))
+                            ->columnSpanFull(),
                     ]),
             ])
             ->statePath('data');
