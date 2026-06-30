@@ -25,7 +25,8 @@ final readonly class GenerationRequest
     public function __construct(
         public EndUser $endUser,
         public Product $product,
-        public ProductVariant $variant,
+        // Null for a single-SKU product (no variants) — the try-on uses the product's main image.
+        public ?ProductVariant $variant,
         public string $photoBytes,
         public string $photoMime,
         public int $userHeight,

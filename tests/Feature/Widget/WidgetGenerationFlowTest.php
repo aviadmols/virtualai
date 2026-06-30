@@ -3,8 +3,11 @@
 namespace Tests\Feature\Widget;
 
 use App\Domain\Generation\GenerateTryOnJob;
+use App\Models\Account;
 use App\Models\EndUser;
 use App\Models\Generation;
+use App\Models\Product;
+use App\Models\Site;
 use App\Support\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -119,6 +122,66 @@ final class WidgetGenerationFlowTest extends TestCase
 
         $endUser = $this->endUserFor($ctx['account'], $ctx['site'], self::ANON);
         $this->assertSame(EndUser::STATUS_ADDED_TO_CART, $endUser->status);
+    }
+
+    public function test_single_sku_product_with_no_variant_generates_against_the_product_image(): void
+    {
+        // A real ring / single-SKU product: confirmed, but NO variants. The try-on must
+        // still run (using the product's main image) — not 422 with variant_mismatch.
+        $this->fakeOpenRouterSuccess();
+
+        $account = Account::factory()->create();
+        $site = Site::factory()->forAccount($account)->create([
+            'allowed_origins' => ['https://shop.example.com'],
+            'free_generations_before_signup' => 2,
+        ]);
+        $product = Tenant::run($account, fn () => Product::factory()->forSite($site)->confirmed()->create([
+            'name' => 'Plain Gold Ring',
+            'product_type' => 'ring',
+            'main_image_url' => 'https://cdn.example.com/ring.jpg',
+            'source_url' => 'https://shop.example.com/p/ring',
+            'source_url_hash' => sha1('https://shop.example.com/p/ring'),
+        ]));
+
+        Queue::fake();
+        $start = $this->withHeaders($this->widgetHeaders($site, 'https://shop.example.com'))
+            ->postJson('/widget/v1/generations', [
+                'photo' => $this->photoDataUrl(),
+                'height' => 170,
+                'product_id' => $product->id,
+                'variant_id' => 0, // single-SKU: no variant to select
+                'client_request_id' => 'crq-no-variant',
+                'consent' => true,
+                'anon_token' => self::ANON,
+            ]);
+
+        $start->assertStatus(201)->assertJson(['ok' => true, 'generation' => ['status' => Generation::STATUS_PENDING]]);
+        $generationId = $start->json('generation.id');
+
+        // The worker runs the money path against the product image (no variant) -> succeeds.
+        $this->runGeneration(['account' => $account, 'site' => $site], $generationId);
+
+        $succeeded = $this->withHeaders($this->widgetHeaders($site, 'https://shop.example.com'))
+            ->getJson('/widget/v1/generations/'.$generationId.'?anon_token='.self::ANON);
+        $succeeded->assertOk()->assertJson(['generation' => ['status' => Generation::STATUS_SUCCEEDED]]);
+
+        $generation = Tenant::run($account, fn () => Generation::query()->findOrFail($generationId));
+        $this->assertNull($generation->product_variant_id);
+    }
+
+    public function test_a_specified_variant_that_is_not_on_the_product_is_still_a_422(): void
+    {
+        Queue::fake();
+        $ctx = $this->makeSiteContext();
+        $body = $this->body($ctx);
+        $body['variant_id'] = 999999; // a real id, but not this product's variant
+
+        $this->withHeaders($this->widgetHeaders($ctx['site'], $ctx['origin']))
+            ->postJson('/widget/v1/generations', $body)
+            ->assertStatus(422)
+            ->assertJson(['ok' => false, 'error' => ['code' => 'variant_mismatch']]);
+
+        Queue::assertNothingPushed();
     }
 
     public function test_oversize_or_unreadable_photo_is_a_typed_422_not_a_500(): void

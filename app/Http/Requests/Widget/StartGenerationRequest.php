@@ -48,7 +48,9 @@ final class StartGenerationRequest extends FormRequest
             self::FIELD_PHOTO_FILE => ['required_without:'.self::FIELD_PHOTO, 'nullable', 'file', 'mimetypes:image/jpeg,image/png,image/webp', 'max:'.(ImagePayload::MAX_IMAGE_BYTES / 1024)],
             self::FIELD_HEIGHT => ['required', 'integer', 'between:'.self::HEIGHT_MIN_CM.','.self::HEIGHT_MAX_CM],
             self::FIELD_PRODUCT_ID => ['required', 'integer'],
-            self::FIELD_VARIANT_ID => ['required', 'integer'],
+            // Optional: a single-SKU product (no variants) has no variant to select. When
+            // present it must be a valid variant of the product (checked in the controller).
+            self::FIELD_VARIANT_ID => ['nullable', 'integer'],
             self::FIELD_CLIENT_REQUEST_ID => ['required', 'string', 'max:128'],
             self::FIELD_CONSENT => ['accepted'], // must be true/1/"yes"/"on" — consent is mandatory
             self::FIELD_ANON_TOKEN => ['required', 'string', 'min:8', 'max:128'],

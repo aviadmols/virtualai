@@ -44,7 +44,7 @@ final class StartGeneration
             siteId: (int) $endUser->site_id,
             endUserId: (int) $endUser->getKey(),
             productId: (int) $request->product->getKey(),
-            variant: (array) ($request->variant->options ?? []),
+            variant: (array) ($request->variant?->options ?? []),
             clientRequestId: $request->clientRequestId,
         );
 
@@ -85,14 +85,14 @@ final class StartGeneration
                 'site_id' => $endUser->site_id,
                 'end_user_id' => $endUser->getKey(),
                 'product_id' => $request->product->getKey(),
-                'product_variant_id' => $request->variant->getKey(),
+                'product_variant_id' => $request->variant?->getKey(),
                 'status' => Generation::STATUS_PENDING,
                 'client_request_id' => $request->clientRequestId,
                 'idempotency_key' => $key,
                 'meta' => [
                     Generation::META_HEIGHT => $request->userHeight,
                     Generation::META_EXTRA_ATTRS => $request->extraAttrs,
-                    Generation::META_VARIANT_SNAPSHOT => (array) ($request->variant->options ?? []),
+                    Generation::META_VARIANT_SNAPSHOT => (array) ($request->variant?->options ?? []),
                     Generation::META_RETENTION_DAYS => $request->endUser->site?->retention_days
                         ?? Site::DEFAULT_RETENTION_DAYS,
                 ],
@@ -133,7 +133,8 @@ final class StartGeneration
             throw GenerationStartException::productNotConfirmed();
         }
 
-        if ((int) $request->variant->product_id !== (int) $request->product->getKey()) {
+        // A single-SKU product has no variant; when one IS given it must belong to the product.
+        if ($request->variant !== null && (int) $request->variant->product_id !== (int) $request->product->getKey()) {
             throw GenerationStartException::variantMismatch();
         }
 

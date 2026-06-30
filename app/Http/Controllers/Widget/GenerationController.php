@@ -59,9 +59,12 @@ final class GenerationController
             return WidgetResponse::error('product_not_found', __('widget_api.not_found.product'), WidgetResponse::STATUS_NOT_FOUND);
         }
 
-        $variant = $this->findVariant($product, (int) $request->input(StartGenerationRequest::FIELD_VARIANT_ID));
+        // A single-SKU product has no variant to select (variant_id 0/absent → null).
+        // When a variant IS specified it must belong to this product.
+        $variantId = (int) $request->input(StartGenerationRequest::FIELD_VARIANT_ID);
+        $variant = $variantId > 0 ? $this->findVariant($product, $variantId) : null;
 
-        if ($variant === null) {
+        if ($variantId > 0 && $variant === null) {
             return WidgetResponse::error('variant_mismatch', __('widget_api.start.variant_mismatch'), WidgetResponse::STATUS_UNPROCESSABLE);
         }
 
