@@ -1290,7 +1290,61 @@ The lookup axis. File each entry under exactly one category; cross-link the rest
 
 ## filament/admin
 
-_No recorded issues yet._
+### TS-FILAMENT-001 — platform cross-account read: the EAGER-LOAD relation re-applies the global scope (variants return 0); + Livewire route-param vs typed property collision
+- **Date:** 2026-06-30
+- **Category:** filament/admin
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `withoutGlobalScope`, `eager-load`, `belongs-to-account`, `platform-seam`, `livewire`, `route-param`, `phase-8`, `scan-review`
+
+- **SYMPTOM:** Two blockers while bringing the scan review/confirm + verify-setup into the
+  PLATFORM Filament panel (super-admin, no bound tenant):
+  1. `PlatformProductQuery::findWithVariants()` removed `AccountScope` from the Product
+     query, but `$product->variants` came back EMPTY — `findWithVariants` returned the
+     product yet `assertCount(1, $loaded->variants)` saw 0.
+  2. The `ManageSiteProducts` resource page declared `public Site $record` and a route
+     `/{record}/products`; the Livewire test (`['record' => $site->id]`) fataled with
+     `Cannot assign int to property …::$record of type App\Models\Site` (a ViewException on
+     mount) — every page test errored before any assertion.
+- **CONTEXT / TRIGGER:** Phase 8, platform `PlatformProductQuery` seam + the
+  `ManageSiteProducts` custom resource Page. The page reads cross-account through the
+  audited `withoutGlobalScope(AccountScope::class)` seam (guarded by `PlatformGuard`).
+- **ROOT CAUSE:**
+  1. `withoutGlobalScope()` only affects the builder it is called on. An eager-load
+     (`with('variants')`) builds a FRESH `ProductVariant` query, and `ProductVariant` IS
+     `BelongsToAccount`, so its `AccountScope` re-applies — and with NO bound tenant it
+     fails closed to nothing. Removing the scope on the parent does not propagate to the
+     child relation.
+  2. Livewire hydrates public properties from the mount parameters BY NAME before `mount()`
+     runs. A `public Site $record` typed property collides with the `record` route/mount
+     param (an int id), so Livewire tries to assign the int to the `Site`-typed property and
+     type-errors.
+- **SOLUTION:**
+  1. Remove the scope on the relation too, inside the same audited seam:
+     `with(['variants' => fn ($r) => $r->withoutGlobalScope(AccountScope::class)])`
+     (`app/Domain/Platform/PlatformProductQuery.php::variantsWithoutScope()`). The bypass is
+     still inside the one guarded, allow-listed seam — not a new product-code bypass.
+  2. Rename the page's public property off the route param: keep `mount(int|string $record)`
+     (receives the id) but store it as `public Site $site = SiteResource::getEloquentQuery()
+     ->findOrFail($record)` (`ManageSiteProducts`). The property name must differ from the
+     mount/route param name so Livewire does not pre-assign the raw id to it.
+  VERIFIED: `tests/Feature/Tenancy/PlatformProductQueryTest.php` (variants load cross-account)
+  + `tests/Feature/Filament/Platform/PlatformSiteProductsTest.php` (page renders, confirm
+  DRAFT→CONFIRMED, setup Ready, verify checklist) — full suite `php artisan test` → 493
+  passed (1592 assertions). Modal-content assertions use `mountTableAction` (opens + renders
+  the modal), not `callTableAction` (which runs a no-submit action and closes it).
+- **PREVENTION:** When an audited platform seam removes `AccountScope` from a parent for a
+  cross-account read, it MUST also remove it from every eager-loaded `BelongsToAccount`
+  child relation (a closure in `with()`), all inside the same guarded seam. A custom Filament
+  resource `Page` with a `/{record}/…` route must NOT also declare a `public <Model> $record`
+  property — name the resolved-model property something else (`$site`) so Livewire's
+  by-name mount hydration doesn't clash with the route param's raw value.
+- **RELATED:** [[laravel-backend]], [[admin-design-system]], [[TS-TENANCY-002]],
+  [[app/Domain/Platform/PlatformProductQuery.php]],
+  [[app/Filament/Platform/Resources/SiteResource/Pages/ManageSiteProducts.php]],
+  [[tests/Feature/Tenancy/PlatformProductQueryTest.php]],
+  [[tests/Feature/Filament/Platform/PlatformSiteProductsTest.php]]
 
 ## i18n/RTL
 

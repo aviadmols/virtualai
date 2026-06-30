@@ -34,6 +34,7 @@ class PlatformSiteQueryTest extends TestCase
     private const SANCTIONED_BYPASS_FILES = [
         'app/Domain/Platform/PlatformActivityQuery.php',
         'app/Domain/Platform/PlatformCreditLedgerQuery.php',
+        'app/Domain/Platform/PlatformProductQuery.php',
         'app/Domain/Platform/PlatformSiteQuery.php',
     ];
 

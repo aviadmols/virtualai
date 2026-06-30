@@ -174,6 +174,60 @@ return [
         'filter' => [
             'account' => 'Account',
         ],
+
+        // Per-site scan review/confirm (the ManageSiteProducts page).
+        'products' => [
+            'label' => 'Products',
+            'title' => 'Products — :site',
+            'col' => [
+                'name' => 'Product',
+                'status' => 'Status',
+                'confidence' => 'Confidence',
+                'variants' => 'Variants',
+                'created' => 'Scanned',
+            ],
+            'status' => [
+                'draft' => 'Needs review',
+                'confirmed' => 'Confirmed',
+                'failed' => 'Scan failed',
+            ],
+            'review' => [
+                'label' => 'Review',
+                'heading' => 'Scanned product',
+                'sub' => 'What the scan read from the page. Read-only — verify before confirming.',
+                'items' => ':count item(s)',
+            ],
+            'confirm' => [
+                'label' => 'Confirm',
+                'heading' => 'Confirm this product?',
+                'sub' => 'Confirms the product exactly as scanned (no corrections). It goes live for the widget.',
+                'submit' => 'Confirm product',
+                'done' => 'Product confirmed',
+                'blocked' => 'Still blocked: :count scan row(s) need review',
+            ],
+            'empty' => 'No scanned products yet',
+            'empty_sub' => 'Use "Scan a product" on the site to add one.',
+        ],
+
+        // Per-site "is everything configured?" verify checklist.
+        'verify' => [
+            'label' => 'Verify setup',
+            'heading' => 'Setup status',
+            'sub' => 'What must be in place for the Tray On button to appear on this site.',
+            'close' => 'Close',
+            'check' => [
+                'openrouter' => 'OpenRouter API key',
+                'origins' => 'Allowed origins',
+                'product' => 'A confirmed product',
+                'snippet' => 'Install snippet on the product page',
+            ],
+            'hint' => [
+                'openrouter' => 'Set the platform OpenRouter key in Settings — every scan and generation needs it.',
+                'origins' => 'The widget only runs on the site\'s allowed origins. Add at least one.',
+                'product' => 'Scan a product and confirm it. The widget needs a confirmed product to work.',
+                'snippet' => 'Add the install snippet (Install code) to the store product page — this cannot be checked here.',
+            ],
+        ],
     ],
 
     // P4 — AI models catalog.

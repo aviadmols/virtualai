@@ -2,6 +2,8 @@
 
 namespace App\Filament\Platform\Resources;
 
+use App\Domain\Platform\PlatformProductQuery;
+use App\Domain\Platform\PlatformSettings;
 use App\Domain\Platform\PlatformSiteQuery;
 use App\Domain\Platform\PlatformSiteWriter;
 use App\Domain\Scan\ScanProductJob;
@@ -9,7 +11,9 @@ use App\Domain\Sites\WidgetAppearance;
 use App\Filament\Platform\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Platform\Resources\SiteResource\Pages\EditSite;
 use App\Filament\Platform\Resources\SiteResource\Pages\ListSites;
+use App\Filament\Platform\Resources\SiteResource\Pages\ManageSiteProducts;
 use App\Models\Account;
+use App\Models\Product;
 use App\Models\Site;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Select;
@@ -64,6 +68,9 @@ class SiteResource extends Resource
     // The widget loader path the install snippet references (app.url + this).
     private const WIDGET_SCRIPT_PATH = '/widget/v1/widget.js';
     private const EMBED_MODAL_VIEW = 'filament.platform.resources.site.embed-modal';
+
+    // The "is this site configured?" verify-setup checklist (modal) view.
+    private const VERIFY_MODAL_VIEW = 'filament.platform.resources.site.verify-setup';
 
     public static function getModelLabel(): string
     {
@@ -144,6 +151,8 @@ class SiteResource extends Resource
             ])
             ->actions([
                 self::scanAction(),
+                self::productsAction(),
+                self::verifyAction(),
                 self::appearanceAction(),
                 self::embedAction(),
                 EditAction::make()
@@ -171,13 +180,28 @@ class SiteResource extends Resource
             'index' => ListSites::route('/'),
             'create' => CreateSite::route('/create'),
             'edit' => EditSite::route('/{record}/edit'),
+            'products' => ManageSiteProducts::route('/{record}/products'),
         ];
     }
 
-    /** A site is "ready" once its page selectors are wired (scanned), else pending. */
+    /**
+     * A site is "ready" once it can actually serve a try-on: a CONFIRMED product exists
+     * (confirmed selectors live on Product->detected_selectors, not site->selectors). A
+     * legacy site->selectors override still counts. The confirmed-product count rides the
+     * audited PlatformProductQuery seam (super-admin only). Else the setup is pending.
+     */
     private static function setupState(Site $site): string
     {
-        return ! empty($site->selectors) ? self::STATE_READY : self::STATE_PENDING;
+        if (! empty($site->selectors)) {
+            return self::STATE_READY;
+        }
+
+        $hasConfirmedProduct = PlatformProductQuery::countForSiteWithStatus(
+            (int) $site->getKey(),
+            Product::STATUS_CONFIRMED,
+        ) > 0;
+
+        return $hasConfirmedProduct ? self::STATE_READY : self::STATE_PENDING;
     }
 
     /**
@@ -212,6 +236,83 @@ class SiteResource extends Resource
                     ->body(__('sites.scan.queued_body'))
                     ->send();
             });
+    }
+
+    /**
+     * "Products" — deep-links to the per-site review/confirm page (ManageSiteProducts).
+     * There the super-admin reviews a site's scanned products read-only and confirms a
+     * DRAFT one. Reads ride the audited PlatformProductQuery seam; confirm runs through
+     * the tenant-bound ConfirmScanAction.
+     */
+    private static function productsAction(): Action
+    {
+        return Action::make('products')
+            ->label(__('platform.sites.products.label'))
+            ->icon('heroicon-o-cube')
+            ->color('gray')
+            ->url(static fn (Site $record): string => ManageSiteProducts::getUrl(['record' => $record->getKey()]));
+    }
+
+    /**
+     * "Verify setup" — the "is everything configured?" answer: a read-only checklist
+     * (✓/✗ + hint) of why the widget button will or won't appear for this site. The
+     * confirmed-product check rides the audited PlatformProductQuery seam (super-admin).
+     */
+    private static function verifyAction(): Action
+    {
+        return Action::make('verify')
+            ->label(__('platform.sites.verify.label'))
+            ->icon('heroicon-o-clipboard-document-check')
+            ->color('gray')
+            ->modalHeading(__('platform.sites.verify.heading'))
+            ->modalDescription(__('platform.sites.verify.sub'))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel(__('platform.sites.verify.close'))
+            ->modalContent(static fn (Site $record): View => view(self::VERIFY_MODAL_VIEW, [
+                'checks' => self::verifyChecklist($record),
+            ]));
+    }
+
+    /**
+     * The setup checklist rows: a stable {key, ok, info, label, hint} list the verify-setup
+     * modal renders. Each verifiable row answers one prerequisite for the widget button to
+     * appear; the snippet row is informational (cannot be verified server-side).
+     *
+     * @return array<int,array{key: string, ok: bool, info: bool, label: string, hint: string}>
+     */
+    private static function verifyChecklist(Site $site): array
+    {
+        $openRouterSet = app(PlatformSettings::class)->isConfigured(PlatformSettings::OPENROUTER_API_KEY);
+        $originsSet = ! empty($site->allowed_origins);
+        $confirmedProducts = PlatformProductQuery::countForSiteWithStatus(
+            (int) $site->getKey(),
+            Product::STATUS_CONFIRMED,
+        );
+
+        return [
+            self::check('openrouter', $openRouterSet),
+            self::check('origins', $originsSet),
+            self::check('product', $confirmedProducts > 0),
+            // Informational: the install snippet must be on the product page — there is
+            // no server-side signal for it, so it is shown as a note, not a pass/fail.
+            self::check('snippet', false, info: true),
+        ];
+    }
+
+    /**
+     * One checklist row with its localised label + hint.
+     *
+     * @return array{key: string, ok: bool, info: bool, label: string, hint: string}
+     */
+    private static function check(string $key, bool $ok, bool $info = false): array
+    {
+        return [
+            'key' => $key,
+            'ok' => $ok,
+            'info' => $info,
+            'label' => __('platform.sites.verify.check.'.$key),
+            'hint' => __('platform.sites.verify.hint.'.$key),
+        ];
     }
 
     /**
