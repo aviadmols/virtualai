@@ -40,8 +40,8 @@ class AiOperationResolverTest extends TestCase
         $bag = $this->resolver->for(AiOperation::KEY_TRY_ON_GENERATION);
 
         $this->assertSame(AiOperation::KEY_TRY_ON_GENERATION, $bag->operationKey);
-        $this->assertSame('google/gemini-2.5-flash-image', $bag->model);
-        $this->assertSame('google/gemini-3.1-flash-image', $bag->fallbackModel);
+        $this->assertSame('google/gemini-3.1-flash-image', $bag->model);
+        $this->assertSame('google/gemini-2.5-flash-image', $bag->fallbackModel);
         $this->assertSame('high', $bag->imageQuality);
         $this->assertSame('3:4', $bag->aspectRatio);
         $this->assertSame(1234, $bag->params['seed']);          // determinism from the bag
@@ -57,12 +57,13 @@ class AiOperationResolverTest extends TestCase
         $account = Account::factory()->create();
         $site = Tenant::run($account, fn () => Site::create([
             'name' => 'Override',
-            'ai_model' => 'google/gemini-3.1-flash-image',
+            'ai_model' => 'google/gemini-2.5-flash-image',
         ]));
 
         $bag = $this->resolver->for(AiOperation::KEY_TRY_ON_GENERATION, $site);
 
-        $this->assertSame('google/gemini-3.1-flash-image', $bag->model);
+        // The site override (the catalogued fallback) wins over the operation default (3.1).
+        $this->assertSame('google/gemini-2.5-flash-image', $bag->model);
     }
 
     public function test_site_model_override_outside_allow_list_falls_back_to_operation_default(): void
@@ -76,7 +77,7 @@ class AiOperationResolverTest extends TestCase
         $bag = $this->resolver->for(AiOperation::KEY_TRY_ON_GENERATION, $site);
 
         // The unlisted model is ignored; the operation default is used.
-        $this->assertSame('google/gemini-2.5-flash-image', $bag->model);
+        $this->assertSame('google/gemini-3.1-flash-image', $bag->model);
     }
 
     public function test_prompt_precedence_site_over_account_over_product_type_over_global(): void
@@ -230,7 +231,7 @@ class AiOperationResolverTest extends TestCase
         $bag = $this->resolver->for(AiOperation::KEY_TRY_ON_GENERATION, $site);
 
         // The override was dropped (operation default used) AND the admin is warned.
-        $this->assertSame('google/gemini-2.5-flash-image', $bag->model);
+        $this->assertSame('google/gemini-3.1-flash-image', $bag->model);
 
         Log::shouldHaveReceived('warning')
             ->withArgs(function (string $message, array $context) {

@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Domain\Platform\QueueHealth;
 use App\Models\Account;
+use App\Models\AiModel;
 use App\Observers\AccountObserver;
+use App\Observers\AiModelObserver;
 use BezhanSalleh\FilamentLanguageSwitch\LanguageSwitch;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
@@ -28,6 +30,11 @@ class AppServiceProvider extends ServiceProvider
     {
         // Every new account gets its single opening $5 grant via the ledger writer.
         Account::observe(AccountObserver::class);
+
+        // The Models-page is_default/is_fallback toggle is the authoring surface for an
+        // operation's model: this observer dedupes to one winner per operation and writes
+        // it through to ai_operations.default_model/fallback_model (what the resolver reads).
+        AiModel::observe(AiModelObserver::class);
 
         // Worker heartbeat: a running queue worker fires the Looping event on every poll
         // (even when idle), so stamp a short-lived cache key. The dashboard health widget
