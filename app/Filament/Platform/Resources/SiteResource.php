@@ -3,15 +3,19 @@
 namespace App\Filament\Platform\Resources;
 
 use App\Domain\Platform\PlatformSiteQuery;
+use App\Domain\Platform\PlatformSiteWriter;
+use App\Domain\Sites\WidgetAppearance;
 use App\Filament\Platform\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Platform\Resources\SiteResource\Pages\EditSite;
 use App\Filament\Platform\Resources\SiteResource\Pages\ListSites;
 use App\Models\Account;
 use App\Models\Site;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\EditAction;
@@ -138,6 +142,7 @@ class SiteResource extends Resource
                     ->alignEnd(),
             ])
             ->actions([
+                self::appearanceAction(),
                 self::embedAction(),
                 EditAction::make()
                     ->label(__('platform.sites.edit')),
@@ -171,6 +176,81 @@ class SiteResource extends Resource
     private static function setupState(Site $site): string
     {
         return ! empty($site->selectors) ? self::STATE_READY : self::STATE_PENDING;
+    }
+
+    /**
+     * "Widget appearance" — set WHERE the Tray On button shows on the store + its look
+     * (placement, label, colours, popup theme/accent) for any site, cross-account. The
+     * write goes through the audited PlatformSiteWriter (binds the site's account via
+     * Tenant::run); values are validated by WidgetAppearance::sanitize. The storefront
+     * widget reads the resolved values from the bootstrap API.
+     */
+    private static function appearanceAction(): Action
+    {
+        return Action::make('appearance')
+            ->label(__('appearance.nav'))
+            ->icon('heroicon-o-paint-brush')
+            ->color('gray')
+            ->modalHeading(__('appearance.title'))
+            ->modalSubmitActionLabel(__('appearance.save'))
+            ->fillForm(static fn (Site $record): array => WidgetAppearance::resolve($record->widget_appearance))
+            ->form([
+                Select::make(WidgetAppearance::KEY_PLACEMENT)
+                    ->label(__('appearance.button.placement'))
+                    ->options(self::placementOptions())
+                    ->required(),
+                TextInput::make(WidgetAppearance::KEY_LABEL)
+                    ->label(__('appearance.button.label'))
+                    ->required()
+                    ->maxLength(WidgetAppearance::LABEL_MAX),
+                ColorPicker::make(WidgetAppearance::KEY_BUTTON_BG)
+                    ->label(__('appearance.button.bg'))
+                    ->required(),
+                ColorPicker::make(WidgetAppearance::KEY_BUTTON_TEXT)
+                    ->label(__('appearance.button.text'))
+                    ->required(),
+                Select::make(WidgetAppearance::KEY_POPUP_THEME)
+                    ->label(__('appearance.popup.theme'))
+                    ->options(self::themeOptions())
+                    ->required(),
+                ColorPicker::make(WidgetAppearance::KEY_POPUP_ACCENT)
+                    ->label(__('appearance.popup.accent'))
+                    ->required(),
+            ])
+            ->action(static function (Site $record, array $data): void {
+                app(PlatformSiteWriter::class)->update($record, [
+                    'widget_appearance' => WidgetAppearance::sanitize($data),
+                ]);
+
+                Notification::make()
+                    ->success()
+                    ->title(__('appearance.saved'))
+                    ->send();
+            });
+    }
+
+    /** Placement value => localised label (shared with the merchant appearance page). */
+    private static function placementOptions(): array
+    {
+        $options = [];
+
+        foreach (WidgetAppearance::PLACEMENTS as $placement) {
+            $options[$placement] = __('appearance.placement.'.$placement);
+        }
+
+        return $options;
+    }
+
+    /** Popup theme value => localised label. */
+    private static function themeOptions(): array
+    {
+        $options = [];
+
+        foreach (WidgetAppearance::THEMES as $theme) {
+            $options[$theme] = __('appearance.theme.'.$theme);
+        }
+
+        return $options;
     }
 
     /**
