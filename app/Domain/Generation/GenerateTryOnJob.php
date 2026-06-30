@@ -79,7 +79,10 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         public readonly int $generationId,
     ) {
         parent::__construct($accountId);
-        $this->onQueue(Q_GENERATIONS);
+        // Read the queue name from config, not the bare Q_GENERATIONS constant: under
+        // config:cache the define() in config/trayon.php never re-runs at runtime, so
+        // the constant is undefined — the cached config array still holds the value.
+        $this->onQueue((string) config('trayon.queues.generations'));
     }
 
     /**

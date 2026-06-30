@@ -38,7 +38,11 @@ final class ScanProductJob extends TenantAwareJob implements ShouldBeUnique
         public readonly string $url,
     ) {
         parent::__construct($accountId);
-        $this->onQueue(Q_SCANS);
+        // Read the queue name from config, not the bare Q_SCANS constant: under
+        // config:cache the define() in config/trayon.php never re-runs at runtime,
+        // so the constant is undefined — but the cached config array still holds the
+        // resolved value. (Construct-time crash otherwise; see TS-INFRA.)
+        $this->onQueue((string) config('trayon.queues.scans'));
     }
 
     /**
