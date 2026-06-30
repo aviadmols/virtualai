@@ -21,5 +21,21 @@ php artisan config:cache || true
 php artisan route:cache  || true
 php artisan view:cache   || true
 
+# --- Background queue worker (single-container fallback) ----------------------
+# Until a dedicated `worker` Railway service runs Horizon, process the queues here
+# so scans/generations don't pile up. A respawn loop self-heals a crashed worker.
+# --timeout 110 stays under the redis retry_after (120) to avoid double-processing.
+# Disable once a dedicated worker exists by setting WEB_INLINE_WORKER=false.
+if [ "${WEB_INLINE_WORKER:-true}" != "false" ]; then
+    (
+        while true; do
+            php artisan queue:work redis \
+                --queue=generations,scans,webhooks,media,default \
+                --sleep=3 --tries=3 --timeout=110 --max-time=3600 || true
+            sleep 2
+        done
+    ) &
+fi
+
 # exec so FrankPHP is PID 1 and receives Railway's SIGTERM for graceful shutdown.
 exec frankenphp run --config Caddyfile

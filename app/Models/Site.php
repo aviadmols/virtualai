@@ -80,6 +80,7 @@ class Site extends Model
             'privacy_config' => 'array',
             'free_generations_before_signup' => 'integer',
             'retention_days' => 'integer',
+            'widget_last_seen_at' => 'datetime',
         ];
     }
 
@@ -102,12 +103,46 @@ class Site extends Model
             if ($site->site_key === '') {
                 $site->site_key = null;
             }
+
+            // Auto-allow the site's OWN domain origin so the widget runs there with no
+            // manual allowed-origins step. Only when none are set yet (a fresh site with a
+            // domain), so explicit/manual origins are never overwritten.
+            if (empty($site->allowed_origins)) {
+                $origin = self::originFromDomain($site->domain);
+                if ($origin !== null) {
+                    $site->allowed_origins = [$origin];
+                }
+            }
         });
     }
 
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    /**
+     * The origin (scheme://host[:port]) of a domain/URL — what the widget's allowed-origin
+     * check compares against. Returns null for a blank/host-less value.
+     */
+    public static function originFromDomain(?string $domain): ?string
+    {
+        $domain = trim((string) $domain);
+
+        if ($domain === '') {
+            return null;
+        }
+
+        // parse_url needs a scheme to find the host reliably; assume https if absent.
+        $parts = parse_url(str_contains($domain, '://') ? $domain : 'https://'.$domain);
+
+        if (empty($parts['host'])) {
+            return null;
+        }
+
+        $origin = ($parts['scheme'] ?? 'https').'://'.$parts['host'];
+
+        return isset($parts['port']) ? $origin.':'.$parts['port'] : $origin;
     }
 
     /** A fresh public site_key (URL-safe). */

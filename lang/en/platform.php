@@ -238,7 +238,7 @@ return [
                 'openrouter' => 'Set the platform OpenRouter key in Settings — every scan and generation needs it.',
                 'origins' => 'The widget only runs on the site\'s allowed origins. Add at least one.',
                 'product' => 'Scan a product and confirm it. The widget needs a confirmed product to work.',
-                'snippet' => 'Add the install snippet (Install code) to the store product page — this cannot be checked here.',
+                'snippet' => 'Auto-detected when the widget first loads on the store. If not detected yet, add the install snippet (Install code) to a product page and open it.',
             ],
         ],
     ],

@@ -9,8 +9,10 @@ use App\Http\Widget\WidgetContext;
 use App\Http\Widget\WidgetGateService;
 use App\Http\Widget\WidgetResponse;
 use App\Models\Product;
+use App\Models\Site;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * BootstrapController — GET /widget/v1/bootstrap. The public config the widget needs to
@@ -29,6 +31,9 @@ final class BootstrapController
     private const QUERY_URL = 'url';
     private const QUERY_ANON_TOKEN = 'anon_token';
 
+    // Throttle the "widget last seen" heartbeat so a busy PDP doesn't write per view.
+    private const SEEN_THROTTLE_MINUTES = 5;
+
     public function __construct(
         private readonly EndUserResolver $endUsers,
         private readonly WidgetGateService $gates,
@@ -38,6 +43,10 @@ final class BootstrapController
     {
         $context = WidgetContext::of($request);
         $site = $context->site;
+
+        // Heartbeat: the widget just booted on the store, so the install snippet is live.
+        // Lets the setup checklist auto-detect installation (throttled, best-effort).
+        $this->touchWidgetSeen($site);
 
         $product = $this->confirmedProductFor($request, (int) $site->getKey());
         $endUser = $this->resolveEndUser($request, $site);
@@ -64,6 +73,26 @@ final class BootstrapController
                 ? ProductPayload::make($product, $product->variants)
                 : null,
         ]);
+    }
+
+    /**
+     * Stamp widget_last_seen_at for the site (the install-snippet heartbeat). Throttled so
+     * a busy PDP doesn't write on every page view; a direct row update (no model events,
+     * no tenant scope) and best-effort — a write failure must never break the widget boot.
+     */
+    private function touchWidgetSeen(Site $site): void
+    {
+        $last = $site->widget_last_seen_at;
+
+        if ($last !== null && $last->gt(now()->subMinutes(self::SEEN_THROTTLE_MINUTES))) {
+            return;
+        }
+
+        try {
+            DB::table('sites')->where('id', $site->getKey())->update(['widget_last_seen_at' => now()]);
+        } catch (\Throwable) {
+            // best-effort heartbeat — never block a widget boot on it
+        }
     }
 
     /** Match the CONFIRMED product for this PDP url within the bound site (account-scoped). */

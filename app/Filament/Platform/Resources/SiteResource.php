@@ -293,9 +293,9 @@ class SiteResource extends Resource
             self::check('openrouter', $openRouterSet),
             self::check('origins', $originsSet),
             self::check('product', $confirmedProducts > 0),
-            // Informational: the install snippet must be on the product page — there is
-            // no server-side signal for it, so it is shown as a note, not a pass/fail.
-            self::check('snippet', false, info: true),
+            // Auto-detected: widget_last_seen_at is stamped when the widget boots on the
+            // store (BootstrapController heartbeat), so this flips to ✓ once it's live.
+            self::check('snippet', $site->widget_last_seen_at !== null),
         ];
     }
 
