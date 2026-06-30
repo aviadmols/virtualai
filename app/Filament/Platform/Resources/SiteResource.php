@@ -283,7 +283,9 @@ class SiteResource extends Resource
     private static function verifyChecklist(Site $site): array
     {
         $openRouterSet = app(PlatformSettings::class)->isConfigured(PlatformSettings::OPENROUTER_API_KEY);
-        $originsSet = ! empty($site->allowed_origins);
+        // The site's own domain origin is auto-allowed by ResolveWidgetSite, so a site
+        // with a domain is effectively origin-configured even before allowed_origins fills.
+        $originsSet = ! empty($site->allowed_origins) || Site::originFromDomain($site->domain) !== null;
         $confirmedProducts = PlatformProductQuery::countForSiteWithStatus(
             (int) $site->getKey(),
             Product::STATUS_CONFIRMED,

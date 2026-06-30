@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\ResolveWidgetSite;
+use App\Http\Middleware\WidgetCorsPreflight;
 use App\Http\Middleware\WidgetRateLimit;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -30,6 +31,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // sees the request as HTTPS, so secure cookies, the widget Origin checks,
         // and signed-URL generation behave correctly behind TLS termination.
         $middleware->trustProxies(at: '*');
+
+        // Answer the widget API's CORS preflight (OPTIONS) globally — Laravel's synthetic
+        // auto-OPTIONS skips the route-group middleware, so the preflight would carry no
+        // CORS headers and the browser would block the cross-origin widget call.
+        $middleware->prepend(WidgetCorsPreflight::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // The widget API must answer TYPED JSON, never an HTML error page, on any

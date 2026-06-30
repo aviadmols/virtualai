@@ -127,9 +127,16 @@ final class ResolveWidgetSite
             return false;
         }
 
-        $allowed = $site->allowed_origins ?? [];
+        // The site's OWN domain origin is always allowed — the widget must run on the
+        // store's own domain without a manual allowed-origins step. allowed_origins adds
+        // any EXTRA origins (e.g. a staging host).
+        $domainOrigin = Site::originFromDomain($site->domain);
 
-        return in_array($origin, $allowed, true);
+        if ($domainOrigin !== null && $origin === $domainOrigin) {
+            return true;
+        }
+
+        return in_array($origin, $site->allowed_origins ?? [], true);
     }
 
     /**
