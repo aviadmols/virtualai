@@ -125,10 +125,10 @@ class AiOperationResolverPreviewTest extends TestCase
     {
         $preview = $this->resolver->preview(self::TRYON);
 
-        $this->assertSame('google/gemini-2.5-flash-image-preview', $preview->winningModel);
-        $this->assertSame('openai/gpt-image-1', $preview->fallbackModel);
+        $this->assertSame('google/gemini-2.5-flash-image', $preview->winningModel);
+        $this->assertSame('google/gemini-3.1-flash-image', $preview->fallbackModel);
         // Chain = [winner, fallback] in the order the client would try them.
-        $this->assertSame(['google/gemini-2.5-flash-image-preview', 'openai/gpt-image-1'], $preview->modelChain);
+        $this->assertSame(['google/gemini-2.5-flash-image', 'google/gemini-3.1-flash-image'], $preview->modelChain);
         $this->assertSame('operation_default', $preview->modelTrace->winningLevel());
     }
 
@@ -154,12 +154,12 @@ class AiOperationResolverPreviewTest extends TestCase
         $account = Account::factory()->create();
         $site = Tenant::run($account, fn () => Site::create([
             'name' => 'Override',
-            'ai_model' => 'openai/gpt-image-1', // allow-listed fallback model
+            'ai_model' => 'google/gemini-3.1-flash-image', // allow-listed fallback model
         ]));
 
         $preview = $this->resolver->preview(self::TRYON, $site);
 
-        $this->assertSame('openai/gpt-image-1', $preview->winningModel);
+        $this->assertSame('google/gemini-3.1-flash-image', $preview->winningModel);
         $this->assertSame('site_override', $preview->modelTrace->winningLevel());
         $this->assertSame($this->resolver->for(self::TRYON, $site)->model, $preview->winningModel);
     }

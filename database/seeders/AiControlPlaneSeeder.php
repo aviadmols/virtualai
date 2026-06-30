@@ -17,9 +17,11 @@ use Illuminate\Database\Seeder;
  *  - a product_scan operation with a vision/JSON model + fallback,
  *  - scope=global prompts for BOTH (the guaranteed resolution floor).
  *
- * Model ids verified current on OpenRouter (2026-06-24): the Gemini image line
- * (google/gemini-2.5-flash-image-preview) for try-on; google/gemini-2.5-flash
- * (vision + structured outputs) for scan. Admin can swap any of these later.
+ * Model ids verified current on OpenRouter (2026-06-30): the Gemini image line
+ * (google/gemini-2.5-flash-image, fallback google/gemini-3.1-flash-image) for try-on;
+ * google/gemini-2.5-flash (vision + structured outputs) for scan. The older
+ * "-image-preview" id and openai/gpt-image-1 were retired by OpenRouter (404). Admin
+ * can swap any of these later from the panel.
  */
 class AiControlPlaneSeeder extends Seeder
 {
@@ -27,8 +29,8 @@ class AiControlPlaneSeeder extends Seeder
     private const SCAN_DEFAULT_MODEL = 'google/gemini-2.5-flash';
     private const SCAN_FALLBACK_MODEL = 'openai/gpt-4o-mini';
 
-    private const TRYON_DEFAULT_MODEL = 'google/gemini-2.5-flash-image-preview';
-    private const TRYON_FALLBACK_MODEL = 'openai/gpt-image-1';
+    private const TRYON_DEFAULT_MODEL = 'google/gemini-2.5-flash-image';
+    private const TRYON_FALLBACK_MODEL = 'google/gemini-3.1-flash-image';
 
     private const TRYON_IMAGE_QUALITY = 'high';
     private const TRYON_ASPECT_RATIO = '3:4';
@@ -99,7 +101,7 @@ class AiControlPlaneSeeder extends Seeder
         );
 
         $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, self::TRYON_DEFAULT_MODEL, 'Gemini 2.5 Flash Image', isDefault: true, costHint: 40_000, unit: AiModel::UNIT_PER_IMAGE);
-        $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, self::TRYON_FALLBACK_MODEL, 'GPT Image 1', isFallback: true, costHint: 60_000, unit: AiModel::UNIT_PER_IMAGE);
+        $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, self::TRYON_FALLBACK_MODEL, 'Gemini 3.1 Flash Image', isFallback: true, costHint: 60_000, unit: AiModel::UNIT_PER_IMAGE);
 
         Prompt::updateOrCreate(
             [

@@ -28,6 +28,7 @@ final class OpenRouterClient
     // === CONSTANTS ===
     private const CHAT_PATH = '/chat/completions';
     private const GENERATION_PATH = '/generation';
+    private const KEY_PATH = '/key'; // GET /key — bearer info (label + usage/limit), no spend
 
     // Required headers (OpenRouter attribution + auth).
     private const HEADER_REFERER = 'HTTP-Referer';
@@ -88,6 +89,53 @@ final class OpenRouterClient
         }
 
         return $this->handleResponse($response, $operationKey, $model);
+    }
+
+    /**
+     * Test the bearer key WITHOUT spending: GET /key returns the key's label + usage/limit
+     * for a valid key, 401 for an invalid one. Returns a typed result the Settings page
+     * renders — it NEVER throws (a bad key / unreachable provider is a result, not a 500).
+     * An optional $overrideKey lets the UI test a just-typed key before it is saved.
+     *
+     * @return array{ok: bool, reason: string, message: string, detail: ?string}
+     */
+    public function checkConnection(?string $overrideKey = null): array
+    {
+        $key = $overrideKey !== null && $overrideKey !== '' ? $overrideKey : $this->apiKey();
+
+        if ($key === '' || PlatformSettings::looksLikePlaceholder($key)) {
+            return ['ok' => false, 'reason' => 'not_configured', 'message' => 'No OpenRouter API key is set.', 'detail' => null];
+        }
+
+        try {
+            $response = $this->request($key)->get(self::KEY_PATH);
+        } catch (ConnectionException) {
+            return ['ok' => false, 'reason' => 'timeout', 'message' => 'Could not reach OpenRouter.', 'detail' => null];
+        }
+
+        if ($response->successful()) {
+            return ['ok' => true, 'reason' => 'ok', 'message' => 'Connected to OpenRouter.', 'detail' => $this->keySummary((array) ($response->json('data') ?? []))];
+        }
+
+        if ($response->status() === 401) {
+            return ['ok' => false, 'reason' => 'invalid_key', 'message' => 'OpenRouter rejected the key (401 — invalid or revoked).', 'detail' => null];
+        }
+
+        return ['ok' => false, 'reason' => 'error', 'message' => 'OpenRouter returned an error ('.$response->status().').', 'detail' => null];
+    }
+
+    /** A short, language-neutral summary of the key's credit, if the provider returned it. */
+    private function keySummary(array $data): ?string
+    {
+        if (isset($data['limit_remaining']) && is_numeric($data['limit_remaining'])) {
+            return 'Credit remaining: $'.number_format((float) $data['limit_remaining'], 2);
+        }
+
+        if (isset($data['usage']) && is_numeric($data['usage'])) {
+            return 'Usage so far: $'.number_format((float) $data['usage'], 2);
+        }
+
+        return null;
     }
 
     /**
@@ -191,12 +239,12 @@ final class OpenRouterClient
      * bearer. The key is set via withToken so it is never assembled into a logged
      * string here.
      */
-    private function request(): PendingRequest
+    private function request(?string $overrideKey = null): PendingRequest
     {
         return $this->http
             ->baseUrl((string) config(self::CFG_BASE_URL))
             ->timeout((int) config(self::CFG_TIMEOUT))
-            ->withToken($this->apiKey())
+            ->withToken($overrideKey !== null && $overrideKey !== '' ? $overrideKey : $this->apiKey())
             ->withHeaders([
                 self::HEADER_REFERER => (string) config(self::CFG_REFERER),
                 self::HEADER_TITLE => (string) config(self::CFG_TITLE),

@@ -129,7 +129,7 @@ trait GenerationTestSupport
         Http::fake([
             self::OR_BASE.'/chat/completions' => Http::response([
                 'id' => 'or-gen-123',
-                'model' => 'google/gemini-2.5-flash-image-preview',
+                'model' => 'google/gemini-2.5-flash-image',
                 'usage' => ['cost' => $costUsd],
                 'choices' => [[
                     'message' => [
@@ -158,7 +158,7 @@ trait GenerationTestSupport
         Http::fake([
             self::OR_BASE.'/chat/completions' => Http::response([
                 'id' => 'or-gen-nocost',
-                'model' => 'google/gemini-2.5-flash-image-preview',
+                'model' => 'google/gemini-2.5-flash-image',
                 // no usage.cost
                 'choices' => [[
                     'message' => ['images' => [['image_url' => ['url' => $dataUrl]]]],

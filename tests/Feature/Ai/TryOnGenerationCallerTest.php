@@ -61,7 +61,7 @@ class TryOnGenerationCallerTest extends TestCase
 
         return [
             'id' => 'gen-img',
-            'model' => 'google/gemini-2.5-flash-image-preview',
+            'model' => 'google/gemini-2.5-flash-image',
             'usage' => ['cost' => 0.039],
             'choices' => [[
                 'message' => [
@@ -109,7 +109,7 @@ class TryOnGenerationCallerTest extends TestCase
         Http::fake([
             self::BASE.'/chat/completions' => Http::response([
                 'id' => 'gen-noimg',
-                'model' => 'google/gemini-2.5-flash-image-preview',
+                'model' => 'google/gemini-2.5-flash-image',
                 'usage' => ['cost' => 0.0],
                 'choices' => [['message' => ['content' => 'I cannot generate that.']]],
             ], 200),

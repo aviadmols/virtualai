@@ -489,6 +489,12 @@ return [
             'title' => 'OpenRouter',
             'sub' => 'The server-side API key used for every product scan and try-on generation.',
             'api_key' => 'OpenRouter API key',
+            'test' => 'Test connection',
+            'test_ok' => 'OpenRouter connected',
+            'test_fail' => 'OpenRouter connection failed',
+            'test_not_configured' => 'No real key is set yet — paste your sk-or-… key above and test again.',
+            'test_invalid' => 'OpenRouter rejected this key (invalid or revoked).',
+            'test_timeout' => 'Could not reach OpenRouter. Check the network and try again.',
         ],
         'payplus' => [
             'title' => 'PayPlus (payments)',

@@ -85,4 +85,51 @@ class OpenRouterKeyFromSettingsTest extends TestCase
         $this->assertTrue(PlatformSettings::looksLikePlaceholder('REPLACE_WITH_REAL_OPENROUTER_KEY'));
         $this->assertFalse(PlatformSettings::looksLikePlaceholder('sk-or-v1-real'));
     }
+
+    public function test_check_connection_reports_ok_with_a_credit_summary_for_a_valid_key(): void
+    {
+        Http::fake([self::BASE.'/key' => Http::response(['data' => ['label' => 'k', 'limit_remaining' => 9.5]], 200)]);
+        PlatformSetting::create(['key' => PlatformSettings::OPENROUTER_API_KEY, 'value' => 'sk-or-real', 'is_secret' => true]);
+
+        $result = app(OpenRouterClient::class)->checkConnection();
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('ok', $result['reason']);
+        $this->assertStringContainsString('9.50', (string) $result['detail']);
+    }
+
+    public function test_check_connection_reports_invalid_on_401(): void
+    {
+        Http::fake([self::BASE.'/key' => Http::response(['error' => ['message' => 'no']], 401)]);
+        PlatformSetting::create(['key' => PlatformSettings::OPENROUTER_API_KEY, 'value' => 'sk-or-bad', 'is_secret' => true]);
+
+        $result = app(OpenRouterClient::class)->checkConnection();
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('invalid_key', $result['reason']);
+    }
+
+    public function test_check_connection_flags_a_placeholder_without_any_http_call(): void
+    {
+        config()->set('services.openrouter.key', 'REPLACE_WITH_REAL_OPENROUTER_KEY');
+
+        $result = app(OpenRouterClient::class)->checkConnection();
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('not_configured', $result['reason']);
+        Http::assertNothingSent();
+    }
+
+    public function test_check_connection_can_test_a_just_typed_key_before_it_is_saved(): void
+    {
+        Http::fake([self::BASE.'/key' => Http::response(['data' => ['usage' => 0.0]], 200)]);
+
+        // No DB row, env is a placeholder — but the typed override is a real key.
+        config()->set('services.openrouter.key', 'REPLACE_WITH_REAL_OPENROUTER_KEY');
+
+        $result = app(OpenRouterClient::class)->checkConnection('sk-or-typed-but-unsaved');
+
+        $this->assertTrue($result['ok']);
+        Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer sk-or-typed-but-unsaved'));
+    }
 }

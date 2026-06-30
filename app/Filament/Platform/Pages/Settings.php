@@ -2,7 +2,9 @@
 
 namespace App\Filament\Platform\Pages;
 
+use App\Domain\Ai\OpenRouterClient;
 use App\Domain\Platform\PlatformSettings;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -70,6 +72,41 @@ class Settings extends Page implements HasForms
     {
         // Write-only: never hydrate the stored secret into the form/browser.
         $this->form->fill();
+    }
+
+    /**
+     * Header actions: "Test OpenRouter connection" — a no-spend GET /key that proves the
+     * configured (or just-typed) key actually works, so the admin never has to run a real
+     * try-on to find out the key is wrong. Tests the typed value if present, else the saved key.
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('testOpenRouter')
+                ->label(__('platform.settings.openrouter.test'))
+                ->icon('heroicon-o-signal')
+                ->color('gray')
+                ->action(function (): void {
+                    $typed = $this->data['openrouter_api_key'] ?? null;
+                    $result = app(OpenRouterClient::class)->checkConnection(is_string($typed) ? $typed : null);
+
+                    $bodyKey = [
+                        'not_configured' => 'platform.settings.openrouter.test_not_configured',
+                        'invalid_key' => 'platform.settings.openrouter.test_invalid',
+                        'timeout' => 'platform.settings.openrouter.test_timeout',
+                    ][$result['reason']] ?? null;
+
+                    $body = $bodyKey !== null ? __($bodyKey) : ($result['detail'] ?? $result['message']);
+
+                    $notification = Notification::make()->body($body);
+
+                    $result['ok']
+                        ? $notification->success()->title(__('platform.settings.openrouter.test_ok'))
+                        : $notification->danger()->title(__('platform.settings.openrouter.test_fail'));
+
+                    $notification->send();
+                }),
+        ];
     }
 
     public function form(Form $form): Form

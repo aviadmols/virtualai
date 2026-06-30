@@ -488,6 +488,12 @@ return [
             'title' => 'OpenRouter',
             'sub' => 'מפתח ה-API בצד השרת לכל סריקת מוצר ויצירת תמונה.',
             'api_key' => 'מפתח OpenRouter API',
+            'test' => 'בדיקת חיבור',
+            'test_ok' => 'החיבור ל-OpenRouter תקין',
+            'test_fail' => 'החיבור ל-OpenRouter נכשל',
+            'test_not_configured' => 'עדיין לא הוגדר מפתח אמיתי — הדבק למעלה מפתח sk-or-… ובדוק שוב.',
+            'test_invalid' => 'OpenRouter דחה את המפתח (לא תקין או בוטל).',
+            'test_timeout' => 'לא ניתן היה להגיע ל-OpenRouter. בדוק את הרשת ונסה שוב.',
         ],
         'payplus' => [
             'title' => 'PayPlus (תשלומים)',
