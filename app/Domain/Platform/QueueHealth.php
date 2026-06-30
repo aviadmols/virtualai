@@ -2,6 +2,7 @@
 
 namespace App\Domain\Platform;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Horizon\Contracts\MasterSupervisorRepository;
@@ -16,6 +17,13 @@ use Throwable;
  */
 final class QueueHealth
 {
+    // === CONSTANTS ===
+    // A running queue worker (queue:work OR Horizon) stamps this cache key on every poll
+    // loop (Queue::looping, registered in AppServiceProvider) — even when idle.
+    public const HEARTBEAT_KEY = 'worker:heartbeat';
+    public const HEARTBEAT_TTL = 120;       // seconds a heartbeat counts as "alive"
+    public const HEARTBEAT_THROTTLE = 20;   // min seconds between heartbeat writes
+
     /**
      * @return array{worker_active: bool, pending: int, failed: int, per_queue: array<string,int>}
      */
@@ -31,9 +39,22 @@ final class QueueHealth
         ];
     }
 
-    /** True if at least one Horizon master supervisor is currently reporting in. */
+    /**
+     * True if a queue worker is alive: a fresh heartbeat (the in-container queue:work or a
+     * Horizon worker stamps it each poll loop), or — as a fallback — a Horizon master
+     * supervisor reporting in. Covers both the queue:work and Horizon deployment shapes.
+     */
     public function workerActive(): bool
     {
+        try {
+            $beat = (int) Cache::get(self::HEARTBEAT_KEY, 0);
+            if ($beat > 0 && (now()->timestamp - $beat) < self::HEARTBEAT_TTL) {
+                return true;
+            }
+        } catch (Throwable) {
+            // cache unavailable — fall through to the Horizon master check
+        }
+
         try {
             return count(app(MasterSupervisorRepository::class)->all()) > 0;
         } catch (Throwable) {

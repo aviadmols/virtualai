@@ -331,5 +331,31 @@ return [
                 'maxProcesses' => 1,
             ],
         ],
+
+        // Lean profile for APP_ENV=staging — without this key a `php artisan horizon`
+        // worker would have NO supervisors in staging and process nothing. Kept small so
+        // a single modest worker (or the in-container fallback) stays within memory.
+        'staging' => [
+            SUP_GENERATIONS => [
+                'minProcesses' => 1,
+                'maxProcesses' => 2,
+            ],
+            SUP_SCANS => [
+                'minProcesses' => 1,
+                'maxProcesses' => 2,
+            ],
+            SUP_WEBHOOKS => [
+                'minProcesses' => 1,
+                'maxProcesses' => 2,
+            ],
+            SUP_MEDIA => [
+                'minProcesses' => 1,
+                'maxProcesses' => 1,
+            ],
+            SUP_DEFAULT => [
+                'minProcesses' => 1,
+                'maxProcesses' => 1,
+            ],
+        ],
     ],
 ];

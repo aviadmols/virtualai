@@ -4,6 +4,7 @@ namespace Tests\Feature\Platform;
 
 use App\Domain\Platform\QueueHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 /**
@@ -33,9 +34,29 @@ class QueueHealthTest extends TestCase
         $this->assertSame(array_sum($snapshot['per_queue']), $snapshot['pending']);
     }
 
-    public function test_worker_is_reported_inactive_with_no_running_horizon(): void
+    public function test_worker_is_inactive_with_no_heartbeat_and_no_horizon(): void
     {
-        // No Horizon master is running in the test process → inactive, no exception.
+        // No worker heartbeat + no Horizon master → inactive, no exception.
+        $this->assertFalse(app(QueueHealth::class)->workerActive());
+    }
+
+    public function test_worker_is_active_when_a_fresh_heartbeat_exists(): void
+    {
+        // A running queue worker stamps the heartbeat each poll loop.
+        Cache::put(QueueHealth::HEARTBEAT_KEY, now()->timestamp, QueueHealth::HEARTBEAT_TTL);
+
+        $this->assertTrue(app(QueueHealth::class)->workerActive());
+    }
+
+    public function test_worker_is_inactive_when_the_heartbeat_is_stale(): void
+    {
+        // A heartbeat older than the TTL means the worker stopped.
+        Cache::put(
+            QueueHealth::HEARTBEAT_KEY,
+            now()->timestamp - (QueueHealth::HEARTBEAT_TTL + 30),
+            QueueHealth::HEARTBEAT_TTL + 120,
+        );
+
         $this->assertFalse(app(QueueHealth::class)->workerActive());
     }
 }
