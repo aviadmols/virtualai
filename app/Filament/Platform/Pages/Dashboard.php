@@ -4,6 +4,7 @@ namespace App\Filament\Platform\Pages;
 
 use App\Filament\Platform\Widgets\CostsVsRevenueWidget;
 use App\Filament\Platform\Widgets\PlatformKpiWidget;
+use App\Filament\Platform\Widgets\QueueHealthWidget;
 use Filament\Pages\Dashboard as BaseDashboard;
 
 /**
@@ -45,10 +46,11 @@ class Dashboard extends BaseDashboard
         return __(self::$navigationGroup);
     }
 
-    /** KPI band (A1) first, then the costs-vs-revenue summary panel. */
+    /** Queue/worker health first (is the pipeline running?), then the KPI band + summary. */
     public function getWidgets(): array
     {
         return [
+            QueueHealthWidget::class,
             PlatformKpiWidget::class,
             CostsVsRevenueWidget::class,
         ];

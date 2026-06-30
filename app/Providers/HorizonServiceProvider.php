@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use Illuminate\Support\Facades\Gate;
-use Laravel\Horizon\Horizon;
 use Laravel\Horizon\HorizonApplicationServiceProvider;
 
 class HorizonServiceProvider extends HorizonApplicationServiceProvider
@@ -27,10 +27,10 @@ class HorizonServiceProvider extends HorizonApplicationServiceProvider
      */
     protected function gate(): void
     {
-        Gate::define('viewHorizon', function ($user = null) {
-            return in_array(optional($user)->email, [
-                //
-            ]);
+        // The Horizon dashboard (/horizon) is the queue/worker control panel. Open it
+        // to authenticated platform super-admins (the same gate the platform panel uses).
+        Gate::define('viewHorizon', static function ($user = null): bool {
+            return $user instanceof User && $user->isSuperAdmin();
         });
     }
 }

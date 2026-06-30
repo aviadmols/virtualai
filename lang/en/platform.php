@@ -18,6 +18,19 @@ return [
         'controls' => 'Controls',
     ],
 
+    // Queue & worker health widget (dashboard).
+    'health' => [
+        'worker' => 'Worker',
+        'active' => 'Active',
+        'inactive' => 'Inactive',
+        'worker_ok' => 'Horizon is processing jobs',
+        'worker_down' => 'No worker running — jobs will not process',
+        'pending' => 'Pending jobs',
+        'pending_sub' => 'Waiting in the queues',
+        'failed' => 'Failed jobs',
+        'failed_sub' => 'Open Horizon to inspect / retry',
+    ],
+
     // P1 — Costs-vs-revenue dashboard (overview).
     'costs' => [
         'title' => 'Costs vs revenue',
