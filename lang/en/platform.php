@@ -167,6 +167,8 @@ return [
             'name' => 'Site name',
             'domain' => 'Domain',
             'domain_placeholder' => 'https://shop.example.com',
+            'category' => 'Store type',
+            'category_help' => 'Chooses the tailored try-on prompt (and the default for asking the shopper\'s height).',
             'origins' => 'Allowed origins',
             'origins_help' => 'The widget only runs on these origins.',
         ],

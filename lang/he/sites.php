@@ -24,6 +24,8 @@ return [
         'domain' => 'דומיין',
         'domain_placeholder' => 'https://shop.example.com',
         'name' => 'שם תצוגה',
+        'category' => 'סוג החנות',
+        'category_help' => 'בוחר את פרומפט ההתאמה הייעודי למוצרים שלך (תכשיטים, ביגוד, ריהוט, …).',
         'origins' => 'דומיינים מורשים',
         'origins_placeholder' => 'https://shop.example.com',
         'origins_help' => 'הווידג׳ט יפעל רק בדומיינים אלו.',

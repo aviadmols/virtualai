@@ -123,7 +123,10 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
             return;
         }
 
-        $config = $this->resolver()->for(self::OPERATION_KEY, $site, $product->product_type);
+        // The site's chosen store type (jewelry/clothing/…) drives the tailored prompt;
+        // fall back to the scanned product_type, then the generic global prompt.
+        $promptType = $site->product_category ?: $product->product_type;
+        $config = $this->resolver()->for(self::OPERATION_KEY, $site, $promptType);
         $estimate = $this->estimator()->estimateMicroUsd($config);
 
         if (! $this->passesCreditGate($generation, $endUser, $estimate)) {

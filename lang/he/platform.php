@@ -166,6 +166,8 @@ return [
             'name' => 'שם האתר',
             'domain' => 'דומיין',
             'domain_placeholder' => 'https://shop.example.com',
+            'category' => 'סוג החנות',
+            'category_help' => 'בוחר את פרומפט ההתאמה הייעודי (וברירת המחדל לבקשת גובה הקונה).',
             'origins' => 'דומיינים מורשים',
             'origins_help' => 'הווידג׳ט יפעל רק בדומיינים אלו.',
         ],

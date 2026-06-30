@@ -24,6 +24,8 @@ return [
         'domain' => 'Domain',
         'domain_placeholder' => 'https://shop.example.com',
         'name' => 'Display name',
+        'category' => 'Store type',
+        'category_help' => 'Picks the tailored try-on prompt for your products (jewelry, clothing, furniture, …).',
         'origins' => 'Allowed origins',
         'origins_placeholder' => 'https://shop.example.com',
         'origins_help' => 'The widget only runs on these origins.',

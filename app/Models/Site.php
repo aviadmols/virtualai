@@ -46,6 +46,7 @@ class Site extends Model
     protected $fillable = [
         'name',
         'domain',
+        'product_category',
         'allowed_origins',
         'site_key',
         'widget_secret',

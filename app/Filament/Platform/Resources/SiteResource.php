@@ -111,6 +111,11 @@ class SiteResource extends Resource
                 ->placeholder(__('platform.sites.field.domain_placeholder'))
                 ->url()
                 ->maxLength(255),
+            Select::make('product_category')
+                ->label(__('platform.sites.field.category'))
+                ->helperText(__('platform.sites.field.category_help'))
+                ->options(\App\Domain\Sites\StoreCategory::options())
+                ->native(false),
             TagsInput::make('allowed_origins')
                 ->label(__('platform.sites.field.origins'))
                 ->helperText(__('platform.sites.field.origins_help')),

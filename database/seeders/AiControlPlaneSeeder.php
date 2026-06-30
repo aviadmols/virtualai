@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Sites\StoreCategory;
 use App\Models\AiModel;
 use App\Models\AiOperation;
 use App\Models\Prompt;
@@ -35,10 +36,67 @@ class AiControlPlaneSeeder extends Seeder
     private const TRYON_IMAGE_QUALITY = 'high';
     private const TRYON_ASPECT_RATIO = '3:4';
 
+    // Tailored try-on prompts per store type (StoreCategory). Seeded as product_type-scoped
+    // defaults the resolver prefers over the generic global prompt; fully admin-editable.
+    // The GENERAL category has no entry — it uses the global prompt.
+    private const CATEGORY_PROMPTS = [
+        StoreCategory::JEWELRY => [
+            'system' => 'You generate photorealistic virtual try-on images of JEWELRY. Place the item precisely on the correct body part — rings on a finger, necklaces around the neck, bracelets on the wrist, earrings on the ears — at true scale. Preserve the person\'s skin, hands, pose and background exactly; change nothing except adding the jewelry. Match lighting, reflections and shadows so metal and gemstones look real.',
+            'user' => 'Place the {{product_name}} ({{variant}}) from the second image naturally and at realistic scale on the person in the first image. Keep their pose, skin and background; render metal and stones with accurate reflections and shadows.',
+        ],
+        StoreCategory::CLOTHING => [
+            'system' => 'You generate photorealistic virtual try-on images of CLOTHING. Dress the person in the garment so it fits their body and pose naturally, with realistic drape, folds and fabric texture. Preserve the person\'s face, hair, body proportions and background; replace only the relevant clothing.',
+            'user' => 'Dress the person in the first image in {{product_name}} ({{variant}}) from the second image. The person is {{height}} cm tall — fit the garment to their proportions, with natural drape and correct length. Keep their face, pose and background.',
+        ],
+        StoreCategory::FOOTWEAR => [
+            'system' => 'You generate photorealistic virtual try-on images of FOOTWEAR. Put the shoes on the person\'s feet matching their stance, foot angle and the ground perspective, with realistic scale, contact shadows and material. Preserve the person and background; change only the footwear.',
+            'user' => 'Put the {{product_name}} ({{variant}}) from the second image on the feet of the person in the first image. The person is {{height}} cm tall. Match their pose, the floor perspective and lighting.',
+        ],
+        StoreCategory::EYEWEAR => [
+            'system' => 'You generate photorealistic virtual try-on images of EYEWEAR. Place the glasses or sunglasses on the person\'s face aligned to their eyes, nose bridge and ears, scaled to their face and head angle, with realistic lens reflections and shadows. Preserve the face and everything else.',
+            'user' => 'Place the {{product_name}} ({{variant}}) from the second image on the face of the person in the first image, aligned to their eyes and matching their head angle and lighting.',
+        ],
+        StoreCategory::ACCESSORIES => [
+            'system' => 'You generate photorealistic virtual try-on images of ACCESSORIES (bags, watches, hats, belts, scarves). Place the item where it is worn or carried — watch on the wrist, bag on the shoulder or in hand, hat on the head — at true scale with realistic shadows. Preserve the person, pose and background.',
+            'user' => 'Place the {{product_name}} ({{variant}}) from the second image on the person in the first image where it is naturally worn or carried, at realistic scale and lighting. Keep their pose and background.',
+        ],
+        StoreCategory::FURNITURE => [
+            'system' => 'You generate photorealistic images that place FURNITURE into a real room photo. Position the item with correct perspective, scale, lighting and contact shadows so it looks genuinely present in the space. Preserve the room, walls, floor and existing items; only add the furniture.',
+            'user' => 'Place the {{product_name}} ({{variant}}) from the second image realistically into the room in the first image — correct perspective, scale, lighting and shadows.',
+        ],
+        StoreCategory::HOME_DECOR => [
+            'system' => 'You generate photorealistic images that place HOME DECOR items (lamps, rugs, wall art, vases, cushions) into a real room photo, with correct perspective, scale, lighting and shadows. Preserve the room and only add the item.',
+            'user' => 'Place the {{product_name}} ({{variant}}) from the second image realistically into the scene in the first image — matching perspective, scale and lighting.',
+        ],
+    ];
+
     public function run(): void
     {
         $this->seedScanOperation();
         $this->seedTryOnOperation();
+        $this->seedCategoryPrompts();
+    }
+
+    /** Seed a product_type-scoped try-on prompt per store category (admin-editable). */
+    private function seedCategoryPrompts(): void
+    {
+        foreach (self::CATEGORY_PROMPTS as $category => $prompt) {
+            Prompt::updateOrCreate(
+                [
+                    'scope' => Prompt::SCOPE_PRODUCT_TYPE,
+                    'operation_key' => AiOperation::KEY_TRY_ON_GENERATION,
+                    'product_type' => $category,
+                    'account_id' => null,
+                    'site_id' => null,
+                ],
+                [
+                    'system_prompt' => $prompt['system'],
+                    'user_prompt' => $prompt['user'],
+                    'version' => 1,
+                    'is_active' => true,
+                ],
+            );
+        }
     }
 
     private function seedScanOperation(): void
