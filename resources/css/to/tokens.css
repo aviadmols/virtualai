@@ -112,10 +112,12 @@
     --toa-accent-hover: #000000;
     --toa-accent-soft: #f0f0ee;          /* selected-row / active-nav tint; panels override */
     --toa-accent-on: var(--to-paper);    /* text/icon on the accent fill */
-    --toa-bg: #f8f8f5;
+    /* Horizon-style admin chrome: a cool light-gray canvas with white cards that
+       float on it (cooler border + soft shadow), instead of the old warm cream. */
+    --toa-bg: #f3f4f6;
     --toa-surface: var(--to-paper);
-    --toa-surface-alt: #fbfbf9;
-    --toa-border: #e6e6e1;
+    --toa-surface-alt: #f9fafb;
+    --toa-border: #e5e7eb;
     --toa-focus: rgb(17 17 17 / 35%);    /* panels override the rgb to their brand */
 
     /* 2.2 Admin typography (density-tuned) */
@@ -135,7 +137,7 @@
     --toa-radius-field: 8px;
 
     /* 2.4 Admin shadow / spacing aliases */
-    --toa-shadow-card: 0 1px 3px rgb(0 0 0 / 6%), 0 1px 2px rgb(0 0 0 / 4%);
+    --toa-shadow-card: 0 1px 3px rgb(15 23 42 / 8%), 0 1px 2px rgb(15 23 42 / 5%);
     --toa-gutter: var(--to-space-6);
     /* min KPI-card track width before the band wraps (A1 auto-fit grid). */
     --toa-kpi-min: 200px;
