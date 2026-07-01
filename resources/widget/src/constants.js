@@ -32,6 +32,10 @@ export const QUERY_SITE_KEY = 'site_key';
 // Bootstrap query params (BootstrapController::QUERY_URL / QUERY_ANON_TOKEN).
 export const QUERY_URL = 'url';
 export const QUERY_ANON_TOKEN = 'anon_token';
+export const QUERY_LIMIT = 'limit';
+
+// How many past try-ons the gallery strip requests (server clamps to its own max).
+export const GALLERY_LIMIT = 12;
 
 // localStorage keys (namespaced so a host page can't collide).
 export const STORAGE_ANON_TOKEN = 'trayon.anon_token';

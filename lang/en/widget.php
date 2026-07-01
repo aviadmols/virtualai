@@ -79,7 +79,10 @@ return [
         'added' => 'Added to cart',
     ],
     'gallery' => [
-        'title' => 'Your try-ons',
+        'title' => 'Your previous try-ons',
+        'viewing' => 'Your try-on',
+        'view' => 'View this try-on',
+        'back' => 'Back',
         'empty' => 'Your try-ons will appear here',
         'error' => "Couldn't load your try-ons",
         'open' => 'View full size',

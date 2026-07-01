@@ -117,6 +117,10 @@ async function stubApi(page, locale) {
   await page.route('**/widget/v1/events/add-to-cart', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, recorded: true }) }),
   );
+  // Default: no past try-ons (individual gates override this to supply a gallery).
+  await page.route('**/widget/v1/gallery*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [] }) }),
+  );
 }
 
 function assert(cond, msg) {
@@ -227,6 +231,51 @@ async function asyncNotificationGate(browser) {
     failures++;
     console.error('  FAIL:', e.message);
     await page.screenshot({ path: resolve(OUT, 'widget-notification-FAIL.png') }).catch(() => {});
+  }
+
+  await page.close();
+  return failures;
+}
+
+/**
+ * Gallery gate: a shopper with past try-ons opens the modal and sees them as a strip atop the
+ * form; tapping one opens that past image.
+ */
+async function galleryGate(browser) {
+  console.log('\n=== gallery (past try-ons) ===');
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  let failures = 0;
+
+  await stubApi(page, 'en');
+  // Override the default empty gallery with two past try-ons (registered last -> wins).
+  await page.route('**/widget/v1/gallery*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [
+      { id: 11, status: 'succeeded', result_url: RESULT_PNG, created_at: null },
+      { id: 12, status: 'succeeded', result_url: RESULT_PNG, created_at: null },
+    ] }) }));
+
+  try {
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    await page.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
+    await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
+
+    // The gallery strip appears atop the form with the shopper's past try-ons.
+    await page.locator('.ton-gallery__thumb').first().waitFor({ timeout: 6000 });
+    const thumbs = await page.locator('.ton-gallery__thumb').count();
+    assert(thumbs === 2, `gallery shows the shopper's past try-ons (${thumbs})`);
+
+    // Tapping one opens that past image.
+    await page.locator('.ton-gallery__thumb').first().click();
+    await page.locator('.ton-result__img').waitFor({ timeout: 5000 });
+    assert(true, 'tapping a past try-on opens it');
+
+    await page.screenshot({ path: resolve(OUT, 'widget-gallery.en.png'), fullPage: false });
+    console.log('  -> screenshot: widget-gallery.en.png');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, 'widget-gallery-FAIL.png') }).catch(() => {});
   }
 
   await page.close();
@@ -386,6 +435,9 @@ async function run() {
 
   // --- async notification gate (close popup mid-generation -> notify -> reopen) ---
   failures += await asyncNotificationGate(browser);
+
+  // --- gallery gate (past try-ons strip -> tap to view) ---
+  failures += await galleryGate(browser);
 
   await browser.close();
   server.close();

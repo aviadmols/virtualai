@@ -183,6 +183,44 @@
   font-weight: 600;
 }
 
+/* ---- Gallery strip (past try-ons, atop the form) ---- */
+.ton-gallery {
+  margin-block-end: var(--ton-gap);
+}
+
+.ton-gallery__title {
+  margin-block-end: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ton-muted);
+}
+
+.ton-gallery__strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-block-end: 4px;
+}
+
+.ton-gallery__thumb {
+  flex: none;
+  width: 64px;
+  height: 80px;
+  padding: 0;
+  border: 1px solid var(--ton-border);
+  border-radius: var(--ton-radius-sm);
+  overflow: hidden;
+  background: var(--ton-field-bg);
+  cursor: pointer;
+}
+
+.ton-gallery__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* ---- Form fields ---- */
 .ton-field {
   margin-block-end: var(--ton-gap);

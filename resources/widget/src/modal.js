@@ -5,7 +5,7 @@
 // so it stays out of the entry bundle. Rendered inside the shared Shadow overlay mount;
 // structural classes only, dynamic per-site values via CSS vars. Object URLs are revoked.
 
-import { STEP, HEIGHT_MIN_CM, HEIGHT_MAX_CM, APPEARANCE } from './constants.js';
+import { STEP, HEIGHT_MIN_CM, HEIGHT_MAX_CM, APPEARANCE, GALLERY_LIMIT } from './constants.js';
 import { state, newIntent } from './state.js';
 import { t, tries } from './i18n.js';
 import { el, warn } from './dom.js';
@@ -114,6 +114,9 @@ function renderForm() {
 
   const chip = triesChip();
 
+  // The shopper's past try-ons (filled asynchronously; hidden when they have none).
+  const gallery = el('div', { class: 'ton-gallery', attrs: { hidden: true } });
+
   const upload = buildUpload(errorBox);
   const height = asksHeight() ? buildHeight() : null;
   const details = buildDetails();
@@ -140,9 +143,69 @@ function renderForm() {
     refresh();
   });
 
-  const body = el('div', {}, [upload, height, details, consent, cta, errorBox].filter(Boolean));
+  const body = el('div', {}, [gallery, upload, height, details, consent, cta, errorBox].filter(Boolean));
   mount(panel('modal.title', body, chip));
   updateCta(cta);
+  void loadGalleryStrip(gallery);
+}
+
+// ---------------------------------------------------------------------------
+// Gallery — the shopper's past try-ons, shown as a strip atop the form; tap one to view it.
+// ---------------------------------------------------------------------------
+async function loadGalleryStrip(container) {
+  let res;
+  try {
+    res = await api.getGallery(state.anonToken, GALLERY_LIMIT);
+  } catch {
+    return; // a gallery failure must never block a new try-on
+  }
+
+  const items = res && res.ok && res.data && Array.isArray(res.data.items) ? res.data.items : [];
+  const usable = items.filter((it) => it && it.result_url);
+  if (!usable.length) return; // no past try-ons -> no strip
+
+  container.innerHTML = '';
+  container.appendChild(el('div', { class: 'ton-gallery__title', text: t('gallery.title') }));
+  container.appendChild(
+    el(
+      'div',
+      { class: 'ton-gallery__strip' },
+      usable.map((item) =>
+        el(
+          'button',
+          {
+            class: 'ton-gallery__thumb',
+            attrs: { type: 'button', 'aria-label': t('gallery.view') },
+            on: { click: () => renderGalleryImage(item.result_url) },
+          },
+          [el('img', { class: 'ton-gallery__img', attrs: { src: item.result_url, alt: '', loading: 'lazy' } })],
+        ),
+      ),
+    ),
+  );
+  container.removeAttribute('hidden');
+}
+
+/** View a past try-on (zoomable), with a Back to the form. No add-to-cart (the variant is historical). */
+function renderGalleryImage(url) {
+  const img = el('img', { class: 'ton-result__img', attrs: { src: url, alt: t('gallery.viewing') } });
+  const hint = el('div', { class: 'ton-result__zoom-hint', text: t('result.zoom_hint') });
+  const frame = el('div', { class: 'ton-result__frame' }, [img, hint]);
+  enableZoom(frame, img, hint);
+
+  const body = el('div', {}, [
+    el('div', { class: 'ton-modal__title', text: t('gallery.viewing') }),
+    frame,
+    el('div', { class: 'ton-actions' }, [
+      el('button', {
+        class: 'ton-action ton-action--primary',
+        attrs: { type: 'button' },
+        text: t('gallery.back'),
+        on: { click: open },
+      }),
+    ]),
+  ]);
+  mount(panel('modal.title', body));
 }
 
 function triesChip() {

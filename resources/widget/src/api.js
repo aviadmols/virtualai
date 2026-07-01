@@ -14,6 +14,7 @@ import {
   QUERY_SITE_KEY,
   QUERY_URL,
   QUERY_ANON_TOKEN,
+  QUERY_LIMIT,
   GEN_FIELD,
   LEAD_FIELD,
   CART_EVENT_FIELD,
@@ -94,6 +95,13 @@ export function createGeneration(payload) {
 export function getGeneration(id, anonToken) {
   return request('GET', ENDPOINTS.generation(id), {
     query: { [QUERY_ANON_TOKEN]: anonToken },
+  });
+}
+
+/** GET /gallery — this shopper's past succeeded try-ons (signed result URLs), newest first. */
+export function getGallery(anonToken, limit) {
+  return request('GET', ENDPOINTS.gallery, {
+    query: { [QUERY_ANON_TOKEN]: anonToken, [QUERY_LIMIT]: limit },
   });
 }
 
