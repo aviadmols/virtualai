@@ -78,6 +78,12 @@ class AiModelResource extends Resource
                         ->label(__('platform.models.field.operation'))
                         ->options(self::operationOptions())
                         ->required(),
+                    Select::make('provider')
+                        ->label(__('platform.models.field.provider'))
+                        ->options(self::providerOptions())
+                        ->default(AiModel::PROVIDER_OPENROUTER)
+                        ->required()
+                        ->helperText(__('platform.models.field.provider_help')),
                     Toggle::make('is_default')
                         ->label(__('platform.models.field.is_default')),
                     Toggle::make('is_fallback')
@@ -120,6 +126,12 @@ class AiModelResource extends Resource
                     ->badge()
                     ->color('gray')
                     ->formatStateUsing(static fn (string $state): string => self::operationLabel($state))
+                    ->sortable(),
+                TextColumn::make('provider')
+                    ->label(__('platform.models.col.provider'))
+                    ->badge()
+                    ->color(static fn (string $state): string => $state === AiModel::PROVIDER_BYTEPLUS ? 'warning' : 'gray')
+                    ->formatStateUsing(static fn (string $state): string => self::providerOptions()[$state] ?? $state)
                     ->sortable(),
                 IconColumn::make('is_default')
                     ->label(__('platform.models.col.default'))
@@ -174,6 +186,15 @@ class AiModelResource extends Resource
     public static function operationLabel(string $key): string
     {
         return AiOperation::query()->where('operation_key', $key)->value('label') ?: $key;
+    }
+
+    /** Provider id → label (the AiModel PROVIDER_* CONSTs). */
+    public static function providerOptions(): array
+    {
+        return [
+            AiModel::PROVIDER_OPENROUTER => 'OpenRouter',
+            AiModel::PROVIDER_BYTEPLUS => 'BytePlus (Seedream)',
+        ];
     }
 
     /** Cost-unit → localised label (from the AiModel UNIT_* CONSTs). */

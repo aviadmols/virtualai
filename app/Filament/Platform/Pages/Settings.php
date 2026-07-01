@@ -2,6 +2,7 @@
 
 namespace App\Filament\Platform\Pages;
 
+use App\Domain\Ai\BytePlusImageClient;
 use App\Domain\Ai\OpenRouterClient;
 use App\Domain\Platform\PlatformSettings;
 use Filament\Actions\Action;
@@ -44,6 +45,7 @@ class Settings extends Page implements HasForms
     // form field → setting key. Every field here is a write-only secret.
     private const FIELD_SETTINGS = [
         'openrouter_api_key' => PlatformSettings::OPENROUTER_API_KEY,
+        'byteplus_api_key' => PlatformSettings::BYTEPLUS_API_KEY,
         'payplus_api_key' => PlatformSettings::PAYPLUS_API_KEY,
         'payplus_secret_key' => PlatformSettings::PAYPLUS_SECRET_KEY,
         'payplus_page_uid' => PlatformSettings::PAYPLUS_PAGE_UID,
@@ -75,38 +77,44 @@ class Settings extends Page implements HasForms
     }
 
     /**
-     * Header actions: "Test OpenRouter connection" — a no-spend GET /key that proves the
-     * configured (or just-typed) key actually works, so the admin never has to run a real
-     * try-on to find out the key is wrong. Tests the typed value if present, else the saved key.
+     * Header actions: a no-spend "Test connection" per AI provider — proves the configured
+     * (or just-typed) key works so the admin never runs a real try-on to find it's wrong.
      */
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('testOpenRouter')
-                ->label(__('platform.settings.openrouter.test'))
-                ->icon('heroicon-o-signal')
-                ->color('gray')
-                ->action(function (): void {
-                    $typed = $this->data['openrouter_api_key'] ?? null;
-                    $result = app(OpenRouterClient::class)->checkConnection(is_string($typed) ? $typed : null);
-
-                    $bodyKey = [
-                        'not_configured' => 'platform.settings.openrouter.test_not_configured',
-                        'invalid_key' => 'platform.settings.openrouter.test_invalid',
-                        'timeout' => 'platform.settings.openrouter.test_timeout',
-                    ][$result['reason']] ?? null;
-
-                    $body = $bodyKey !== null ? __($bodyKey) : ($result['detail'] ?? $result['message']);
-
-                    $notification = Notification::make()->body($body);
-
-                    $result['ok']
-                        ? $notification->success()->title(__('platform.settings.openrouter.test_ok'))
-                        : $notification->danger()->title(__('platform.settings.openrouter.test_fail'));
-
-                    $notification->send();
-                }),
+            $this->testAction('testOpenRouter', 'openrouter_api_key', 'platform.settings.openrouter', fn (?string $k) => app(OpenRouterClient::class)->checkConnection($k)),
+            $this->testAction('testByteplus', 'byteplus_api_key', 'platform.settings.byteplus', fn (?string $k) => app(BytePlusImageClient::class)->checkConnection($k)),
         ];
+    }
+
+    /** A provider "Test connection" header action (tests the typed value, else the saved key). */
+    private function testAction(string $name, string $field, string $labelPrefix, callable $probe): Action
+    {
+        return Action::make($name)
+            ->label(__($labelPrefix.'.test'))
+            ->icon('heroicon-o-signal')
+            ->color('gray')
+            ->action(function () use ($field, $labelPrefix, $probe): void {
+                $typed = $this->data[$field] ?? null;
+                $result = $probe(is_string($typed) ? $typed : null);
+
+                $bodyKey = [
+                    'not_configured' => $labelPrefix.'.test_not_configured',
+                    'invalid_key' => $labelPrefix.'.test_invalid',
+                    'timeout' => $labelPrefix.'.test_timeout',
+                ][$result['reason']] ?? null;
+
+                $body = $bodyKey !== null ? __($bodyKey) : ($result['detail'] ?? $result['message']);
+
+                $notification = Notification::make()->body($body);
+
+                $result['ok']
+                    ? $notification->success()->title(__($labelPrefix.'.test_ok'))
+                    : $notification->danger()->title(__($labelPrefix.'.test_fail'));
+
+                $notification->send();
+            });
     }
 
     public function form(Form $form): Form
@@ -117,6 +125,11 @@ class Settings extends Page implements HasForms
                     ->description(__('platform.settings.openrouter.sub'))
                     ->schema([
                         $this->secretField('openrouter_api_key', 'platform.settings.openrouter.api_key', PlatformSettings::OPENROUTER_API_KEY),
+                    ]),
+                Section::make(__('platform.settings.byteplus.title'))
+                    ->description(__('platform.settings.byteplus.sub'))
+                    ->schema([
+                        $this->secretField('byteplus_api_key', 'platform.settings.byteplus.api_key', PlatformSettings::BYTEPLUS_API_KEY),
                     ]),
                 Section::make(__('platform.settings.payplus.title'))
                     ->description(__('platform.settings.payplus.sub'))

@@ -2,24 +2,35 @@
 
 namespace App\Domain\Ai;
 
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
+
 /**
  * TryOnGenerationCaller — operation B: try_on_generation to result image BYTES.
  *
- * Given the shopper image + the selected-variant product image + the assembled
- * prompt, calls an image-generation/edit model and returns the result image
- * bytes. Honours image_quality + aspect_ratio + seed/temperature from the
- * resolver bag — never a literal. Returns bytes (not a URL); laravel-backend
- * stores them to media before charging.
+ * Given the shopper image + the selected-variant product image + the assembled prompt,
+ * calls the image provider the resolved config points at (OpenRouter or BytePlus) and
+ * returns the result image bytes. Provider-agnostic: it builds the provider-appropriate
+ * request body and delegates the call + image/cost extraction to the ImageGenerationProvider
+ * chosen by ProviderRouter. Honours image_quality + aspect_ratio + seed from the bag —
+ * never a literal. Returns bytes (not a URL); laravel-backend stores them before charging.
  */
 final class TryOnGenerationCaller
 {
     // === CONSTANTS ===
     // The image output modality OpenRouter image models expect.
     private const MODALITIES = ['image', 'text'];
-    private const DATA_URL_PREFIX = 'data:';
+
+    // BytePlus/Seedream: image_quality -> size token, response format, defaults.
+    private const BYTEPLUS_RESPONSE_FORMAT = 'b64_json';
+    private const BYTEPLUS_DEFAULT_SIZE = '2K';
+    private const BYTEPLUS_QUALITY_SIZE = [
+        'high' => '2K',
+        'standard' => '1K',
+        'low' => '1K',
+    ];
 
     public function __construct(
-        private readonly OpenRouterClient $client,
+        private readonly ProviderRouter $router,
     ) {}
 
     /**
@@ -33,15 +44,19 @@ final class TryOnGenerationCaller
         ImagePayload $variantImage,
         array $vars = [],
     ): TryOnResult {
-        $response = $this->client->callWithFallback(
+        $provider = $this->router->for($config->provider);
+
+        $response = $provider->callWithFallback(
             $config->operationKey,
             $config->model,
             $config->fallbackModel,
-            fn (string $model): array => $this->buildBody($config, $model, $shopperImage, $variantImage, $vars),
+            fn (string $model): array => $config->provider === ImageGenerationProvider::PROVIDER_BYTEPLUS
+                ? $this->buildBytePlusBody($config, $model, $shopperImage, $variantImage, $vars)
+                : $this->buildOpenRouterBody($config, $model, $shopperImage, $variantImage, $vars),
         );
 
-        $modelUsed = $this->client->extractModelUsed($response, $config->model);
-        [$bytes, $mime] = $this->extractImage($response);
+        $modelUsed = $provider->extractModelUsed($response, $config->model);
+        [$bytes, $mime] = $provider->extractImage($response);
 
         if ($bytes === null) {
             throw OpenRouterException::make(
@@ -54,20 +69,20 @@ final class TryOnGenerationCaller
         return new TryOnResult(
             imageBytes: $bytes,
             mimeType: $mime,
-            cost: $this->client->parseCost($response, $config->estimatedCostMicroUsd),
+            cost: $provider->parseCost($response, $config->estimatedCostMicroUsd),
             modelUsed: $modelUsed,
-            openrouterGenerationId: $this->client->extractGenerationId($response),
+            openrouterGenerationId: $provider->extractGenerationId($response),
         );
     }
 
     /**
-     * Build the chat body for an image generation. quality / aspect / sampler all
-     * come from the bag.
+     * OpenRouter chat body for an image generation. quality / aspect / sampler come from
+     * the bag. (Unchanged from the original single-provider path.)
      *
      * @param  array<string,string|int|float|null>  $vars
      * @return array<string,mixed>
      */
-    private function buildBody(
+    private function buildOpenRouterBody(
         OperationConfig $config,
         string $model,
         ImagePayload $shopperImage,
@@ -92,18 +107,53 @@ final class TryOnGenerationCaller
 
         $messages[] = ['role' => 'user', 'content' => $userContent];
 
-        $body = [
+        return $this->applyImageParams([
             'model' => $model,
             'messages' => $messages,
             'modalities' => self::MODALITIES,
-        ];
-
-        return $this->applyImageParams($body, $config);
+        ], $config);
     }
 
     /**
-     * Apply image_quality + aspect_ratio + sampler params from the bag. These are
-     * config, never service literals; a hardcoded 1024x1024 / fixed seed is the scar.
+     * BytePlus/Seedream images/generations body: a single prompt (system prepended — no
+     * separate system role) + the input image refs (shopper + product) + size/format.
+     *
+     * @param  array<string,string|int|float|null>  $vars
+     * @return array<string,mixed>
+     */
+    private function buildBytePlusBody(
+        OperationConfig $config,
+        string $model,
+        ImagePayload $shopperImage,
+        ImagePayload $variantImage,
+        array $vars,
+    ): array {
+        $prompt = $config->substituteUser($vars);
+        $system = $config->substituteSystem($vars);
+
+        if ($system !== null && $system !== '') {
+            $prompt = $system."\n\n".$prompt;
+        }
+
+        $body = [
+            'model' => $model,
+            'prompt' => $prompt,
+            'image' => [$shopperImage->url, $variantImage->url],
+            'size' => self::BYTEPLUS_QUALITY_SIZE[$config->imageQuality] ?? self::BYTEPLUS_DEFAULT_SIZE,
+            'response_format' => self::BYTEPLUS_RESPONSE_FORMAT,
+            'watermark' => false,
+        ];
+
+        if (array_key_exists('seed', $config->params)) {
+            $body['seed'] = $config->params['seed'];
+        }
+
+        return $body;
+    }
+
+    /**
+     * Apply image_quality + aspect_ratio + sampler params from the bag (OpenRouter shape).
+     * These are config, never service literals; a hardcoded 1024x1024 / fixed seed is the scar.
      *
      * @param  array<string,mixed>  $body
      * @return array<string,mixed>
@@ -125,90 +175,5 @@ final class TryOnGenerationCaller
         }
 
         return $body;
-    }
-
-    /**
-     * Extract image bytes + mime from the response. Defensive: the image may
-     * arrive as message.images[].image_url.url (data URL) OR a content image part
-     * OR a top-level data[].b64_json. Returns [null, ''] when none is usable.
-     *
-     * @return array{0: string|null, 1: string}
-     */
-    private function extractImage(array $response): array
-    {
-        $message = $response['choices'][0]['message'] ?? [];
-
-        // 1) Chat image modality: message.images[].image_url.url as a data URL.
-        $images = $message['images'] ?? null;
-
-        if (is_array($images)) {
-            foreach ($images as $image) {
-                $url = $image['image_url']['url'] ?? ($image['url'] ?? null);
-
-                if (is_string($url)) {
-                    $decoded = $this->decodeDataUrl($url);
-
-                    if ($decoded !== null) {
-                        return $decoded;
-                    }
-                }
-            }
-        }
-
-        // 2) Content parts carrying an image_url.
-        $content = $message['content'] ?? null;
-
-        if (is_array($content)) {
-            foreach ($content as $part) {
-                $url = $part['image_url']['url'] ?? null;
-
-                if (is_string($url)) {
-                    $decoded = $this->decodeDataUrl($url);
-
-                    if ($decoded !== null) {
-                        return $decoded;
-                    }
-                }
-            }
-        }
-
-        // 3) Dedicated image endpoint shape: data[].b64_json.
-        $b64 = $response['data'][0]['b64_json'] ?? null;
-
-        if (is_string($b64) && $b64 !== '') {
-            $bytes = base64_decode($b64, true);
-
-            if ($bytes !== false) {
-                return [$bytes, 'image/png'];
-            }
-        }
-
-        return [null, ''];
-    }
-
-    /**
-     * Decode a data: URL to [bytes, mime]. Returns null for a non-data URL or
-     * undecodable base64.
-     *
-     * @return array{0: string, 1: string}|null
-     */
-    private function decodeDataUrl(string $url): ?array
-    {
-        if (! str_starts_with($url, self::DATA_URL_PREFIX)) {
-            return null;
-        }
-
-        // data:image/png;base64,XXXX
-        if (! preg_match('#^data:(?<mime>[^;]+);base64,(?<data>.+)$#s', $url, $m)) {
-            return null;
-        }
-
-        $bytes = base64_decode($m['data'], true);
-
-        if ($bytes === false || $bytes === '') {
-            return null;
-        }
-
-        return [$bytes, $m['mime']];
     }
 }

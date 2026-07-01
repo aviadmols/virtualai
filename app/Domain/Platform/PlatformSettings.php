@@ -20,6 +20,7 @@ final class PlatformSettings
     // === CONSTANTS ===
     // Setting keys (the DB `key` column). Stable identifiers, never magic strings.
     public const OPENROUTER_API_KEY = 'openrouter.api_key';
+    public const BYTEPLUS_API_KEY = 'byteplus.api_key';
     public const PAYPLUS_API_KEY = 'payplus.api_key';
     public const PAYPLUS_SECRET_KEY = 'payplus.secret_key';
     public const PAYPLUS_PAGE_UID = 'payplus.page_uid';
@@ -28,6 +29,7 @@ final class PlatformSettings
     // setting key → the config()/env fallback used when the DB value is unset.
     private const CONFIG_FALLBACK = [
         self::OPENROUTER_API_KEY => 'services.openrouter.key',
+        self::BYTEPLUS_API_KEY => 'services.byteplus.api_key',
         self::PAYPLUS_API_KEY => 'services.payplus.api_key',
         self::PAYPLUS_SECRET_KEY => 'services.payplus.secret_key',
         self::PAYPLUS_PAGE_UID => 'services.payplus.page_uid',

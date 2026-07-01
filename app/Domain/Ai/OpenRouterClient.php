@@ -2,6 +2,7 @@
 
 namespace App\Domain\Ai;
 
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Domain\Platform\PlatformSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -23,12 +24,13 @@ use Illuminate\Support\Sleep;
  * primary failure is retried (bounded backoff on transient) then re-called on the
  * fallback model, and the terminal failure carries a stable error code.
  */
-final class OpenRouterClient
+final class OpenRouterClient implements ImageGenerationProvider
 {
     // === CONSTANTS ===
     private const CHAT_PATH = '/chat/completions';
     private const GENERATION_PATH = '/generation';
     private const KEY_PATH = '/key'; // GET /key — bearer info (label + usage/limit), no spend
+    private const DATA_URL_PREFIX = 'data:';
 
     // Required headers (OpenRouter attribution + auth).
     private const HEADER_REFERER = 'HTTP-Referer';
@@ -136,6 +138,72 @@ final class OpenRouterClient
         }
 
         return null;
+    }
+
+    /**
+     * Result image bytes + mime from an OpenRouter response. Defensive: the image may
+     * arrive as message.images[].image_url.url (data URL), a content image part, OR a
+     * top-level data[].b64_json. Returns [null, ''] when none is usable.
+     *
+     * @return array{0: string|null, 1: string}
+     */
+    public function extractImage(array $response): array
+    {
+        $message = $response['choices'][0]['message'] ?? [];
+
+        $images = $message['images'] ?? null;
+        if (is_array($images)) {
+            foreach ($images as $image) {
+                $url = $image['image_url']['url'] ?? ($image['url'] ?? null);
+                if (is_string($url) && ($decoded = $this->decodeDataUrl($url)) !== null) {
+                    return $decoded;
+                }
+            }
+        }
+
+        $content = $message['content'] ?? null;
+        if (is_array($content)) {
+            foreach ($content as $part) {
+                $url = $part['image_url']['url'] ?? null;
+                if (is_string($url) && ($decoded = $this->decodeDataUrl($url)) !== null) {
+                    return $decoded;
+                }
+            }
+        }
+
+        $b64 = $response['data'][0]['b64_json'] ?? null;
+        if (is_string($b64) && $b64 !== '') {
+            $bytes = base64_decode($b64, true);
+            if ($bytes !== false) {
+                return [$bytes, 'image/png'];
+            }
+        }
+
+        return [null, ''];
+    }
+
+    /**
+     * Decode a data: URL to [bytes, mime]. Returns null for a non-data URL or undecodable
+     * base64.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    private function decodeDataUrl(string $url): ?array
+    {
+        if (! str_starts_with($url, self::DATA_URL_PREFIX)) {
+            return null;
+        }
+
+        if (! preg_match('#^data:(?<mime>[^;]+);base64,(?<data>.+)$#s', $url, $m)) {
+            return null;
+        }
+
+        $bytes = base64_decode($m['data'], true);
+        if ($bytes === false || $bytes === '') {
+            return null;
+        }
+
+        return [$bytes, $m['mime']];
     }
 
     /**

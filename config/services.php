@@ -46,6 +46,17 @@ return [
         'app_title' => env('OPENROUTER_APP_TITLE', env('APP_NAME', 'Tray On')),
     ],
 
+    // BytePlus / Seedream — the SECOND try-on image provider (image-to-image). Key is
+    // server-side only. base_url is the ModelArk region host — verify the region
+    // (ap-southeast vs eu-west) matches the account before enabling a Seedream model.
+    // probe_model is used ONLY by the no-spend Test-connection button.
+    'byteplus' => [
+        'api_key' => env('BYTEPLUS_API_KEY'),
+        'base_url' => env('BYTEPLUS_BASE_URL', 'https://ark.ap-southeast.bytepluses.com/api/v3'),
+        'timeout' => (int) env('BYTEPLUS_TIMEOUT', 80),
+        'probe_model' => env('BYTEPLUS_PROBE_MODEL', 'seedream-4-0-250828'),
+    ],
+
     // PayPlus — the LOCKED credit-purchase rail for v1 (behind CreditPaymentProvider).
     // secret_key is BOTH the request auth header and the webhook-signature HMAC key (the
     // `hash` header = base64(HMAC-SHA256(rawBody, secret_key))). webhook_secret is kept

@@ -2,16 +2,17 @@
 
 namespace App\Models;
 
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * AiModel — the catalog of allowed OpenRouter model ids per operation (GLOBAL).
+ * AiModel — the catalog of allowed model ids per operation (GLOBAL), across providers.
  *
- * On GlobalModels::ALLOW_LIST: a platform catalog, NOT tenant-scoped. Provides
- * the is_default / is_fallback floor the resolver falls back to, and the
- * allow-list a per-site model override is validated against.
+ * On GlobalModels::ALLOW_LIST: a platform catalog, NOT tenant-scoped. Provides the
+ * is_default / is_fallback floor the resolver falls back to, the allow-list a per-site
+ * model override is validated against, and the upstream PROVIDER each model belongs to.
  */
 class AiModel extends Model
 {
@@ -22,8 +23,12 @@ class AiModel extends Model
     public const UNIT_PER_IMAGE = 'per_image';
     public const UNIT_PER_1K_TOKENS = 'per_1k_tokens';
 
+    public const PROVIDER_OPENROUTER = ImageGenerationProvider::PROVIDER_OPENROUTER;
+    public const PROVIDER_BYTEPLUS = ImageGenerationProvider::PROVIDER_BYTEPLUS;
+
     protected $fillable = [
         'operation_key',
+        'provider',
         'model_id',
         'label',
         'is_default',

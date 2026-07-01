@@ -1,0 +1,30 @@
+<?php
+
+namespace App\Domain\Ai;
+
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
+
+/**
+ * ProviderRouter — picks the image-generation client for a provider id. The provider comes
+ * from the resolved model's `provider` column (AiOperationResolver), so a Seedream model
+ * routes to BytePlus and a Gemini model routes to OpenRouter, transparently to the caller.
+ */
+final class ProviderRouter
+{
+    public function __construct(
+        private readonly OpenRouterClient $openRouter,
+        private readonly BytePlusImageClient $bytePlus,
+    ) {}
+
+    public function for(string $provider): ImageGenerationProvider
+    {
+        return match ($provider) {
+            ImageGenerationProvider::PROVIDER_OPENROUTER => $this->openRouter,
+            ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->bytePlus,
+            default => throw OpenRouterException::make(
+                OpenRouterException::CODE_BAD_REQUEST,
+                sprintf('Unknown AI provider "%s".', $provider),
+            ),
+        };
+    }
+}

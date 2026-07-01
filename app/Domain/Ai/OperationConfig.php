@@ -2,6 +2,8 @@
 
 namespace App\Domain\Ai;
 
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
+
 /**
  * OperationConfig — the immutable resolved AI-config bag.
  *
@@ -32,6 +34,9 @@ final readonly class OperationConfig
         public int $promptVersion,
         public ?int $estimatedCostMicroUsd,
         public ?array $inputSchema,
+        // Which upstream serves the model (openrouter|byteplus). Defaults to OpenRouter so
+        // every existing caller/construction stays valid; the resolver sets the real value.
+        public string $provider = ImageGenerationProvider::PROVIDER_OPENROUTER,
     ) {}
 
     /**

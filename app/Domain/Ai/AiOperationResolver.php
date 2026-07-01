@@ -6,6 +6,7 @@ use App\Domain\Ai\Preview\OperationPreview;
 use App\Domain\Ai\Preview\ResolutionStep;
 use App\Domain\Ai\Preview\ResolutionTrace;
 use App\Domain\Ai\Preview\ResolvedOperation;
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Models\AiModel;
 use App\Models\AiOperation;
 use App\Models\Prompt;
@@ -142,6 +143,7 @@ final class AiOperationResolver
             promptVersion: (int) $prompt->version,
             estimatedCostMicroUsd: $operation->estimated_cost_micro_usd,
             inputSchema: $operation->input_schema,
+            provider: $this->providerForModel($operationKey, $model),
         );
 
         return new ResolvedOperation(
@@ -296,6 +298,23 @@ final class AiOperationResolver
             ->all();
 
         return $ids;
+    }
+
+    /**
+     * The upstream provider for the winning model id, read from the catalog. Defaults to
+     * OpenRouter when the id isn't catalogued (e.g. an operation default not in ai_models)
+     * — preserving behaviour for the OpenRouter-only case.
+     */
+    private function providerForModel(string $operationKey, string $modelId): string
+    {
+        $provider = AiModel::query()
+            ->forOperation($operationKey)
+            ->where('model_id', $modelId)
+            ->value('provider');
+
+        return is_string($provider) && $provider !== ''
+            ? $provider
+            : ImageGenerationProvider::PROVIDER_OPENROUTER;
     }
 
     /**
