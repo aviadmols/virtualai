@@ -52,11 +52,15 @@ return [
     // probe_model is used ONLY by the no-spend Test-connection button.
     'byteplus' => [
         'api_key' => env('BYTEPLUS_API_KEY'),
-        // Region host — override BYTEPLUS_BASE_URL if the account is in another region
-        // (ap-southeast / us-east). eu-west matches the merchant's ModelArk account.
-        'base_url' => env('BYTEPLUS_BASE_URL', 'https://ark.eu-west.bytepluses.com/api/v3'),
+        // Region host. The ModelArk account is in ASIA PACIFIC (ap-southeast), and keys are
+        // region-bound — an ap-southeast key sent to eu-west is rejected (401). So ap-southeast
+        // is the default; override BYTEPLUS_BASE_URL for another region. Per-model overrides
+        // live on the Models page (ai_models.base_url).
+        'base_url' => env('BYTEPLUS_BASE_URL', 'https://ark.ap-southeast.bytepluses.com/api/v3'),
         'timeout' => (int) env('BYTEPLUS_TIMEOUT', 80),
-        'probe_model' => env('BYTEPLUS_PROBE_MODEL', 'seedream-5-0-260128'),
+        // Probe model for the Settings "Test connection" — a model the account actually has
+        // (Seedream 4.0, Top-recommended in the console), so a valid key reads as connected.
+        'probe_model' => env('BYTEPLUS_PROBE_MODEL', 'seedream-4-0-250828'),
     ],
 
     // PayPlus — the LOCKED credit-purchase rail for v1 (behind CreditPaymentProvider).
