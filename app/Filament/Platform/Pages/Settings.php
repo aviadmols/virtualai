@@ -55,6 +55,9 @@ class Settings extends Page implements HasForms
     /** @var array<string,mixed> */
     public ?array $data = [];
 
+    /** The full text of the last failed connection test — rendered under the form ("Read all"). */
+    public ?string $lastTestError = null;
+
     public static function getNavigationLabel(): string
     {
         return __(self::NAV_LABEL);
@@ -105,13 +108,20 @@ class Settings extends Page implements HasForms
                     'timeout' => $labelPrefix.'.test_timeout',
                 ][$result['reason']] ?? null;
 
-                $body = $bodyKey !== null ? __($bodyKey) : ($result['detail'] ?? $result['message']);
+                $body = $bodyKey !== null ? __($bodyKey) : ($result['message'] ?? '');
+
+                // Keep the FULL error (message + provider detail) for the "Read all" panel.
+                $this->lastTestError = $result['ok']
+                    ? null
+                    : trim(($result['message'] ?? '')."\n\n".($result['detail'] ?? ''));
 
                 $notification = Notification::make()->body($body);
 
-                $result['ok']
-                    ? $notification->success()->title(__($labelPrefix.'.test_ok'))
-                    : $notification->danger()->title(__($labelPrefix.'.test_fail'));
+                if ($result['ok']) {
+                    $notification->success()->title(__($labelPrefix.'.test_ok'));
+                } else {
+                    $notification->danger()->title(__($labelPrefix.'.test_fail'))->persistent();
+                }
 
                 $notification->send();
             });

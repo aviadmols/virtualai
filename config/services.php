@@ -52,9 +52,11 @@ return [
     // probe_model is used ONLY by the no-spend Test-connection button.
     'byteplus' => [
         'api_key' => env('BYTEPLUS_API_KEY'),
-        'base_url' => env('BYTEPLUS_BASE_URL', 'https://ark.ap-southeast.bytepluses.com/api/v3'),
+        // Region host — override BYTEPLUS_BASE_URL if the account is in another region
+        // (ap-southeast / us-east). eu-west matches the merchant's ModelArk account.
+        'base_url' => env('BYTEPLUS_BASE_URL', 'https://ark.eu-west.bytepluses.com/api/v3'),
         'timeout' => (int) env('BYTEPLUS_TIMEOUT', 80),
-        'probe_model' => env('BYTEPLUS_PROBE_MODEL', 'seedream-4-0-250828'),
+        'probe_model' => env('BYTEPLUS_PROBE_MODEL', 'seedream-5-0-260128'),
     ],
 
     // PayPlus — the LOCKED credit-purchase rail for v1 (behind CreditPaymentProvider).

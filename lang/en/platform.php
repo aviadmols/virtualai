@@ -485,6 +485,7 @@ return [
         'title' => 'Platform settings',
         'save' => 'Save settings',
         'saved' => 'Settings saved',
+        'read_all' => 'Read the full error',
         'secret_help' => 'Paste the key here, then Save. Stored encrypted; the value is never shown again.',
         'secret_saved' => 'A value is saved (hidden for security). Leave blank to keep it, or paste a new one to replace it.',
         'status' => [

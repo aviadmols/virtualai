@@ -33,9 +33,13 @@ class AiControlPlaneSeeder extends Seeder
     private const TRYON_DEFAULT_MODEL = 'google/gemini-3.1-flash-image';
     private const TRYON_FALLBACK_MODEL = 'google/gemini-2.5-flash-image';
 
-    // A BytePlus/Seedream try-on model, catalogued but INACTIVE — the admin activates it
+    // BytePlus/Seedream try-on models, catalogued but INACTIVE — the admin activates one
     // after adding a BytePlus key + a verified per-image cost hint (money-safe by default).
-    private const SEEDREAM_MODEL = 'seedream-4-0-250828';
+    // model id (the ModelArk `model`/endpoint id) => label.
+    private const SEEDREAM_MODELS = [
+        'seedream-5-0-260128' => 'Seedream 5.0 (BytePlus)',
+        'Dola-Seedream-5.0-lite' => 'Seedream 5.0 Lite (BytePlus)',
+    ];
 
     private const TRYON_IMAGE_QUALITY = 'high';
     private const TRYON_ASPECT_RATIO = '3:4';
@@ -169,7 +173,9 @@ class AiControlPlaneSeeder extends Seeder
         $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, self::TRYON_DEFAULT_MODEL, 'Gemini 3.1 Flash Image', isDefault: true, costHint: 60_000, unit: AiModel::UNIT_PER_IMAGE);
         $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, self::TRYON_FALLBACK_MODEL, 'Gemini 2.5 Flash Image', isFallback: true, costHint: 40_000, unit: AiModel::UNIT_PER_IMAGE);
         // Alternative provider, OFF by default + no cost hint (fails closed) until validated.
-        $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, self::SEEDREAM_MODEL, 'Seedream 4.0 (BytePlus)', unit: AiModel::UNIT_PER_IMAGE, provider: AiModel::PROVIDER_BYTEPLUS, isActive: false);
+        foreach (self::SEEDREAM_MODELS as $modelId => $label) {
+            $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, $modelId, $label, unit: AiModel::UNIT_PER_IMAGE, provider: AiModel::PROVIDER_BYTEPLUS, isActive: false);
+        }
 
         Prompt::updateOrCreate(
             [

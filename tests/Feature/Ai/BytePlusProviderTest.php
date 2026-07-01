@@ -37,7 +37,7 @@ class BytePlusProviderTest extends TestCase
         config()->set('services.byteplus.api_key', 'bp-real-key');
         config()->set('services.byteplus.base_url', self::BASE);
         config()->set('services.byteplus.timeout', 30);
-        config()->set('services.byteplus.probe_model', 'seedream-4-0-250828');
+        config()->set('services.byteplus.probe_model', 'seedream-5-0-260128');
         Sleep::fake();
     }
 
@@ -100,23 +100,23 @@ class BytePlusProviderTest extends TestCase
 
         // Activate + default the seeded (inactive) Seedream model with a cost hint.
         $model = AiModel::query()->where('operation_key', 'try_on_generation')
-            ->where('model_id', 'seedream-4-0-250828')->firstOrFail();
+            ->where('model_id', 'seedream-5-0-260128')->firstOrFail();
         $model->forceFill(['is_active' => true, 'is_default' => true, 'cost_hint_micro_usd' => 40_000])->save();
 
         $config = app(AiOperationResolver::class)->for('try_on_generation');
 
         $this->assertSame(ImageGenerationProvider::PROVIDER_BYTEPLUS, $config->provider);
-        $this->assertSame('seedream-4-0-250828', $config->model);
+        $this->assertSame('seedream-5-0-260128', $config->model);
     }
 
     public function test_caller_routes_a_byteplus_config_to_seedream(): void
     {
         $png = "\x89PNG\r\n\x1a\nSEEDREAM";
-        Http::fake([self::GEN => Http::response(['model' => 'seedream-4-0-250828', 'data' => [['b64_json' => base64_encode($png)]]], 200)]);
+        Http::fake([self::GEN => Http::response(['model' => 'seedream-5-0-260128', 'data' => [['b64_json' => base64_encode($png)]]], 200)]);
 
         $config = new OperationConfig(
             operationKey: 'try_on_generation',
-            model: 'seedream-4-0-250828',
+            model: 'seedream-5-0-260128',
             fallbackModel: null,
             systemPrompt: 'sys',
             userPrompt: 'wear {{product_name}}',
@@ -138,11 +138,11 @@ class BytePlusProviderTest extends TestCase
         );
 
         $this->assertSame($png, $result->imageBytes);
-        $this->assertSame('seedream-4-0-250828', $result->modelUsed);
+        $this->assertSame('seedream-5-0-260128', $result->modelUsed);
         $this->assertTrue($result->cost->available); // from the cost hint (flat rate)
 
         Http::assertSent(fn ($req) => str_contains($req->url(), '/images/generations')
-            && $req['model'] === 'seedream-4-0-250828'
+            && $req['model'] === 'seedream-5-0-260128'
             && is_array($req['image']) && count($req['image']) === 2
             && str_contains($req['prompt'], 'wear Ring')
             && $req['size'] === '2K'

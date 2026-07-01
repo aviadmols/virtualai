@@ -119,11 +119,13 @@ final class OpenRouterClient implements ImageGenerationProvider
             return ['ok' => true, 'reason' => 'ok', 'message' => 'Connected to OpenRouter.', 'detail' => $this->keySummary((array) ($response->json('data') ?? []))];
         }
 
+        $detail = 'HTTP '.$response->status().': '.mb_substr($response->body(), 0, 2000);
+
         if ($response->status() === 401) {
-            return ['ok' => false, 'reason' => 'invalid_key', 'message' => 'OpenRouter rejected the key (401 — invalid or revoked).', 'detail' => null];
+            return ['ok' => false, 'reason' => 'invalid_key', 'message' => 'OpenRouter rejected the key (401 — invalid or revoked).', 'detail' => $detail];
         }
 
-        return ['ok' => false, 'reason' => 'error', 'message' => 'OpenRouter returned an error ('.$response->status().').', 'detail' => null];
+        return ['ok' => false, 'reason' => 'error', 'message' => 'OpenRouter returned an error ('.$response->status().').', 'detail' => $detail];
     }
 
     /** A short, language-neutral summary of the key's credit, if the provider returned it. */

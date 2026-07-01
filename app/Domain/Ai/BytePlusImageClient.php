@@ -208,14 +208,15 @@ final class BytePlusImageClient implements ImageGenerationProvider
                 'prompt' => 'ping',
                 'size' => '1K',
             ]);
-        } catch (ConnectionException) {
-            return ['ok' => false, 'reason' => 'timeout', 'message' => 'Could not reach BytePlus.', 'detail' => null];
+        } catch (ConnectionException $e) {
+            return ['ok' => false, 'reason' => 'timeout', 'message' => 'Could not reach BytePlus (check the region host / network).', 'detail' => $this->host().' — '.$e->getMessage()];
         }
 
         $status = $response->status();
+        $detail = $this->connectionDetail($response);
 
         if ($status === self::STATUS_UNAUTHORIZED) {
-            return ['ok' => false, 'reason' => 'invalid_key', 'message' => 'BytePlus rejected the key (401 — invalid or revoked).', 'detail' => null];
+            return ['ok' => false, 'reason' => 'invalid_key', 'message' => 'BytePlus rejected the key (401 — invalid or revoked).', 'detail' => $detail];
         }
 
         // 200 (produced) OR 400 (key accepted, params rejected) both prove the bearer works.
@@ -224,10 +225,21 @@ final class BytePlusImageClient implements ImageGenerationProvider
         }
 
         if ($status === self::STATUS_FORBIDDEN) {
-            return ['ok' => false, 'reason' => 'error', 'message' => 'Key valid but the model/region is not permitted (403).', 'detail' => null];
+            return ['ok' => false, 'reason' => 'error', 'message' => 'Key valid but the model/region is not permitted (403).', 'detail' => $detail];
         }
 
-        return ['ok' => false, 'reason' => 'error', 'message' => 'BytePlus returned an error ('.$status.').', 'detail' => null];
+        return ['ok' => false, 'reason' => 'error', 'message' => 'BytePlus returned an error ('.$status.').', 'detail' => $detail];
+    }
+
+    /** The full provider error (host + status + response body) for the "Read all" view. */
+    private function connectionDetail(Response $response): string
+    {
+        return $this->host().' — HTTP '.$response->status().': '.mb_substr($response->body(), 0, 2000);
+    }
+
+    private function host(): string
+    {
+        return (string) config(self::CFG_BASE_URL);
     }
 
     private function request(?string $overrideKey = null): PendingRequest
