@@ -322,21 +322,32 @@ async function onSubmit(cta, errorBox) {
 }
 
 function renderLoading() {
-  const body = el('div', { class: 'ton-center' }, [
+  // Show the shopper's OWN uploaded photo, heavily blurred + breathing + shimmering
+  // (ChatGPT-style "generating…"), then the result fades in over it.
+  const layers = [];
+
+  if (draft.photo) {
+    layers.push(el('img', { class: 'ton-loading__img', attrs: { src: draft.photo, alt: '' } }));
+    layers.push(el('div', { class: 'ton-loading__shimmer' }));
+  }
+
+  layers.push(el('div', { class: 'ton-loading__label' }, [
     el('div', { class: 'ton-spinner' }),
     el('div', { class: 'ton-modal__title', text: t('loading.title') }),
     el('div', { class: 'ton-upload__hint', text: t('loading.sub') }),
-  ]);
-  mount(panel('modal.title', body));
+  ]));
+
+  mount(panel('modal.title', el('div', { class: 'ton-loading__frame' }, layers)));
 }
 
 // ---------------------------------------------------------------------------
 // Result screen.
 // ---------------------------------------------------------------------------
 function renderResult(resultUrl) {
-  const frame = el('div', { class: 'ton-result__frame' }, [
-    el('img', { class: 'ton-result__img', attrs: { src: resultUrl, alt: t('result.title') } }),
-  ]);
+  const img = el('img', { class: 'ton-result__img', attrs: { src: resultUrl, alt: t('result.title') } });
+  const hint = el('div', { class: 'ton-result__zoom-hint', text: t('result.zoom_hint') });
+  const frame = el('div', { class: 'ton-result__frame' }, [img, hint]);
+  enableZoom(frame, img, hint);
 
   const toast = el('div', { class: 'ton-toast', attrs: { hidden: true } });
 
@@ -374,6 +385,54 @@ function renderResult(resultUrl) {
     toast,
   ]);
   mount(panel('modal.title', body));
+}
+
+/**
+ * Tap/click the result image to zoom (and again to reset). While zoomed, moving the
+ * pointer (desktop hover) or dragging (mobile) pans a magnifier over the image. A small
+ * pointer move between press and release is treated as a pan, not a zoom toggle.
+ */
+function enableZoom(frame, img, hint) {
+  let zoomed = false;
+  let downX = 0;
+  let downY = 0;
+  let moved = false;
+
+  const clamp = (v) => Math.max(0, Math.min(100, v));
+
+  const setOrigin = (clientX, clientY) => {
+    const rect = frame.getBoundingClientRect();
+    const x = clamp(((clientX - rect.left) / rect.width) * 100);
+    const y = clamp(((clientY - rect.top) / rect.height) * 100);
+    img.style.transformOrigin = `${x}% ${y}%`;
+  };
+
+  const setZoom = (on, clientX, clientY) => {
+    zoomed = on;
+    frame.classList.toggle('ton-result__frame--zoomed', on);
+    img.classList.toggle('ton-result__img--zoomed', on);
+    if (hint) hint.hidden = on;
+    if (on && clientX != null) setOrigin(clientX, clientY);
+  };
+
+  frame.addEventListener('pointerdown', (e) => {
+    downX = e.clientX;
+    downY = e.clientY;
+    moved = false;
+  });
+
+  frame.addEventListener('pointermove', (e) => {
+    if (Math.abs(e.clientX - downX) > 6 || Math.abs(e.clientY - downY) > 6) moved = true;
+    if (zoomed) setOrigin(e.clientX, e.clientY);
+  });
+
+  frame.addEventListener('click', (e) => {
+    if (moved) {
+      moved = false;
+      return; // it was a pan, not a tap
+    }
+    setZoom(!zoomed, e.clientX, e.clientY);
+  });
 }
 
 async function onAddToCart(toast) {

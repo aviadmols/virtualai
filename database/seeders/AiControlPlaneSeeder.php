@@ -36,6 +36,10 @@ class AiControlPlaneSeeder extends Seeder
     private const TRYON_IMAGE_QUALITY = 'high';
     private const TRYON_ASPECT_RATIO = '3:4';
 
+    // Appended to every try-on user prompt so the result matches the shopper's photo
+    // (the model tends to reframe/crop otherwise — the merchant asked for true size).
+    private const FRAMING_CLAUSE = 'Return the image at the SAME orientation, framing and aspect ratio as the input photo — do not crop, zoom or reframe the subject; keep the whole figure exactly as uploaded.';
+
     // Tailored try-on prompts per store type (StoreCategory). Seeded as product_type-scoped
     // defaults the resolver prefers over the generic global prompt; fully admin-editable.
     // The GENERAL category has no entry — it uses the global prompt.
@@ -91,7 +95,7 @@ class AiControlPlaneSeeder extends Seeder
                 ],
                 [
                     'system_prompt' => $prompt['system'],
-                    'user_prompt' => $prompt['user'],
+                    'user_prompt' => $prompt['user'].' '.self::FRAMING_CLAUSE,
                     'version' => 1,
                     'is_active' => true,
                 ],
@@ -171,7 +175,7 @@ class AiControlPlaneSeeder extends Seeder
             ],
             [
                 'system_prompt' => 'You generate photorealistic virtual try-on images. Keep the shopper\'s face, body and pose; place the product naturally and accurately on them.',
-                'user_prompt' => 'Generate a realistic try-on of {{product_name}} ({{variant}}) on the person in the first image, using the product in the second image. The person is {{height}} cm tall. Match lighting and perspective.',
+                'user_prompt' => 'Generate a realistic try-on of {{product_name}} ({{variant}}) on the person in the first image, using the product in the second image. The person is {{height}} cm tall. Match lighting and perspective. '.self::FRAMING_CLAUSE,
                 'version' => 1,
                 'is_active' => true,
             ],

@@ -323,7 +323,7 @@
 .ton-result__frame {
   /* Adapt to the generated image's real orientation (portrait OR landscape) and show
      it WHOLE — no fixed aspect-ratio that would crop/letterbox. A min-height keeps
-     layout shift small while the image loads. */
+     layout shift small while the image loads. Tap to zoom (see --zoomed). */
   position: relative;
   width: 100%;
   display: flex;
@@ -334,6 +334,12 @@
   border-radius: var(--ton-radius-sm);
   overflow: hidden;
   background: var(--ton-field-bg);
+  cursor: zoom-in;
+  touch-action: none;
+}
+
+.ton-result__frame--zoomed {
+  cursor: zoom-out;
 }
 
 .ton-result__img {
@@ -343,6 +349,99 @@
   width: auto;
   height: auto;
   object-fit: contain;
+  transition: transform 0.18s ease;
+  will-change: transform;
+}
+
+.ton-result__img--zoomed {
+  transform: scale(2.4);
+}
+
+.ton-result__zoom-hint {
+  position: absolute;
+  inset-block-end: 8px;
+  inset-inline-end: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* The result fades in when generation finishes ("it appears"). */
+.ton-result__frame {
+  animation: ton-appear 0.45s ease;
+}
+
+@keyframes ton-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Loading: the shopper's uploaded photo, heavily blurred + breathing + shimmering. */
+.ton-loading__frame {
+  position: relative;
+  width: 100%;
+  min-height: 300px;
+  max-height: 62vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ton-radius-sm);
+  overflow: hidden;
+  background: var(--ton-field-bg);
+}
+
+.ton-loading__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(26px) saturate(1.25);
+  transform: scale(1.18);
+  animation: ton-breathe 3.4s ease-in-out infinite;
+}
+
+@keyframes ton-breathe {
+  0%, 100% { transform: scale(1.14); filter: blur(24px) brightness(1) saturate(1.2); }
+  50% { transform: scale(1.22) rotate(0.4deg); filter: blur(32px) brightness(1.08) saturate(1.35); }
+}
+
+.ton-loading__shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.28) 50%, transparent 65%);
+  background-size: 220% 100%;
+  animation: ton-shimmer 1.9s linear infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes ton-shimmer {
+  0% { background-position: 220% 0; }
+  100% { background-position: -220% 0; }
+}
+
+.ton-loading__label {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  background: rgba(18, 18, 20, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-align: center;
+}
+
+.ton-loading__label .ton-modal__title,
+.ton-loading__label .ton-upload__hint {
+  color: #fff;
 }
 
 .ton-actions {
