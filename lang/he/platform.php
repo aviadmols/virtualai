@@ -269,6 +269,7 @@ return [
             'is_default' => 'ברירת מחדל לפעולה',
             'is_fallback' => 'גיבוי לפעולה',
             'cost_hint' => 'עלות משוערת',
+            'cost_hint_help' => 'מחיר לתמונה (BytePlus) או ל-1K טוקנים (OpenRouter), ב-USD — למשל 0.03. חובה כדי שמודל BytePlus יחייב.',
             'cost_unit' => 'יחידת עלות',
             'is_active' => 'פעיל',
         ],

@@ -88,18 +88,21 @@ class AiModelResource extends Resource
                         ->label(__('platform.models.field.is_default')),
                     Toggle::make('is_fallback')
                         ->label(__('platform.models.field.is_fallback')),
-                    TextInput::make('cost_hint_usd')
+                    TextInput::make('cost_hint_micro_usd')
                         ->label(__('platform.models.field.cost_hint'))
+                        ->helperText(__('platform.models.field.cost_hint_help'))
                         ->numeric()
                         ->prefix('$')
                         ->step('0.000001')
-                        // Display USD; the stored column is integer micro-USD.
-                        ->afterStateHydrated(static function (TextInput $component, $state, ?AiModel $record): void {
-                            $component->state($record !== null
-                                ? CreditMath::microToUsd((int) $record->cost_hint_micro_usd)
-                                : null);
-                        })
-                        ->dehydrated(false),
+                        // Entered + shown in USD; stored as integer micro-USD. Both directions
+                        // convert so a BytePlus per-image price actually persists (was
+                        // dehydrated(false) — display-only — so it could never be saved).
+                        ->formatStateUsing(static fn (?int $state): ?string => $state !== null
+                            ? (string) CreditMath::microToUsd($state)
+                            : null)
+                        ->dehydrateStateUsing(static fn ($state): ?int => ($state === null || $state === '')
+                            ? null
+                            : CreditMath::usdToMicro((float) $state)),
                     Select::make('cost_unit')
                         ->label(__('platform.models.field.cost_unit'))
                         ->options(self::unitOptions())

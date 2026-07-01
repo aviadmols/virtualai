@@ -172,9 +172,10 @@ class AiControlPlaneSeeder extends Seeder
 
         $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, self::TRYON_DEFAULT_MODEL, 'Gemini 3.1 Flash Image', isDefault: true, costHint: 60_000, unit: AiModel::UNIT_PER_IMAGE);
         $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, self::TRYON_FALLBACK_MODEL, 'Gemini 2.5 Flash Image', isFallback: true, costHint: 40_000, unit: AiModel::UNIT_PER_IMAGE);
-        // Alternative provider, OFF by default + no cost hint (fails closed) until validated.
+        // Alternative provider, OFF by default. A starter per-image price ($0.03) so
+        // activating one just works; the admin adjusts it to the real BytePlus price.
         foreach (self::SEEDREAM_MODELS as $modelId => $label) {
-            $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, $modelId, $label, unit: AiModel::UNIT_PER_IMAGE, provider: AiModel::PROVIDER_BYTEPLUS, isActive: false);
+            $this->seedModel(AiOperation::KEY_TRY_ON_GENERATION, $modelId, $label, costHint: 30_000, unit: AiModel::UNIT_PER_IMAGE, provider: AiModel::PROVIDER_BYTEPLUS, isActive: false);
         }
 
         Prompt::updateOrCreate(

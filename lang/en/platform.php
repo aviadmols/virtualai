@@ -270,6 +270,7 @@ return [
             'is_default' => 'Default for operation',
             'is_fallback' => 'Fallback for operation',
             'cost_hint' => 'Cost hint',
+            'cost_hint_help' => 'Price per image (BytePlus) or per 1K tokens (OpenRouter), in USD — e.g. 0.03. Required for a BytePlus model to charge.',
             'cost_unit' => 'Cost unit',
             'is_active' => 'Active',
         ],
