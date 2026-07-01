@@ -29,6 +29,7 @@ class AiModel extends Model
     protected $fillable = [
         'operation_key',
         'provider',
+        'base_url',
         'model_id',
         'label',
         'is_default',

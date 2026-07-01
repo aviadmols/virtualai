@@ -5,6 +5,7 @@ namespace App\Domain\Ai;
 use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Platform\PlatformSettings;
+use App\Models\AiModel;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
@@ -34,6 +35,9 @@ final class BytePlusImageClient implements ImageGenerationProvider
     private const CFG_BASE_URL = 'services.byteplus.base_url';
     private const CFG_TIMEOUT = 'services.byteplus.timeout';
     private const CFG_PROBE_MODEL = 'services.byteplus.probe_model';
+
+    // A per-model region-host override is only honoured for this host (key-safety).
+    private const HOST_SUFFIX = 'bytepluses.com';
 
     private const MAX_RETRIES = 1;
     private const BACKOFF_BASE_MS = 400;
@@ -99,7 +103,7 @@ final class BytePlusImageClient implements ImageGenerationProvider
         $model = (string) ($body['model'] ?? 'unknown');
 
         try {
-            $response = $this->request()->post(self::IMAGES_PATH, $body);
+            $response = $this->request(null, $this->baseUrlForModel($model))->post(self::IMAGES_PATH, $body);
         } catch (ConnectionException $e) {
             $this->logOutcome($operationKey, $model, 'timeout', null);
 
@@ -201,7 +205,7 @@ final class BytePlusImageClient implements ImageGenerationProvider
         return $this->checkModel((string) config(self::CFG_PROBE_MODEL), $overrideKey);
     }
 
-    public function checkModel(string $modelId, ?string $overrideKey = null): array
+    public function checkModel(string $modelId, ?string $overrideKey = null, ?string $baseUrl = null): array
     {
         $key = $overrideKey !== null && $overrideKey !== '' ? $overrideKey : $this->apiKey();
 
@@ -209,18 +213,22 @@ final class BytePlusImageClient implements ImageGenerationProvider
             return ['ok' => false, 'reason' => 'not_configured', 'message' => 'No BytePlus API key is set.', 'detail' => null];
         }
 
+        // Probe at the per-model region host (sanitized explicit override, else the saved base_url).
+        $base = $this->sanitizeBaseUrl($baseUrl) ?? $this->baseUrlForModel($modelId);
+        $host = $this->host($base);
+
         try {
-            $response = $this->request($key)->post(self::IMAGES_PATH, [
+            $response = $this->request($key, $base)->post(self::IMAGES_PATH, [
                 'model' => $modelId,
                 'prompt' => 'ping',
                 'size' => '1K',
             ]);
         } catch (ConnectionException $e) {
-            return ['ok' => false, 'reason' => 'timeout', 'message' => 'Could not reach BytePlus (check the region host / network).', 'detail' => $this->host().' — '.$e->getMessage()];
+            return ['ok' => false, 'reason' => 'timeout', 'message' => 'Could not reach BytePlus (check the region host / network).', 'detail' => $host.' — '.$e->getMessage()];
         }
 
         $status = $response->status();
-        $detail = $this->connectionDetail($response);
+        $detail = $this->connectionDetail($response, $host);
 
         if ($status === self::STATUS_UNAUTHORIZED) {
             return ['ok' => false, 'reason' => 'invalid_key', 'message' => 'BytePlus rejected the key (401 — invalid or revoked).', 'detail' => $detail];
@@ -245,20 +253,51 @@ final class BytePlusImageClient implements ImageGenerationProvider
     }
 
     /** The full provider error (host + status + response body) for the "Read all" view. */
-    private function connectionDetail(Response $response): string
+    private function connectionDetail(Response $response, string $host): string
     {
-        return $this->host().' — HTTP '.$response->status().': '.mb_substr($response->body(), 0, 2000);
+        return $host.' — HTTP '.$response->status().': '.mb_substr($response->body(), 0, 2000);
     }
 
-    private function host(): string
+    /** The effective region host: the per-model / override base_url, else the configured default. */
+    private function host(?string $baseUrl = null): string
     {
-        return (string) config(self::CFG_BASE_URL);
+        return $baseUrl !== null && $baseUrl !== '' ? $baseUrl : (string) config(self::CFG_BASE_URL);
     }
 
-    private function request(?string $overrideKey = null): PendingRequest
+    /** The per-model region host override from the catalog (null = use the configured default). */
+    private function baseUrlForModel(string $modelId): ?string
+    {
+        $url = AiModel::query()
+            ->where('provider', ImageGenerationProvider::PROVIDER_BYTEPLUS)
+            ->where('model_id', $modelId)
+            ->value('base_url');
+
+        return $this->sanitizeBaseUrl(is_string($url) ? $url : null);
+    }
+
+    /**
+     * A region-host override is honoured ONLY when it is an https BytePlus host, so a mis-typed
+     * or hostile override can never redirect the platform BytePlus key off-provider. Anything
+     * else returns null and the caller falls back to the configured default host.
+     */
+    private function sanitizeBaseUrl(?string $url): ?string
+    {
+        if ($url === null || $url === '') {
+            return null;
+        }
+
+        $parts = parse_url($url);
+        $host = $parts['host'] ?? '';
+        $isByteplusHttps = ($parts['scheme'] ?? '') === 'https'
+            && ($host === self::HOST_SUFFIX || str_ends_with($host, '.'.self::HOST_SUFFIX));
+
+        return $isByteplusHttps ? $url : null;
+    }
+
+    private function request(?string $overrideKey = null, ?string $baseUrl = null): PendingRequest
     {
         return $this->http
-            ->baseUrl((string) config(self::CFG_BASE_URL))
+            ->baseUrl($this->host($baseUrl))
             ->timeout((int) config(self::CFG_TIMEOUT))
             ->withToken($overrideKey !== null && $overrideKey !== '' ? $overrideKey : $this->apiKey())
             ->acceptJson()

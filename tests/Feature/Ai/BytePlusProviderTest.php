@@ -230,4 +230,45 @@ class BytePlusProviderTest extends TestCase
             && $req['size'] === '2K'
             && $req['seed'] === 7);
     }
+
+    public function test_generation_routes_to_the_models_region_host(): void
+    {
+        $this->seed(AiControlPlaneSeeder::class);
+        // Default region differs from the model's — the per-model base_url must win.
+        config()->set('services.byteplus.base_url', 'https://ark.ap-southeast.bytepluses.com/api/v3');
+        AiModel::query()->where('model_id', 'seedream-5-0-260128')
+            ->update(['base_url' => 'https://ark.eu-west.bytepluses.com/api/v3']);
+
+        $png = "\x89PNG\r\n\x1a\nREGION";
+        Http::fake([
+            'ark.eu-west.bytepluses.com/*' => Http::response(['model' => 'seedream-5-0-260128', 'data' => [['b64_json' => base64_encode($png)]]], 200),
+            '*' => Http::response(['error' => ['message' => 'wrong region']], 404),
+        ]);
+
+        $config = new OperationConfig(
+            operationKey: 'try_on_generation',
+            model: 'seedream-5-0-260128',
+            fallbackModel: null,
+            systemPrompt: null,
+            userPrompt: 'wear {{product_name}}',
+            imageQuality: 'high',
+            aspectRatio: '3:4',
+            params: [],
+            creditMultiplier: null,
+            promptVersion: 1,
+            estimatedCostMicroUsd: 40_000,
+            inputSchema: null,
+            provider: ImageGenerationProvider::PROVIDER_BYTEPLUS,
+        );
+
+        $result = app(TryOnGenerationCaller::class)->generate(
+            $config,
+            ImagePayload::fromUrl('https://cdn.test/shopper.jpg'),
+            ImagePayload::fromUrl('https://cdn.test/product.jpg'),
+            ['product_name' => 'Ring', 'variant' => '', 'height' => ''],
+        );
+
+        $this->assertSame($png, $result->imageBytes);
+        Http::assertSent(fn ($req) => str_contains($req->url(), 'eu-west'));
+    }
 }

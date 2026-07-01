@@ -267,6 +267,8 @@ return [
             'operation' => 'Operation',
             'provider' => 'Provider',
             'provider_help' => 'Which upstream serves this model. BytePlus models need a per-image cost hint set + a BytePlus API key in Settings.',
+            'base_url' => 'Region host (BytePlus)',
+            'base_url_help' => 'Optional. The BytePlus ModelArk base URL for this model\'s region — e.g. https://ark.ap-southeast.bytepluses.com/api/v3. Leave blank to use the default host. Different models can live in different regions.',
             'is_default' => 'Default for operation',
             'is_fallback' => 'Fallback for operation',
             'cost_hint' => 'Cost hint',
@@ -292,6 +294,8 @@ return [
         'test_not_configured' => 'No API key is set for this provider — add it in Settings first.',
         'test_timeout' => "Couldn't reach the provider — check the network / region host.",
         'test_error' => 'The provider returned an error — check the API key and region in Settings.',
+        'test_close' => 'Close',
+        'test_provider_response' => 'Provider response (raw)',
     ],
 
     // P5 — Prompts editor + resolver preview.

@@ -266,6 +266,8 @@ return [
             'operation' => 'פעולה',
             'provider' => 'ספק',
             'provider_help' => 'איזה ספק מריץ את המודל. מודלי BytePlus דורשים עלות-לתמונה + מפתח BytePlus ב-Settings.',
+            'base_url' => 'כתובת אזור (BytePlus)',
+            'base_url_help' => 'לא חובה. כתובת ה-BytePlus ModelArk לאזור של המודל — למשל https://ark.ap-southeast.bytepluses.com/api/v3. השאירו ריק לשימוש בכתובת ברירת המחדל. מודלים שונים יכולים לשבת באזורים שונים.',
             'is_default' => 'ברירת מחדל לפעולה',
             'is_fallback' => 'גיבוי לפעולה',
             'cost_hint' => 'עלות משוערת',
@@ -291,6 +293,8 @@ return [
         'test_not_configured' => 'לא הוגדר מפתח API לספק הזה — הוסיפו אותו בהגדרות תחילה.',
         'test_timeout' => 'לא הצלחנו להגיע לספק — בדקו את הרשת / כתובת האזור.',
         'test_error' => 'הספק החזיר שגיאה — בדקו את מפתח ה-API והאזור בהגדרות.',
+        'test_close' => 'סגירה',
+        'test_provider_response' => 'תגובת הספק (גולמי)',
     ],
 
     // P5 — עורך פרומפטים + תצוגת הכרעה.

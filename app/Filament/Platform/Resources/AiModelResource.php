@@ -14,7 +14,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
-use Filament\Notifications\Notification;
+use Filament\Forms\Get;
 use Filament\Resources\Resource;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Columns\IconColumn;
@@ -52,6 +52,7 @@ class AiModelResource extends Resource
     private const LABEL_TEST = 'platform.models.test';
     private const LABEL_TEST_OK = 'platform.models.test_ok';
     private const LABEL_TEST_FAIL = 'platform.models.test_fail';
+    private const TEST_RESULT_VIEW = 'filament.platform.model-test-result';
     private const TEST_REASON_BODY = [
         'ok' => 'platform.models.test_ok_body',
         'not_configured' => 'platform.models.test_not_configured',
@@ -100,7 +101,18 @@ class AiModelResource extends Resource
                         ->options(self::providerOptions())
                         ->default(AiModel::PROVIDER_OPENROUTER)
                         ->required()
+                        ->live()
                         ->helperText(__('platform.models.field.provider_help')),
+                    // Per-model region host — a BytePlus account may serve different models from
+                    // different regions (e.g. Seedream 4.5 on ap-southeast). Blank = the default host.
+                    TextInput::make('base_url')
+                        ->label(__('platform.models.field.base_url'))
+                        ->helperText(__('platform.models.field.base_url_help'))
+                        ->url()
+                        ->maxLength(255)
+                        ->placeholder('https://ark.ap-southeast.bytepluses.com/api/v3')
+                        ->visible(fn (Get $get): bool => $get('provider') === AiModel::PROVIDER_BYTEPLUS)
+                        ->columnSpanFull(),
                     Toggle::make('is_default')
                         ->label(__('platform.models.field.is_default')),
                     Toggle::make('is_fallback')
@@ -173,13 +185,18 @@ class AiModelResource extends Resource
                     ->boolean(),
             ])
             ->actions([
-                // No-spend probe of THIS model against its provider — answers "does it work?"
-                // right in the catalog, so the admin never runs a real try-on to find a 404.
+                // No-spend probe of THIS model against its provider (at its region host) — a
+                // details modal shows the EXACT provider response, so the admin never runs a real
+                // try-on to find a 404 and can see precisely why a model is/ isn't reachable.
                 Action::make('test')
                     ->label(__(self::LABEL_TEST))
                     ->icon('heroicon-o-signal')
                     ->color('gray')
-                    ->action(static fn (AiModel $record) => self::runModelTest($record)),
+                    ->modalHeading(fn (AiModel $record): string => __(self::LABEL_TEST).' — '.$record->model_id)
+                    ->modalIcon('heroicon-o-signal')
+                    ->modalContent(fn (AiModel $record) => view(self::TEST_RESULT_VIEW, ['result' => self::probeModel($record)]))
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel(__('platform.models.test_close')),
             ])
             ->filters([
                 SelectFilter::make('operation_key')
@@ -202,32 +219,29 @@ class AiModelResource extends Resource
     }
 
     /**
-     * Probe a single model against its provider (no-spend) and flash the typed result. The
-     * provider clients never throw; only ProviderRouter::for can (unknown provider), so guard
-     * that. A model_not_found is the answer to the common 404 "no access / wrong id".
+     * Probe a single model against its provider (no-spend, at its per-model region host) and
+     * return a localized result + the EXACT provider response for the details modal. The
+     * provider clients never throw; only ProviderRouter::for can (unknown provider), so guard it.
+     *
+     * @return array{ok: bool, title: string, body: string, raw: string}
      */
-    public static function runModelTest(AiModel $record): void
+    public static function probeModel(AiModel $record): array
     {
         try {
-            $result = app(ProviderRouter::class)->for($record->provider)->checkModel($record->model_id);
+            $result = app(ProviderRouter::class)->for($record->provider)->checkModel($record->model_id, null, $record->base_url);
         } catch (Throwable $e) {
             $result = ['ok' => false, 'reason' => 'error', 'message' => $e->getMessage(), 'detail' => null];
         }
 
         $bodyKey = self::TEST_REASON_BODY[$result['reason']] ?? null;
-        $body = $bodyKey !== null
-            ? __($bodyKey, ['model' => $record->model_id])
-            : (string) ($result['message'] ?? '');
 
-        $notification = Notification::make()->body($body);
-
-        if ($result['ok']) {
-            $notification->success()->title(__(self::LABEL_TEST_OK, ['model' => $record->model_id]));
-        } else {
-            $notification->danger()->title(__(self::LABEL_TEST_FAIL, ['model' => $record->model_id]))->persistent();
-        }
-
-        $notification->send();
+        return [
+            'ok' => (bool) $result['ok'],
+            'title' => __($result['ok'] ? self::LABEL_TEST_OK : self::LABEL_TEST_FAIL, ['model' => $record->model_id]),
+            'body' => $bodyKey !== null ? __($bodyKey, ['model' => $record->model_id]) : (string) ($result['message'] ?? ''),
+            // The EXACT provider message + raw response body (host + HTTP status + payload).
+            'raw' => trim(((string) ($result['message'] ?? ''))."\n\n".((string) ($result['detail'] ?? ''))),
+        ];
     }
 
     /** Operation key → localised option label (from the AiOperation CONSTs). */

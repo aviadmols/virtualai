@@ -132,10 +132,12 @@ final class OpenRouterClient implements ImageGenerationProvider
     /**
      * Test a SPECIFIC OpenRouter model WITHOUT spending: GET /models lists the live catalog;
      * we check the id is present (a retired/mistyped id is the common failure). Never throws.
+     * $baseUrl is ignored — OpenRouter is a single global endpoint (the param exists only to
+     * satisfy the shared provider contract, where BytePlus uses a per-region host).
      *
      * @return array{ok: bool, reason: string, message: string, detail: ?string}
      */
-    public function checkModel(string $modelId, ?string $overrideKey = null): array
+    public function checkModel(string $modelId, ?string $overrideKey = null, ?string $baseUrl = null): array
     {
         $key = $overrideKey !== null && $overrideKey !== '' ? $overrideKey : $this->apiKey();
 
