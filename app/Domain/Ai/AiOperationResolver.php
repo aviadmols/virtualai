@@ -144,6 +144,9 @@ final class AiOperationResolver
             estimatedCostMicroUsd: $operation->estimated_cost_micro_usd,
             inputSchema: $operation->input_schema,
             provider: $this->providerForModel($operationKey, $model),
+            fallbackProvider: $fallback !== null
+                ? $this->providerForModel($operationKey, $fallback)
+                : ImageGenerationProvider::PROVIDER_OPENROUTER,
         );
 
         return new ResolvedOperation(

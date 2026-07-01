@@ -30,6 +30,7 @@ class BytePlusProviderTest extends TestCase
 
     private const BASE = 'https://ark.ap-southeast.bytepluses.com/api/v3';
     private const GEN = self::BASE.'/images/generations';
+    private const OR_BASE = 'https://openrouter.ai/api/v1';
 
     protected function setUp(): void
     {
@@ -107,6 +108,65 @@ class BytePlusProviderTest extends TestCase
 
         $this->assertSame(ImageGenerationProvider::PROVIDER_BYTEPLUS, $config->provider);
         $this->assertSame('seedream-5-0-260128', $config->model);
+        // The fallback stays on OpenRouter (the seeded Gemini fallback) — proving the
+        // resolver carries a per-model provider for the fallback too (cross-provider).
+        $this->assertSame('google/gemini-2.5-flash-image', $config->fallbackModel);
+        $this->assertSame(ImageGenerationProvider::PROVIDER_OPENROUTER, $config->fallbackProvider);
+    }
+
+    public function test_byteplus_failure_falls_back_to_openrouter_across_providers(): void
+    {
+        config()->set('services.openrouter.key', 'sk-or-test');
+        config()->set('services.openrouter.base_url', self::OR_BASE);
+        config()->set('services.openrouter.timeout', 30);
+
+        $gemini = "\x89PNG\r\n\x1a\nGEMINI";
+        $dataUrl = 'data:image/png;base64,'.base64_encode($gemini);
+
+        // BytePlus 404s (the exact failure the merchant hit); OpenRouter/Gemini then serves it.
+        Http::fake([
+            self::GEN => Http::response(['error' => ['message' => 'The model or endpoint does not exist or you do not have access to it.']], 404),
+            self::OR_BASE.'/chat/completions' => Http::response([
+                'id' => 'gen-fallback',
+                'model' => 'google/gemini-2.5-flash-image',
+                'usage' => ['cost' => 0.039],
+                'choices' => [['message' => ['role' => 'assistant', 'content' => '', 'images' => [['type' => 'image_url', 'image_url' => ['url' => $dataUrl]]]]]],
+            ], 200),
+        ]);
+
+        $config = new OperationConfig(
+            operationKey: 'try_on_generation',
+            model: 'seedream-5-0-260128',
+            fallbackModel: 'google/gemini-2.5-flash-image',
+            systemPrompt: 'sys',
+            userPrompt: 'wear {{product_name}}',
+            imageQuality: 'high',
+            aspectRatio: '3:4',
+            params: ['seed' => 7],
+            creditMultiplier: null,
+            promptVersion: 1,
+            estimatedCostMicroUsd: 40_000,
+            inputSchema: null,
+            provider: ImageGenerationProvider::PROVIDER_BYTEPLUS,
+            fallbackProvider: ImageGenerationProvider::PROVIDER_OPENROUTER,
+        );
+
+        $result = app(TryOnGenerationCaller::class)->generate(
+            $config,
+            ImagePayload::fromUrl('https://cdn.test/shopper.jpg'),
+            ImagePayload::fromUrl('https://cdn.test/product.jpg'),
+            ['product_name' => 'Ring', 'variant' => '', 'height' => ''],
+        );
+
+        // The fallback provider produced the image — the shopper still gets a result.
+        $this->assertSame($gemini, $result->imageBytes);
+        $this->assertSame('google/gemini-2.5-flash-image', $result->modelUsed);
+        $this->assertTrue($result->cost->available);
+
+        // BytePlus was attempted first, then OpenRouter served the fallback.
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/images/generations'));
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/chat/completions')
+            && $req['model'] === 'google/gemini-2.5-flash-image');
     }
 
     public function test_caller_routes_a_byteplus_config_to_seedream(): void

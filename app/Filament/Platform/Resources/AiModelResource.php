@@ -95,11 +95,13 @@ class AiModelResource extends Resource
                         ->prefix('$')
                         ->step('0.000001')
                         // Entered + shown in USD; stored as integer micro-USD. Both directions
-                        // convert so a BytePlus per-image price actually persists (was
-                        // dehydrated(false) — display-only — so it could never be saved).
-                        ->formatStateUsing(static fn (?int $state): ?string => $state !== null
-                            ? (string) CreditMath::microToUsd($state)
-                            : null)
+                        // convert in-field so the price persists (a second conversion on the
+                        // page previously nulled it). number_format avoids scientific notation
+                        // (e.g. "2.0E-6") that a numeric input would render blank; trailing
+                        // zeros are trimmed for a clean "$0.035".
+                        ->formatStateUsing(static fn ($state): ?string => ($state === null || $state === '')
+                            ? null
+                            : rtrim(rtrim(number_format(CreditMath::microToUsd((int) $state), 6, '.', ''), '0'), '.'))
                         ->dehydrateStateUsing(static fn ($state): ?int => ($state === null || $state === '')
                             ? null
                             : CreditMath::usdToMicro((float) $state)),

@@ -37,6 +37,10 @@ final readonly class OperationConfig
         // Which upstream serves the model (openrouter|byteplus). Defaults to OpenRouter so
         // every existing caller/construction stays valid; the resolver sets the real value.
         public string $provider = ImageGenerationProvider::PROVIDER_OPENROUTER,
+        // Which upstream serves the FALLBACK model. The fallback may live on a different
+        // provider than the primary (e.g. a BytePlus default with a Gemini/OpenRouter
+        // fallback), so cross-provider fallback routes it correctly. Defaults to OpenRouter.
+        public string $fallbackProvider = ImageGenerationProvider::PROVIDER_OPENROUTER,
     ) {}
 
     /**
