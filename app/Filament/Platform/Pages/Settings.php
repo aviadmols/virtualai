@@ -167,17 +167,30 @@ class Settings extends Page implements HasForms
             ->send();
     }
 
-    /** A masked, write-only secret input that hints whether the value is configured. */
+    /**
+     * A masked, write-only secret input. When a value is already stored it shows a green
+     * "Saved ✓" hint + a placeholder + helper so the admin can SEE it's set — the field is
+     * intentionally blank (the secret never returns to the browser); leaving it blank keeps
+     * the stored value, entering a new one replaces it.
+     */
     private function secretField(string $field, string $labelKey, string $settingKey): TextInput
     {
         $configured = app(PlatformSettings::class)->isConfigured($settingKey);
 
-        return TextInput::make($field)
+        $input = TextInput::make($field)
             ->label(__($labelKey))
             ->password()
             ->revealable()
             ->autocomplete(false)
             ->placeholder(__($configured ? 'platform.settings.status.configured' : 'platform.settings.status.unset'))
-            ->helperText(__('platform.settings.secret_help'));
+            ->helperText(__($configured ? 'platform.settings.secret_saved' : 'platform.settings.secret_help'));
+
+        if ($configured) {
+            $input->hint(__('platform.settings.status.saved_hint'))
+                ->hintColor('success')
+                ->hintIcon('heroicon-m-check-circle');
+        }
+
+        return $input;
     }
 }

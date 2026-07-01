@@ -485,10 +485,12 @@ return [
         'title' => 'Platform settings',
         'save' => 'Save settings',
         'saved' => 'Settings saved',
-        'secret_help' => 'Leave blank to keep the current value. Stored encrypted; never shown again.',
+        'secret_help' => 'Paste the key here, then Save. Stored encrypted; the value is never shown again.',
+        'secret_saved' => 'A value is saved (hidden for security). Leave blank to keep it, or paste a new one to replace it.',
         'status' => [
-            'configured' => 'Configured',
-            'unset' => 'Not set',
+            'configured' => 'A value is saved — leave blank to keep',
+            'unset' => 'Not set — paste your key',
+            'saved_hint' => 'Saved',
         ],
         'openrouter' => [
             'title' => 'OpenRouter',
