@@ -23,6 +23,8 @@ final class TryOnGenerationCaller
     // BytePlus/Seedream: image_quality -> size token, response format, defaults.
     private const BYTEPLUS_RESPONSE_FORMAT = 'b64_json';
     private const BYTEPLUS_DEFAULT_SIZE = '2K';
+    // Seedream 4.x/5.x: force a SINGLE output image (no multi-image sequence) for a try-on.
+    private const BYTEPLUS_SEQUENTIAL = 'disabled';
     private const BYTEPLUS_QUALITY_SIZE = [
         'high' => '2K',
         'standard' => '1K',
@@ -183,6 +185,7 @@ final class TryOnGenerationCaller
             'prompt' => $prompt,
             'image' => [$shopperImage->url, $variantImage->url],
             'size' => self::BYTEPLUS_QUALITY_SIZE[$config->imageQuality] ?? self::BYTEPLUS_DEFAULT_SIZE,
+            'sequential_image_generation' => self::BYTEPLUS_SEQUENTIAL,
             'response_format' => self::BYTEPLUS_RESPONSE_FORMAT,
             'watermark' => false,
         ];
