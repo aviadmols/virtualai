@@ -2,30 +2,33 @@
 
 namespace App\Http\Middleware;
 
+use App\Domain\Tenancy\MerchantSiteTenancy;
+use App\Models\Site;
+use App\Models\User;
 use App\Support\Tenant;
 use Closure;
+use Filament\Facades\Filament;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * BindMerchantAccount — the tenant-binding floor for the merchant Filament panel.
  *
- * For an authenticated account-owner, binds the Tenant context to the owner's
- * account for the WHOLE request lifecycle, so every BelongsToAccount query made
- * by a merchant resource is auto-scoped to that one account. Same shape as the
- * widget's ResolveWidgetSite: Tenant::run($accountId, fn () => $next($request))
- * — $next (controller + view render) runs INSIDE the bind, which clears in
- * finally so a worker/request never leaks one tenant into the next (TS-TENANCY-001).
+ * The merchant panel is SHOP-centric (Filament tenant = Site), but the ACCOUNT stays the
+ * security boundary: this binds the Tenant (account) context for the WHOLE request so every
+ * BelongsToAccount query is auto-scoped. Registered as PERSISTENT tenant middleware, so it runs
+ * AFTER Filament resolves the shop tenant (needed for the super-admin branch) yet still wraps the
+ * render, clearing in finally (TS-TENANCY-001).
  *
- * FAIL-CLOSED CONTRACT: this middleware resolves the account from the AUTH user
- * only (auth()->user()->account_id), never from the request. If there is no
- * authenticated user or no resolvable account_id, it binds NOTHING — leaving the
- * fail-closed global scope to return an empty set rather than another account's
- * rows. It runs AFTER Filament's Authenticate middleware, and the panel's
- * canAccessPanel gate already excludes super-admins (account_id === null), so the
- * no-account path is defence in depth, not the happy path.
+ * Two account sources, both read WITHOUT trusting the request body:
+ *  1. Account owner  → their own account_id (from the AUTH user).
+ *  2. Super-admin drill-in → the account of the active shop (Filament tenant Site), re-derived
+ *     every request from the URL so it can never point at a different account. A super-admin has
+ *     no account of their own; the shop they drilled into is the single source of truth.
  *
- * No withoutGlobalScopes() — this only NARROWS to one account, never widens.
+ * FAIL-CLOSED: no resolvable account → bind NOTHING, leaving the fail-closed global scope to
+ * return an empty set (never another account's rows). No withoutGlobalScopes() — this only
+ * NARROWS to one account.
  */
 final class BindMerchantAccount
 {
@@ -33,24 +36,16 @@ final class BindMerchantAccount
     {
         $accountId = $this->resolveAccountId($request);
 
-        // Fail closed: with no resolvable account, do NOT bind a tenant. The
-        // BelongsToAccount global scope then returns nothing (sentinel), never
-        // another account's data. Authenticate + canAccessPanel run first, so a
-        // legitimate merchant request always has an account_id here.
         if ($accountId === null) {
             return $next($request);
         }
 
-        // Bind for the WHOLE request lifecycle; $next runs inside the bind and the
-        // context clears in finally (never ambient/stale — TS-TENANCY-001).
         return Tenant::run($accountId, static fn (): Response => $next($request));
     }
 
     /**
-     * The authenticated account-owner's account_id, or null. Read from the auth
-     * user ONLY — never from the request/session/domain (TS-TENANCY-001). A
-     * super-admin (account_id === null) is excluded by canAccessPanel before this
-     * runs; if one slips through, this returns null and the scope fails closed.
+     * The account to bind, read from the AUTH user / the active shop tenant ONLY — never from the
+     * request/session/domain (TS-TENANCY-001).
      */
     private function resolveAccountId(Request $request): ?int
     {
@@ -62,6 +57,25 @@ final class BindMerchantAccount
 
         $accountId = $user->getAttribute('account_id');
 
-        return $accountId === null ? null : (int) $accountId;
+        if ($accountId !== null) {
+            return (int) $accountId; // account owner — bind their own account
+        }
+
+        // Super-admin drill-in: derive the account from the active shop (Filament tenant), which
+        // is the URL-resolved Site gated by User::canAccessTenant. Re-read every request. The
+        // try/catch keeps it robust outside a panel/tenant context (fail closed → bind nothing).
+        if ($user instanceof User && $user->isSuperAdmin()) {
+            try {
+                $tenant = Filament::getTenant();
+            } catch (\Throwable) {
+                $tenant = null;
+            }
+
+            if ($tenant instanceof Site) {
+                return MerchantSiteTenancy::accountIdForSite($tenant);
+            }
+        }
+
+        return null;
     }
 }

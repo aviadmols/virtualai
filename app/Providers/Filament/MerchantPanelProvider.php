@@ -3,8 +3,11 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Merchant\Pages\Dashboard;
+use App\Filament\Merchant\Pages\Tenancy\EditSiteProfile;
+use App\Filament\Merchant\Pages\Tenancy\RegisterSite;
 use App\Http\Middleware\BindMerchantAccount;
 use App\Http\Middleware\HtmlDirection;
+use App\Models\Site;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -57,6 +60,13 @@ class MerchantPanelProvider extends PanelProvider
             ->id(self::PANEL_ID)
             ->path(self::PANEL_PATH)
             ->login()
+            // SHOP-centric: the tenant is a Site (the "shop"), routed by its unique slug. The
+            // switcher + per-shop URLs come from Filament tenancy; ownership is enforced by
+            // User::getTenants / canAccessTenant (the ACCOUNT stays the security boundary).
+            ->tenant(Site::class, slugAttribute: Site::TENANT_SLUG_FIELD)
+            ->tenantMenu()
+            ->tenantRegistration(RegisterSite::class)
+            ->tenantProfile(EditSiteProfile::class)
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -81,14 +91,15 @@ class MerchantPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
                 HtmlDirection::class,
             ])
-            // BindMerchantAccount runs in authMiddleware, AFTER Authenticate, so
-            // the account-owner is resolved and the Tenant is bound to their
-            // account for the whole request (auto-scoping every BelongsToAccount
-            // query). It clears in finally and fails closed with no account.
             ->authMiddleware([
                 Authenticate::class,
+            ])
+            // BindMerchantAccount is PERSISTENT tenant middleware: it runs AFTER Filament resolves
+            // the shop tenant (so the super-admin drill-in can read it) yet still wraps the render,
+            // binding the account for the whole request and clearing in finally (TS-TENANCY-001).
+            ->tenantMiddleware([
                 BindMerchantAccount::class,
-            ]);
+            ], isPersistent: true);
     }
 
     /** Translated nav-group labels in the locked workspace order. */

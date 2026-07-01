@@ -6,12 +6,15 @@ use App\Domain\Leads\LeadsExporter;
 use App\Filament\Merchant\Resources\EndUserResource\Pages\ListEndUsers;
 use App\Filament\Merchant\Resources\EndUserResource\Pages\ViewEndUser;
 use App\Models\EndUser;
+use App\Models\Site;
 use App\Support\Ui\StatusBadge;
+use Filament\Facades\Filament;
 use Filament\Resources\Resource;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -31,6 +34,10 @@ class EndUserResource extends Resource
     // === CONSTANTS ===
     protected static ?string $model = EndUser::class;
 
+    // Explicitly scoped to the ACTIVE shop (Filament tenant) in getEloquentQuery, on top of the
+    // account global scope — not via Filament's relationship auto-scoping (codebase idiom).
+    protected static bool $isScopedToTenant = false;
+
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
 
     protected static ?string $navigationGroup = 'nav.leads';
@@ -44,6 +51,17 @@ class EndUserResource extends Resource
     private const LABEL_SINGULAR = 'leads.singular';
     private const NAV_LABEL = 'leads.title';
     private const EXPORT_LABEL = 'leads.export';
+
+    /** Narrow the leads list to the ACTIVE shop (Filament tenant) on top of the account scope. */
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+        $tenant = Filament::getTenant();
+
+        return $tenant instanceof Site
+            ? $query->where('site_id', $tenant->getKey())
+            : $query;
+    }
 
     public static function getModelLabel(): string
     {

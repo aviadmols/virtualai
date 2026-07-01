@@ -30,6 +30,10 @@ class CreditLedgerResource extends Resource
     // === CONSTANTS ===
     protected static ?string $model = CreditLedger::class;
 
+    // Credits are per-ACCOUNT (no site_id) — shared across all the merchant's shops. Not
+    // tenant-scoped; the account global scope (BindMerchantAccount) already isolates it.
+    protected static bool $isScopedToTenant = false;
+
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
 
     // Attaches to the locked nav order (Credits group) in MerchantPanelProvider.

@@ -110,6 +110,7 @@ class MerchantResourceRecordIsolationTest extends TestCase
         // Control: A's OWN site renders fine — the 404 above is isolation, not a
         // blanket failure (a meaningful test must show the happy path works).
         $ownSite = Site::factory()->forAccount($this->accountA)->create();
+        Filament::setTenant($ownSite); // shop-centric panel: bind the active shop
 
         $this->asMerchantA(function () use ($ownSite): void {
             Livewire::test(ViewSite::class, ['record' => $ownSite->getRouteKey()])
@@ -121,6 +122,7 @@ class MerchantResourceRecordIsolationTest extends TestCase
     public function test_own_lead_card_renders_for_the_owner(): void
     {
         $ownSite = Site::factory()->forAccount($this->accountA)->create();
+        Filament::setTenant($ownSite); // shop-centric panel: bind the active shop
         $ownLead = $this->asMerchantA(fn () => EndUser::factory()->forSite($ownSite)->create([
             'full_name' => 'Owner A Lead',
         ]));

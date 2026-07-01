@@ -34,6 +34,10 @@ class SiteResource extends Resource
     // === CONSTANTS ===
     protected static ?string $model = Site::class;
 
+    // Site IS the Filament tenant, so it can't be tenant-scoped to itself. This resource is
+    // the account's "all shops" list (account-scoped by BindMerchantAccount), not per-shop.
+    protected static bool $isScopedToTenant = false;
+
     protected static ?string $navigationIcon = 'heroicon-o-globe-alt';
 
     // Attaches to the locked nav order in MerchantPanelProvider::NAV_GROUPS.

@@ -8,6 +8,12 @@ return [
     'add' => 'Add site',
     'saved' => 'Site added',
     'updated' => 'Site saved',
+    'register' => [
+        'label' => 'Add a shop',
+    ],
+    'profile' => [
+        'label' => 'Shop settings',
+    ],
     'scan' => [
         'label' => 'Scan a product',
         'heading' => 'Scan a product page',

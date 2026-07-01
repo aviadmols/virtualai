@@ -32,6 +32,7 @@ class WidgetAppearancePageTest extends TestCase
         $this->site = Site::factory()->forAccount($this->account)->create();
         Filament::setCurrentPanel(Filament::getPanel('merchant'));
         $this->actingAs(User::factory()->forAccount($this->account)->create());
+        Filament::setTenant($this->site); // shop-centric panel: bind the active shop
     }
 
     public function test_page_renders_for_the_owner(): void

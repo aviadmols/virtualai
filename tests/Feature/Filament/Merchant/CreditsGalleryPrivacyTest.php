@@ -58,6 +58,8 @@ class CreditsGalleryPrivacyTest extends TestCase
 
         Filament::setCurrentPanel(Filament::getPanel('merchant'));
         $this->actingAs($this->owner);
+        // The merchant panel is shop-centric (Filament tenant = Site); bind the active shop.
+        Filament::setTenant($this->site);
     }
 
     /** Run the body with the owner's account bound, as BindMerchantAccount would. */

@@ -45,6 +45,10 @@ class SiteEditRenderTest extends TestCase
                 'domain' => 'https://shop-a.test',
             ]);
 
+            // The panel is shop-centric (Filament tenant = Site); set the active shop so the
+            // per-tenant resource URLs resolve.
+            Filament::setTenant($site);
+
             Livewire::test(EditSite::class, ['record' => $site->getRouteKey()])
                 ->assertOk()
                 ->fillForm(['name' => 'New name'])
@@ -59,12 +63,16 @@ class SiteEditRenderTest extends TestCase
     {
         $accountB = Account::factory()->create();
         $foreign = Site::factory()->forAccount($accountB)->create();
+        $ownSite = Site::factory()->forAccount($this->accountA)->create();
 
         $this->expectException(ModelNotFoundException::class);
 
-        Tenant::run($this->accountA->id, fn () => Livewire::test(
-            EditSite::class,
-            ['record' => $foreign->getRouteKey()],
-        ));
+        Tenant::run($this->accountA->id, function () use ($ownSite, $foreign) {
+            // Active shop is the merchant's OWN; a hand-crafted URL for another account's site
+            // resolves through the account-scoped record binding to ModelNotFoundException.
+            Filament::setTenant($ownSite);
+
+            Livewire::test(EditSite::class, ['record' => $foreign->getRouteKey()]);
+        });
     }
 }

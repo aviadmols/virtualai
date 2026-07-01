@@ -44,6 +44,7 @@ class ScanReviewAndEmbedTest extends TestCase
 
         Filament::setCurrentPanel(Filament::getPanel('merchant'));
         $this->actingAs($this->owner);
+        Filament::setTenant($this->site); // shop-centric panel: bind the active shop
     }
 
     /** A draft product with a deliberate mix of confidence + selectors. */

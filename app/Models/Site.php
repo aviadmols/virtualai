@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
+use App\Domain\Tenancy\MerchantSiteTenancy;
 use App\Models\Concerns\BelongsToAccount;
 use Database\Factories\SiteFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -34,6 +35,9 @@ class Site extends Model
 
     // Random suffix length for the globally-unique tenant slug.
     private const SLUG_SUFFIX_LEN = 6;
+
+    // The Filament merchant-panel tenant slug attribute/route field.
+    public const TENANT_SLUG_FIELD = 'slug';
 
     public const DEFAULT_FREE_GENERATIONS_BEFORE_SIGNUP = 2;
 
@@ -128,6 +132,21 @@ class Site extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    /**
+     * Route-model binding. The Filament TENANT segment resolves by `slug` and must read across
+     * accounts (a merchant's own shop resolves before the account is bound; a super-admin drills
+     * into any shop) — routed through the audited MerchantSiteTenancy seam and gated IMMEDIATELY
+     * by User::canAccessTenant. All OTHER bindings (records bound by id) stay account-scoped.
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field === self::TENANT_SLUG_FIELD) {
+            return MerchantSiteTenancy::resolveBySlug((string) $value);
+        }
+
+        return parent::resolveRouteBinding($value, $field);
     }
 
     /**
