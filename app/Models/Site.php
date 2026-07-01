@@ -32,6 +32,9 @@ class Site extends Model
     // Server-side HMAC secret, never sent to the browser.
     private const WIDGET_SECRET_RANDOM_BYTES = 32;
 
+    // Random suffix length for the globally-unique tenant slug.
+    private const SLUG_SUFFIX_LEN = 6;
+
     public const DEFAULT_FREE_GENERATIONS_BEFORE_SIGNUP = 2;
 
     public const DEFAULT_RETENTION_DAYS = 30;
@@ -96,6 +99,11 @@ class Site extends Model
             if ($site->widget_secret === null) {
                 $site->widget_secret = self::generateWidgetSecret();
             }
+
+            // The Filament-tenancy URL slug (globally unique). Generated once, like site_key.
+            if ($site->slug === null || $site->slug === '') {
+                $site->slug = self::generateSlug($site->name);
+            }
         });
 
         // NULL-not-empty guard: an empty string collides under the unique
@@ -150,6 +158,14 @@ class Site extends Model
     public static function generateSiteKey(): string
     {
         return self::SITE_KEY_PREFIX.Str::random(self::SITE_KEY_RANDOM_BYTES);
+    }
+
+    /** A globally-unique URL slug for the merchant-panel tenant segment (name + random suffix). */
+    public static function generateSlug(?string $name): string
+    {
+        $base = Str::slug((string) $name);
+
+        return ($base !== '' ? $base : 'shop').'-'.Str::lower(Str::random(self::SLUG_SUFFIX_LEN));
     }
 
     /** A fresh server-side widget secret (hex). */

@@ -2,13 +2,17 @@
 
 namespace App\Models;
 
+use App\Domain\Tenancy\MerchantSiteTenancy;
 use Filament\Models\Contracts\FilamentUser;
+use Filament\Models\Contracts\HasTenants;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 
 /**
  * User — authentication.
@@ -21,7 +25,7 @@ use Illuminate\Notifications\Notifiable;
  * panel/query layer via the forAccount() query scope, not via the global
  * tenant scope.
  */
-class User extends Authenticatable implements FilamentUser
+class User extends Authenticatable implements FilamentUser, HasTenants
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
@@ -94,14 +98,60 @@ class User extends Authenticatable implements FilamentUser
 
     /**
      * Panel access gate (required by Filament in non-local environments).
-     * Platform = super-admins only; Merchant = account-scoped owners only.
+     * Platform = super-admins only; Merchant = account owners, PLUS super-admins who drill into
+     * a specific shop (they carry no account and land on a tenant URL; canAccessTenant + the
+     * tenant menu's "Exit to platform" bound their session to that one shop).
      */
     public function canAccessPanel(Panel $panel): bool
     {
         return match ($panel->getId()) {
             self::PANEL_PLATFORM => $this->isSuperAdmin(),
-            self::PANEL_MERCHANT => ! $this->isSuperAdmin() && $this->account_id !== null,
+            self::PANEL_MERCHANT => $this->isSuperAdmin() || $this->account_id !== null,
             default => false,
         };
+    }
+
+    // === Filament SITE tenancy (the merchant "shop" switcher) ===
+
+    /**
+     * The shops (Site tenants) this user may switch between in the merchant panel — the security
+     * boundary for the switcher. A merchant sees ONLY their account's sites (via the audited seam,
+     * read through the normal account scope). A super-admin's list is empty: they reach a shop by
+     * drill-in URL (gated by canAccessTenant), not the menu. account_id === null → empty (fail-closed).
+     *
+     * @return Collection<int, Site>
+     */
+    public function getTenants(Panel $panel): Collection
+    {
+        if ($this->isSuperAdmin() || $this->account_id === null) {
+            return collect();
+        }
+
+        return MerchantSiteTenancy::sitesForAccount((int) $this->account_id);
+    }
+
+    /** The landing shop for a bare /merchant visit (the merchant's first site). */
+    public function getDefaultTenant(Panel $panel): ?Model
+    {
+        return $this->getTenants($panel)->first();
+    }
+
+    /**
+     * Ownership gate for a shop (Site) — THE authoritative tenant-access check. A merchant may
+     * access only their own account's shops; a super-admin may drill into any shop. Reads the
+     * AUTH user only, never the request. This is what makes the cross-account tenant RESOLUTION
+     * in MerchantSiteTenancy::resolveBySlug safe.
+     */
+    public function canAccessTenant(Model $tenant): bool
+    {
+        if (! $tenant instanceof Site) {
+            return false;
+        }
+
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        return $this->account_id !== null && (int) $tenant->account_id === (int) $this->account_id;
     }
 }

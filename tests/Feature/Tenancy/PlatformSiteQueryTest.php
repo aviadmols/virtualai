@@ -28,14 +28,19 @@ class PlatformSiteQueryTest extends TestCase
     private const APP_DIR = 'app';
 
     /**
-     * The audited platform-admin seams are the ONLY product-code files allowed to call
-     * withoutGlobalScope(). Each one is guarded by PlatformGuard (super-admin only).
+     * The audited seams are the ONLY product-code files allowed to call withoutGlobalScope().
+     * The Platform seams are guarded by PlatformGuard (super-admin only). MerchantSiteTenancy is
+     * the merchant-panel Filament-tenancy seam: its single cross-account read (resolveBySlug) is
+     * gated by User::canAccessTenant — the authoritative ownership check Filament applies right
+     * after — so a merchant only ever resolves their own account's shops (a super-admin any). It
+     * widens no list view, only the single-tenant lookup canAccessTenant then authorizes.
      */
     private const SANCTIONED_BYPASS_FILES = [
         'app/Domain/Platform/PlatformActivityQuery.php',
         'app/Domain/Platform/PlatformCreditLedgerQuery.php',
         'app/Domain/Platform/PlatformProductQuery.php',
         'app/Domain/Platform/PlatformSiteQuery.php',
+        'app/Domain/Tenancy/MerchantSiteTenancy.php',
     ];
 
     public function test_super_admin_lists_sites_across_all_accounts(): void
