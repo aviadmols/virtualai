@@ -2,6 +2,7 @@
 
 namespace App\Filament\Platform\Resources;
 
+use App\Domain\Ai\ProviderRouter;
 use App\Domain\Credits\CreditMath;
 use App\Filament\Platform\Resources\AiModelResource\Pages\CreateAiModel;
 use App\Filament\Platform\Resources\AiModelResource\Pages\EditAiModel;
@@ -13,11 +14,14 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions\Action;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Throwable;
 
 /**
  * P4 — AI models catalog (full CRUD). The allow-list of OpenRouter model ids per
@@ -43,6 +47,19 @@ class AiModelResource extends Resource
     // i18n label keys (platform.models.*).
     private const LABEL_SINGULAR = 'platform.models.singular';
     private const NAV_LABEL = 'platform.models.title';
+
+    // Per-model "Test" action (no-spend probe) i18n + reason -> localized body map.
+    private const LABEL_TEST = 'platform.models.test';
+    private const LABEL_TEST_OK = 'platform.models.test_ok';
+    private const LABEL_TEST_FAIL = 'platform.models.test_fail';
+    private const TEST_REASON_BODY = [
+        'ok' => 'platform.models.test_ok_body',
+        'not_configured' => 'platform.models.test_not_configured',
+        'invalid_key' => 'platform.models.test_invalid_key',
+        'model_not_found' => 'platform.models.test_not_found',
+        'timeout' => 'platform.models.test_timeout',
+        'error' => 'platform.models.test_error',
+    ];
 
     public static function getModelLabel(): string
     {
@@ -155,6 +172,15 @@ class AiModelResource extends Resource
                     ->label(__('platform.models.col.active'))
                     ->boolean(),
             ])
+            ->actions([
+                // No-spend probe of THIS model against its provider — answers "does it work?"
+                // right in the catalog, so the admin never runs a real try-on to find a 404.
+                Action::make('test')
+                    ->label(__(self::LABEL_TEST))
+                    ->icon('heroicon-o-signal')
+                    ->color('gray')
+                    ->action(static fn (AiModel $record) => self::runModelTest($record)),
+            ])
             ->filters([
                 SelectFilter::make('operation_key')
                     ->label(__('platform.models.filter.operation'))
@@ -173,6 +199,35 @@ class AiModelResource extends Resource
             'create' => CreateAiModel::route('/create'),
             'edit' => EditAiModel::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * Probe a single model against its provider (no-spend) and flash the typed result. The
+     * provider clients never throw; only ProviderRouter::for can (unknown provider), so guard
+     * that. A model_not_found is the answer to the common 404 "no access / wrong id".
+     */
+    public static function runModelTest(AiModel $record): void
+    {
+        try {
+            $result = app(ProviderRouter::class)->for($record->provider)->checkModel($record->model_id);
+        } catch (Throwable $e) {
+            $result = ['ok' => false, 'reason' => 'error', 'message' => $e->getMessage(), 'detail' => null];
+        }
+
+        $bodyKey = self::TEST_REASON_BODY[$result['reason']] ?? null;
+        $body = $bodyKey !== null
+            ? __($bodyKey, ['model' => $record->model_id])
+            : (string) ($result['message'] ?? '');
+
+        $notification = Notification::make()->body($body);
+
+        if ($result['ok']) {
+            $notification->success()->title(__(self::LABEL_TEST_OK, ['model' => $record->model_id]));
+        } else {
+            $notification->danger()->title(__(self::LABEL_TEST_FAIL, ['model' => $record->model_id]))->persistent();
+        }
+
+        $notification->send();
     }
 
     /** Operation key → localised option label (from the AiOperation CONSTs). */

@@ -30,6 +30,7 @@ final class OpenRouterClient implements ImageGenerationProvider
     private const CHAT_PATH = '/chat/completions';
     private const GENERATION_PATH = '/generation';
     private const KEY_PATH = '/key'; // GET /key — bearer info (label + usage/limit), no spend
+    private const MODELS_PATH = '/models'; // GET /models — the model catalog, no spend
     private const DATA_URL_PREFIX = 'data:';
 
     // Required headers (OpenRouter attribution + auth).
@@ -126,6 +127,43 @@ final class OpenRouterClient implements ImageGenerationProvider
         }
 
         return ['ok' => false, 'reason' => 'error', 'message' => 'OpenRouter returned an error ('.$response->status().').', 'detail' => $detail];
+    }
+
+    /**
+     * Test a SPECIFIC OpenRouter model WITHOUT spending: GET /models lists the live catalog;
+     * we check the id is present (a retired/mistyped id is the common failure). Never throws.
+     *
+     * @return array{ok: bool, reason: string, message: string, detail: ?string}
+     */
+    public function checkModel(string $modelId, ?string $overrideKey = null): array
+    {
+        $key = $overrideKey !== null && $overrideKey !== '' ? $overrideKey : $this->apiKey();
+
+        if ($key === '' || PlatformSettings::looksLikePlaceholder($key)) {
+            return ['ok' => false, 'reason' => 'not_configured', 'message' => 'No OpenRouter API key is set.', 'detail' => null];
+        }
+
+        try {
+            $response = $this->request($key)->get(self::MODELS_PATH);
+        } catch (ConnectionException) {
+            return ['ok' => false, 'reason' => 'timeout', 'message' => 'Could not reach OpenRouter.', 'detail' => null];
+        }
+
+        if ($response->status() === 401) {
+            return ['ok' => false, 'reason' => 'invalid_key', 'message' => 'OpenRouter rejected the key (401 — invalid or revoked).', 'detail' => 'HTTP 401'];
+        }
+
+        if (! $response->successful()) {
+            return ['ok' => false, 'reason' => 'error', 'message' => 'OpenRouter returned an error ('.$response->status().').', 'detail' => 'HTTP '.$response->status().': '.mb_substr($response->body(), 0, 2000)];
+        }
+
+        $ids = array_column((array) ($response->json('data') ?? []), 'id');
+
+        if (in_array($modelId, $ids, true)) {
+            return ['ok' => true, 'reason' => 'ok', 'message' => 'OpenRouter model "'.$modelId.'" is available.', 'detail' => null];
+        }
+
+        return ['ok' => false, 'reason' => 'model_not_found', 'message' => 'OpenRouter model "'.$modelId.'" is not in the live catalog (retired or wrong id).', 'detail' => null];
     }
 
     /** A short, language-neutral summary of the key's credit, if the provider returned it. */

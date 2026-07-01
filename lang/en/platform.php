@@ -283,6 +283,15 @@ return [
         'filter' => [
             'operation' => 'Operation',
         ],
+        'test' => 'Test',
+        'test_ok' => 'Model :model works',
+        'test_ok_body' => 'The provider accepted this model — a try-on can use it.',
+        'test_fail' => 'Model :model failed',
+        'test_not_found' => "Model :model isn't reachable — it doesn't exist, or your account/region has no access to it.",
+        'test_invalid_key' => 'The provider rejected the API key (invalid or revoked) — check it in Settings.',
+        'test_not_configured' => 'No API key is set for this provider — add it in Settings first.',
+        'test_timeout' => "Couldn't reach the provider — check the network / region host.",
+        'test_error' => 'The provider returned an error — check the API key and region in Settings.',
     ],
 
     // P5 — Prompts editor + resolver preview.

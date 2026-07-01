@@ -43,6 +43,26 @@ class OpenRouterClientTest extends TestCase
         return ['model' => $model, 'messages' => [['role' => 'user', 'content' => 'hi']]];
     }
 
+    public function test_check_model_ok_when_id_is_in_the_catalog(): void
+    {
+        Http::fake([self::BASE.'/models' => Http::response(['data' => [['id' => 'google/gemini-3.1-flash-image'], ['id' => 'google/gemini-2.5-flash']]], 200)]);
+
+        $result = $this->client()->checkModel('google/gemini-3.1-flash-image');
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('ok', $result['reason']);
+    }
+
+    public function test_check_model_not_found_when_id_absent_from_catalog(): void
+    {
+        Http::fake([self::BASE.'/models' => Http::response(['data' => [['id' => 'google/gemini-2.5-flash']]], 200)]);
+
+        $result = $this->client()->checkModel('openai/gpt-image-1');
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('model_not_found', $result['reason']);
+    }
+
     public function test_parses_inline_cost_from_usage(): void
     {
         $response = [

@@ -57,4 +57,14 @@ interface ImageGenerationProvider
      * @return array{ok: bool, reason: string, message: string, detail: ?string}
      */
     public function checkConnection(?string $overrideKey = null): array;
+
+    /**
+     * Test whether a SPECIFIC model id is reachable/usable on this provider (the admin
+     * "does this model work?" probe). Never throws; classifies not_configured / invalid_key /
+     * model_not_found / timeout / error. The reason 'model_not_found' is the answer to the
+     * common 404 "the model does not exist or you do not have access".
+     *
+     * @return array{ok: bool, reason: string, message: string, detail: ?string}
+     */
+    public function checkModel(string $modelId, ?string $overrideKey = null): array;
 }

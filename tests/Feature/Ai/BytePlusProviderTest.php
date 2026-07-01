@@ -95,6 +95,28 @@ class BytePlusProviderTest extends TestCase
         $this->assertFalse($client->parseCost([], 0)->available);
     }
 
+    public function test_check_model_reports_404_as_no_access(): void
+    {
+        config()->set('services.byteplus.api_key', 'bp-real-key');
+        Http::fake([self::GEN => Http::response(['error' => ['message' => 'The model or endpoint seedream-4-0-250828 does not exist or you do not have access to it.']], 404)]);
+
+        $result = app(BytePlusImageClient::class)->checkModel('seedream-4-0-250828');
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('model_not_found', $result['reason']);
+    }
+
+    public function test_check_model_reports_reachable_on_200(): void
+    {
+        config()->set('services.byteplus.api_key', 'bp-real-key');
+        Http::fake([self::GEN => Http::response(['model' => 'seedream-5-0-260128', 'data' => [['b64_json' => base64_encode('x')]]], 200)]);
+
+        $result = app(BytePlusImageClient::class)->checkModel('seedream-5-0-260128');
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('ok', $result['reason']);
+    }
+
     public function test_resolver_carries_the_byteplus_provider(): void
     {
         $this->seed(AiControlPlaneSeeder::class);

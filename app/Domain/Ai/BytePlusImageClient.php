@@ -42,6 +42,7 @@ final class BytePlusImageClient implements ImageGenerationProvider
     private const STATUS_BAD_PARAMS = 400; // key accepted, params rejected — bearer is valid
     private const STATUS_UNAUTHORIZED = 401;
     private const STATUS_FORBIDDEN = 403;
+    private const STATUS_NOT_FOUND = 404; // model id wrong OR account/region has no access
     private const STATUS_RATE_LIMITED = 429;
     private const STATUS_SERVER_MIN = 500;
 
@@ -196,6 +197,12 @@ final class BytePlusImageClient implements ImageGenerationProvider
 
     public function checkConnection(?string $overrideKey = null): array
     {
+        // The generic key/region probe uses the configured probe model.
+        return $this->checkModel((string) config(self::CFG_PROBE_MODEL), $overrideKey);
+    }
+
+    public function checkModel(string $modelId, ?string $overrideKey = null): array
+    {
         $key = $overrideKey !== null && $overrideKey !== '' ? $overrideKey : $this->apiKey();
 
         if ($key === '' || PlatformSettings::looksLikePlaceholder($key)) {
@@ -204,7 +211,7 @@ final class BytePlusImageClient implements ImageGenerationProvider
 
         try {
             $response = $this->request($key)->post(self::IMAGES_PATH, [
-                'model' => (string) config(self::CFG_PROBE_MODEL),
+                'model' => $modelId,
                 'prompt' => 'ping',
                 'size' => '1K',
             ]);
@@ -219,9 +226,15 @@ final class BytePlusImageClient implements ImageGenerationProvider
             return ['ok' => false, 'reason' => 'invalid_key', 'message' => 'BytePlus rejected the key (401 — invalid or revoked).', 'detail' => $detail];
         }
 
-        // 200 (produced) OR 400 (key accepted, params rejected) both prove the bearer works.
+        // 200 (produced) OR 400 (key accepted, params rejected) both prove the model is reachable.
         if ($response->successful() || $status === self::STATUS_BAD_PARAMS) {
-            return ['ok' => true, 'reason' => 'ok', 'message' => 'Connected to BytePlus.', 'detail' => null];
+            return ['ok' => true, 'reason' => 'ok', 'message' => 'BytePlus model "'.$modelId.'" is reachable.', 'detail' => null];
+        }
+
+        // 404 — the EXACT failure a try-on hits: the model id is wrong OR the account/region
+        // has no access to it. This is the answer the admin is testing for.
+        if ($status === self::STATUS_NOT_FOUND) {
+            return ['ok' => false, 'reason' => 'model_not_found', 'message' => 'BytePlus model "'.$modelId.'" does not exist, or your account/region has no access to it (404).', 'detail' => $detail];
         }
 
         if ($status === self::STATUS_FORBIDDEN) {
