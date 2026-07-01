@@ -9,7 +9,7 @@ import { STEP, HEIGHT_MIN_CM, HEIGHT_MAX_CM, APPEARANCE } from './constants.js';
 import { state, newIntent } from './state.js';
 import { t, tries } from './i18n.js';
 import { el, warn } from './dom.js';
-import { getOverlayMount } from './shell.js';
+import { getOverlayMount, getNotificationMount } from './shell.js';
 import { prepare, ImageError } from './image.js';
 import { submit, cancelPoll, OUTCOME } from './generation.js';
 import * as cart from './cart.js';
@@ -17,6 +17,12 @@ import * as api from './api.js';
 
 let overlay = null;
 let objectUrl = null;
+
+// Async-notification state: is the modal currently mounted, and is there an unviewed
+// background completion (the shopper closed the popup while it was still generating)?
+let isOpen = false;
+let notice = null; // the on-page "your try-on is ready" element, when shown
+let pendingNotice = null; // 'success' | 'error' | null — an unviewed background completion
 
 // The working draft for the current intent (kept across step changes / retries).
 let draft = { photo: null, height: '', extra: {}, consent: false };
@@ -28,20 +34,44 @@ function asksHeight() {
 
 /** Open the modal. Captures the variant the shopper has RIGHT NOW (carried through the flow). */
 export function open() {
+  // A generation is still running in the background -> re-attach to its progress view
+  // (the same poll renders the result inline when ready) instead of starting over.
+  if (state.submitting) {
+    renderLoading();
+    return;
+  }
+
+  // A background generation finished while the popup was closed and hasn't been viewed
+  // -> jump straight to that result instead of a fresh form.
+  if (pendingNotice === 'success' && state.lastResult) {
+    onNoticeClick(true);
+    return;
+  }
+
+  dismissNotification();
   newIntent();
   draft = { photo: null, height: '', extra: {}, consent: false };
   renderForm();
 }
 
 export function close() {
-  cancelPoll();
   revokePreview();
+  detachOverlay();
+  isOpen = false;
+
+  // Keep polling in the BACKGROUND when a generation is still in flight — the shopper can
+  // close the popup and be notified when the image is ready. A non-generating close (form,
+  // result already shown, a typed state) drops any poll as before.
+  if (!state.submitting) cancelPoll();
+}
+
+function detachOverlay() {
   if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
   overlay = null;
 }
 
 function mount(panel) {
-  if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  detachOverlay();
   overlay = el(
     'div',
     {
@@ -55,6 +85,7 @@ function mount(panel) {
     [panel],
   );
   getOverlayMount().appendChild(overlay);
+  isOpen = true;
 }
 
 /** A modal panel scaffold with a title + close button. */
@@ -291,12 +322,30 @@ async function onSubmit(cta, errorBox) {
   renderLoading();
 
   const out = await submit({ photo: draft.photo, height: asksHeight() ? Number(draft.height) : null, extra: draft.extra });
+  cacheSuccess(out);
 
+  // The shopper closed the popup while it generated -> notify on-page instead of forcing
+  // the modal back open. Otherwise render the outcome inline as usual.
+  if (!isOpen) {
+    notifyOutcome(out);
+    return;
+  }
+
+  renderPrimaryOutcome(out);
+}
+
+/** Cache a successful result so a notification / reopen can show it later. */
+function cacheSuccess(out) {
+  if (out.outcome !== OUTCOME.succeeded) return;
+  state.lastResult = { generationId: out.generationId, resultUrl: out.resultUrl, variant: state.variant };
+  if (out.freeRemaining != null && state.lead) state.lead.freeRemaining = out.freeRemaining;
+}
+
+/** The full set of typed outcomes for a first submit (rendered when the modal is open). */
+function renderPrimaryOutcome(out) {
   switch (out.outcome) {
     case OUTCOME.succeeded:
-      state.lastResult = { generationId: out.generationId, resultUrl: out.resultUrl, variant: state.variant };
-      if (out.freeRemaining != null && state.lead) state.lead.freeRemaining = out.freeRemaining;
-      renderResult(out.resultUrl);
+      renderResult(state.lastResult.resultUrl);
       break;
     case OUTCOME.signupRequired:
       renderSignup();
@@ -455,9 +504,16 @@ function onRegenerate() {
 
 async function onSubmitDirect() {
   const out = await submit({ photo: draft.photo, height: asksHeight() ? Number(draft.height) : null, extra: draft.extra });
+  cacheSuccess(out);
+
+  // Closed mid-generation (regenerate then close) -> notify on-page.
+  if (!isOpen) {
+    notifyOutcome(out);
+    return;
+  }
+
   if (out.outcome === OUTCOME.succeeded) {
-    state.lastResult = { generationId: out.generationId, resultUrl: out.resultUrl, variant: state.variant };
-    renderResult(out.resultUrl);
+    renderResult(state.lastResult.resultUrl);
   } else if (out.outcome === OUTCOME.outOfCredits) {
     renderState('state.out_of_credits', 'unavailable.body');
   } else if (out.outcome === OUTCOME.postSignupLimit || out.outcome === OUTCOME.signupRequired) {
@@ -567,6 +623,98 @@ function renderError(messageKey) {
     }),
   ]);
   mount(panel('modal.title', body));
+}
+
+// ---------------------------------------------------------------------------
+// Async notification — the shopper closed the popup mid-generation; tell them on-page
+// when the image is ready (or failed) and reopen to it on click. Lives in its own
+// shadow-root mount so it survives the modal being torn down.
+// ---------------------------------------------------------------------------
+function notifyOutcome(out) {
+  const success = out.outcome === OUTCOME.succeeded;
+  pendingNotice = success ? 'success' : 'error';
+  showNotification(success);
+}
+
+function showNotification(success) {
+  dismissNotification();
+
+  const main = el(
+    'button',
+    {
+      class: 'ton-notification__main',
+      attrs: { type: 'button' },
+      on: { click: () => onNoticeClick(success) },
+    },
+    [
+      el('span', { class: 'ton-notification__icon', text: success ? '✨' : '↻' }),
+      el('span', { class: 'ton-notification__body' }, [
+        el('span', { class: 'ton-notification__title', text: t(success ? 'notify.ready_title' : 'notify.failed_title') }),
+        el('span', { class: 'ton-notification__sub', text: t(success ? 'notify.ready_sub' : 'notify.failed_sub') }),
+      ]),
+    ],
+  );
+
+  const dismiss = el('button', {
+    class: 'ton-notification__close',
+    attrs: { type: 'button', 'aria-label': t('modal.close') },
+    text: '×',
+    on: { click: dismissNotification },
+  });
+
+  notice = el(
+    'div',
+    {
+      class: 'ton-notification ton-notification--' + (success ? 'ready' : 'error'),
+      attrs: { role: 'status', 'aria-live': 'polite' },
+    },
+    [main, dismiss],
+  );
+
+  getNotificationMount().appendChild(notice);
+}
+
+function dismissNotification() {
+  if (notice && notice.parentNode) notice.parentNode.removeChild(notice);
+  notice = null;
+  pendingNotice = null;
+}
+
+async function onNoticeClick(success) {
+  dismissNotification();
+  if (success && state.lastResult) {
+    await reopenToResult();
+  } else {
+    renderError('result.error');
+  }
+}
+
+/**
+ * Reopen the modal on the finished image. Re-fetches a FRESH signed result URL first — the
+ * one captured at completion may have passed its ~10-minute TTL by the time it's clicked.
+ */
+async function reopenToResult() {
+  mount(panel('modal.title', el('div', { class: 'ton-center' }, [
+    el('div', { class: 'ton-spinner' }),
+    el('div', { class: 'ton-upload__hint', text: t('notify.opening') }),
+  ])));
+
+  const url = await freshResultUrl();
+  renderResult(url);
+}
+
+async function freshResultUrl() {
+  try {
+    const res = await api.getGeneration(state.lastResult.generationId, state.anonToken);
+    const fresh = res.ok && res.data?.ok ? res.data.generation?.result_url : null;
+    if (fresh) {
+      state.lastResult.resultUrl = fresh;
+      return fresh;
+    }
+  } catch {
+    // fall back to the captured URL below
+  }
+  return state.lastResult.resultUrl;
 }
 
 // ---------------------------------------------------------------------------

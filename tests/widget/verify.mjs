@@ -17,6 +17,7 @@ import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
+import { deflateSync, crc32 } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -126,6 +127,103 @@ function assert(cond, msg) {
 async function waitForBoot(page) {
   await page.waitForFunction(() => window.__TrayOn && window.__TrayOn.booted === true, { timeout: 8000 });
   await page.waitForFunction(() => !!document.querySelector('[data-trayon-mounted]'), { timeout: 8000 });
+}
+
+// A real 64x64 RGB PNG for the file upload — big enough that the widget's client-side
+// decode+downscale (createImageBitmap + canvas re-encode) succeeds (a 1x1 pixel fails it).
+function pngChunk(type, data) {
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length, 0);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body) >>> 0, 0);
+  return Buffer.concat([len, body, crc]);
+}
+function makePng(w, h) {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // color type 2 = RGB
+  const row = Buffer.alloc(1 + w * 3); // filter byte + RGB pixels
+  for (let x = 0; x < w; x++) {
+    row[1 + x * 3] = 90;
+    row[1 + x * 3 + 1] = 125;
+    row[1 + x * 3 + 2] = 82;
+  }
+  const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  return Buffer.concat([sig, pngChunk('IHDR', ihdr), pngChunk('IDAT', deflateSync(raw)), pngChunk('IEND', Buffer.alloc(0))]);
+}
+const PNG_UPLOAD_BYTES = makePng(64, 64);
+
+/**
+ * Async-notification gate: submit a try-on, CLOSE the popup while it's still generating,
+ * and prove the background poll continues, surfaces an on-page notification when ready, and
+ * reopens to the finished result on click. The status endpoint returns `processing` first,
+ * then `succeeded`, so the close happens mid-generation.
+ */
+async function asyncNotificationGate(browser) {
+  console.log('\n=== async notification (close popup mid-generation) ===');
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  let failures = 0;
+  let polls = 0;
+
+  await page.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bootstrapBody('en')) }));
+  await page.route('**/widget/v1/generations', (route) =>
+    route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ ok: true, generation: { id: 8, status: 'pending' }, free_remaining: 2, reused: false }) }));
+  await page.route('**/widget/v1/generations/8*', (route) => {
+    polls++;
+    const status = polls >= 2 ? 'succeeded' : 'processing';
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, generation: { id: 8, status, failure_code: null, result_url: status === 'succeeded' ? RESULT_PNG : null, created_at: null } }) });
+  });
+
+  try {
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+
+    // Open the modal via the injected button.
+    await page.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
+    await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
+
+    // Fill the form: photo + height + consent (Playwright CSS locators pierce open shadow DOM;
+    // .click() auto-waits for the CTA to become enabled once all three are valid).
+    await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
+    // Wait for the photo to be accepted (preview shows) — surfaces a prepare() failure early.
+    await page.locator('.ton-preview__img').waitFor({ timeout: 6000 }).catch(async () => {
+      const err = await page.locator('.ton-error').first().textContent().catch(() => '');
+      throw new Error('photo not accepted by prepare(); error box="' + (err || '').trim() + '"');
+    });
+    await page.locator('.ton-input').first().fill('175');
+    await page.locator('.ton-consent__box').check();
+
+    // Generate -> loading, then CLOSE the popup while it is still generating.
+    await page.locator('.ton-cta').click({ timeout: 6000 });
+    await page.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
+    await page.locator('.ton-modal__close').click();
+    await page.locator('.ton-overlay').waitFor({ state: 'detached', timeout: 5000 });
+    assert(true, 'popup closed while generation still in flight');
+
+    // The background poll completes -> an on-page notification appears (modal stays closed).
+    await page.locator('.ton-notification--ready').waitFor({ timeout: 8000 });
+    assert(true, 'on-page "ready" notification appeared after the popup was closed');
+
+    // Click it -> the modal reopens straight to the finished result image.
+    await page.locator('.ton-notification__main').click();
+    await page.locator('.ton-result__img').waitFor({ timeout: 8000 });
+    assert(true, 'clicking the notification reopened the modal on the result image');
+
+    await page.screenshot({ path: resolve(OUT, 'widget-notification.en.png'), fullPage: false });
+    console.log('  -> screenshot: widget-notification.en.png');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, 'widget-notification-FAIL.png') }).catch(() => {});
+  }
+
+  await page.close();
+  return failures;
 }
 
 async function run() {
@@ -278,6 +376,9 @@ async function run() {
     console.error('  FAIL:', e.message);
   }
   await page.close();
+
+  // --- async notification gate (close popup mid-generation -> notify -> reopen) ---
+  failures += await asyncNotificationGate(browser);
 
   await browser.close();
   server.close();

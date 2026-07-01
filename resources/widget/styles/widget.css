@@ -480,6 +480,91 @@
   text-align: center;
 }
 
+/* ---- Page-level "your try-on is ready" notification ----
+   Shown when the shopper closed the popup mid-generation; polling continued in the
+   background. Fixed to a corner (RTL-aware via logical props); click to reopen the
+   result. Lives in the notification mount, a sibling of the overlay. */
+.ton-notification {
+  position: fixed;
+  inset-block-end: 20px;
+  inset-inline-end: 20px;
+  z-index: var(--ton-z);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 320px;
+  padding: 12px 14px;
+  border: 1px solid var(--ton-border);
+  border-radius: var(--ton-radius);
+  background: var(--ton-surface);
+  color: var(--ton-text);
+  box-shadow: var(--ton-shadow);
+  animation: ton-notify-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ton-notification--ready {
+  border-inline-start: 3px solid var(--ton-accent);
+}
+
+.ton-notification--error {
+  border-inline-start: 3px solid #d23a3a;
+}
+
+.ton-notification__main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ton-notification__icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ton-notification__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ton-notification__title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ton-notification__sub {
+  font-size: 12px;
+  color: var(--ton-muted);
+}
+
+.ton-notification__close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ton-field-bg);
+  color: var(--ton-text);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+@keyframes ton-notify-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* Directional glyph mirroring for RTL (e.g. a back arrow). */
 [dir='rtl'] .ton-glyph--directional {
   transform: scaleX(-1);

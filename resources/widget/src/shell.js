@@ -17,6 +17,7 @@ let hostEl = null;
 let shadow = null;
 let rootEl = null; // the themed root inside the shadow (holds [data-theme] + [dir])
 let overlayMount = null; // where the modal/result overlay lives
+let notificationMount = null; // where the page-level "try-on ready" notification lives
 let buttonMount = null; // where the injected button lives (moved into the host DOM)
 
 /** Create the shadow host + root once. Idempotent (returns the existing shell). */
@@ -41,6 +42,11 @@ export function create(appearance) {
   // The overlay mount: modals render here, on top of everything.
   overlayMount = el('div', { class: 'ton-overlay-mount' });
   rootEl.appendChild(overlayMount);
+
+  // The notification mount: the page-level "your try-on is ready" badge lives here (a
+  // sibling of the overlay) so it survives the modal being closed mid-generation.
+  notificationMount = el('div', { class: 'ton-notification-mount' });
+  rootEl.appendChild(notificationMount);
 
   // The button mount: created in the shadow, then RELOCATED into the host DOM by button.js
   // so it sits under add-to-cart. Its styles still resolve because button.js gives it a
@@ -75,6 +81,10 @@ export function getOverlayMount() {
   return overlayMount;
 }
 
+export function getNotificationMount() {
+  return notificationMount;
+}
+
 export function getButtonMount() {
   return buttonMount;
 }
@@ -86,5 +96,6 @@ export function destroy() {
   shadow = null;
   rootEl = null;
   overlayMount = null;
+  notificationMount = null;
   buttonMount = null;
 }

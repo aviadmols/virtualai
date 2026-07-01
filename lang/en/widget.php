@@ -53,9 +53,16 @@ return [
     ],
     'loading' => [
         'title' => 'Creating your try-on…',
-        'sub' => 'This takes a few seconds',
+        'sub' => 'This takes a few seconds — you can close this and we\'ll let you know',
         'cancel' => 'Cancel',
         'timeout' => 'This is taking longer than usual. Try again?',
+    ],
+    'notify' => [
+        'ready_title' => 'Your try-on is ready',
+        'ready_sub' => 'Tap to view it',
+        'failed_title' => "Your try-on didn't finish",
+        'failed_sub' => 'Tap to try again',
+        'opening' => 'Opening your try-on…',
     ],
     'result' => [
         'title' => "Here's your try-on",
