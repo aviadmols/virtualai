@@ -7,6 +7,7 @@ return [
     'button' => [
         'label' => 'מדדו את זה',
         'loading' => 'טוען…',
+        'busy' => 'יוצרים…',
     ],
     'modal' => [
         'title' => 'מדדו את זה',

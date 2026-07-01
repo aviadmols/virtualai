@@ -14,6 +14,7 @@ import { prepare, ImageError } from './image.js';
 import { submit, cancelPoll, OUTCOME } from './generation.js';
 import * as cart from './cart.js';
 import * as api from './api.js';
+import * as button from './button.js';
 
 let overlay = null;
 let objectUrl = null;
@@ -320,8 +321,10 @@ async function onSubmit(cta, errorBox) {
   hideError(errorBox);
   cta.disabled = true; // UI double-submit guard (server is the real guard)
   renderLoading();
+  button.setBusy(true); // the Tray On button "thinks" until the result lands (even if closed)
 
   const out = await submit({ photo: draft.photo, height: asksHeight() ? Number(draft.height) : null, extra: draft.extra });
+  button.setBusy(false);
   cacheSuccess(out);
 
   // The shopper closed the popup while it generated -> notify on-page instead of forcing
@@ -503,7 +506,9 @@ function onRegenerate() {
 }
 
 async function onSubmitDirect() {
+  button.setBusy(true);
   const out = await submit({ photo: draft.photo, height: asksHeight() ? Number(draft.height) : null, extra: draft.extra });
+  button.setBusy(false);
   cacheSuccess(out);
 
   // Closed mid-generation (regenerate then close) -> notify on-page.

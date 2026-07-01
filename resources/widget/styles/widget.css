@@ -101,6 +101,21 @@
   line-height: 1;
 }
 
+/* "Thinking" state while a try-on is generating (shown even after the popup is closed). */
+.ton-button--busy {
+  cursor: progress;
+}
+
+.ton-button__glyph--busy {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: ton-spin 0.7s linear infinite;
+}
+
 /* ---- Modal overlay + panel ---- */
 .ton-overlay {
   position: fixed;

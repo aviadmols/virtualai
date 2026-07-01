@@ -198,9 +198,13 @@ async function asyncNotificationGate(browser) {
     await page.locator('.ton-input').first().fill('175');
     await page.locator('.ton-consent__box').check();
 
-    // Generate -> loading, then CLOSE the popup while it is still generating.
+    // Generate -> loading; the Tray On button enters its "thinking" state.
     await page.locator('.ton-cta').click({ timeout: 6000 });
     await page.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
+    await page.locator('.ton-button--busy').waitFor({ timeout: 5000 });
+    assert(true, 'Tray On button shows the "thinking" state during generation');
+
+    // CLOSE the popup while it is still generating — the busy button stays busy in the background.
     await page.locator('.ton-modal__close').click();
     await page.locator('.ton-overlay').waitFor({ state: 'detached', timeout: 5000 });
     assert(true, 'popup closed while generation still in flight');
@@ -208,6 +212,9 @@ async function asyncNotificationGate(browser) {
     // The background poll completes -> an on-page notification appears (modal stays closed).
     await page.locator('.ton-notification--ready').waitFor({ timeout: 8000 });
     assert(true, 'on-page "ready" notification appeared after the popup was closed');
+
+    // ...and the button returns to its normal (non-busy) state once generation finished.
+    assert((await page.locator('.ton-button--busy').count()) === 0, 'Tray On button returns to normal after generation');
 
     // Click it -> the modal reopens straight to the finished result image.
     await page.locator('.ton-notification__main').click();

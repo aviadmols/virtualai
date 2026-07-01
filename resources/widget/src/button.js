@@ -10,11 +10,40 @@ import { MOUNT_SENTINEL_ATTR, APPEARANCE, PLACEMENT } from './constants.js';
 import { t } from './i18n.js';
 import { el } from './dom.js';
 
+const GLYPH = '✦';
+
 let onClickHandler = null;
+
+// Busy state: a try-on is generating. Shown on the LIVE button even after the popup is closed
+// (background polling), and re-applied if the theme re-injects the button mid-generation.
+let busy = false;
+let currentButton = null;
+let currentGlyph = null;
+let currentLabelNode = null;
+let currentLabelText = '';
 
 /** Register the click handler (opens the modal). Called once at mount.start. */
 export function onClick(handler) {
   onClickHandler = handler;
+}
+
+/** Toggle the button's "thinking" indicator. Safe before the button exists; re-applied on build. */
+export function setBusy(on) {
+  busy = !!on;
+  applyBusy(busy);
+}
+
+function applyBusy(on) {
+  if (!currentButton) return;
+  currentButton.classList.toggle('ton-button--busy', on);
+  currentButton.setAttribute('aria-busy', on ? 'true' : 'false');
+  if (currentGlyph) {
+    currentGlyph.classList.toggle('ton-button__glyph--busy', on);
+    currentGlyph.textContent = on ? '' : GLYPH; // spinner (via CSS) while busy, else the mark
+  }
+  if (currentLabelNode) {
+    currentLabelNode.nodeValue = on ? t('button.busy') : currentLabelText;
+  }
 }
 
 /**
@@ -41,6 +70,9 @@ export function build(appearance) {
   const fixedClass = fixedPlacementClass(placement);
   const label = appearance[APPEARANCE.label] || t('button.label');
 
+  const glyph = el('span', { class: 'ton-button__glyph', text: GLYPH });
+  const labelNode = document.createTextNode(label);
+
   const button = el(
     'button',
     {
@@ -54,10 +86,19 @@ export function build(appearance) {
         },
       },
     },
-    [el('span', { class: 'ton-button__glyph', text: '✦' }), document.createTextNode(label)],
+    [glyph, labelNode],
   );
 
   root.appendChild(button);
+
+  // Track the live button so setBusy reflects an in-flight generation on it — and re-apply the
+  // busy state here in case the theme re-injected the button mid-generation.
+  currentButton = button;
+  currentGlyph = glyph;
+  currentLabelNode = labelNode;
+  currentLabelText = label;
+  applyBusy(busy);
+
   return wrapper;
 }
 

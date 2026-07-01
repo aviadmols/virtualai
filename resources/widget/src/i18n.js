@@ -13,6 +13,7 @@ const MESSAGES = {
   en: {
     'button.label': 'Tray On',
     'button.loading': 'Loading…',
+    'button.busy': 'Creating…',
     'modal.title': 'Tray On',
     'modal.close': 'Close',
     'upload.prompt': 'Add a photo of yourself',
@@ -82,6 +83,7 @@ const MESSAGES = {
   he: {
     'button.label': 'מדדו את זה',
     'button.loading': 'טוען…',
+    'button.busy': 'יוצרים…',
     'modal.title': 'מדדו את זה',
     'modal.close': 'סגירה',
     'upload.prompt': 'הוסיפו תמונה שלכם',

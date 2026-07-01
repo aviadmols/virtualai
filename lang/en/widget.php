@@ -7,6 +7,7 @@ return [
     'button' => [
         'label' => 'Tray On',
         'loading' => 'Loading…',
+        'busy' => 'Creating…',
     ],
     'modal' => [
         'title' => 'Tray On',
