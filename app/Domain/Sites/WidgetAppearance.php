@@ -49,7 +49,9 @@ final class WidgetAppearance
 
     private const HEX_PATTERN = '/^#[0-9a-fA-F]{6}$/';
 
-    // The locked defaults — a brand-neutral monochrome button + light popup.
+    // The locked defaults — a brand-neutral monochrome button + light popup. The
+    // ask_height default here (true) is the general fallback; defaultsForCategory()
+    // overrides it per store type (jewelry/furniture/eyewear ask no height).
     public const DEFAULTS = [
         self::KEY_PLACEMENT => self::PLACEMENT_AFTER_ATC,
         self::KEY_LABEL => 'Try it on',
@@ -60,24 +62,42 @@ final class WidgetAppearance
         self::KEY_ASK_HEIGHT => true,
     ];
 
-    /** The complete default appearance. */
-    public static function defaults(): array
+    /** The complete default appearance, with ask_height following the store category. */
+    public static function defaults(?string $category = null): array
     {
-        return self::DEFAULTS;
+        return self::defaultsForCategory($category);
+    }
+
+    /**
+     * The defaults for a site whose store type is $category. Identical to DEFAULTS
+     * except ask_height, whose sensible default follows the category (StoreCategory):
+     * clothing/footwear ask the shopper's height, jewelry/furniture/eyewear do not.
+     * A null/unknown category keeps the general default (ask height).
+     *
+     * @return array<string,mixed>
+     */
+    public static function defaultsForCategory(?string $category): array
+    {
+        $defaults = self::DEFAULTS;
+        $defaults[self::KEY_ASK_HEIGHT] = StoreCategory::asksHeight($category);
+
+        return $defaults;
     }
 
     /**
      * The effective appearance for the widget: stored values merged OVER the defaults,
-     * keeping only known keys. Always returns a complete, valid set.
+     * keeping only known keys. Always returns a complete, valid set. When the merchant
+     * never set ask_height, it defaults from the site's store category ($category); an
+     * explicit stored value always wins.
      *
      * @param  array<string,mixed>|null  $stored
      * @return array<string,mixed>
      */
-    public static function resolve(?array $stored): array
+    public static function resolve(?array $stored, ?string $category = null): array
     {
-        $resolved = self::DEFAULTS;
+        $resolved = self::defaultsForCategory($category);
 
-        foreach (self::DEFAULTS as $key => $default) {
+        foreach ($resolved as $key => $default) {
             if (is_array($stored) && array_key_exists($key, $stored) && $stored[$key] !== null && $stored[$key] !== '') {
                 $resolved[$key] = $stored[$key];
             }

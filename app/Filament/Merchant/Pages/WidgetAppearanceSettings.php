@@ -84,7 +84,7 @@ class WidgetAppearanceSettings extends Page implements HasForms
 
         $this->siteId = (int) $resolved->getKey();
         $this->hasSite = true;
-        $this->form->fill(WidgetAppearance::resolve($resolved->widget_appearance));
+        $this->form->fill(WidgetAppearance::resolve($resolved->widget_appearance, $resolved->product_category));
     }
 
     public function form(Form $form): Form

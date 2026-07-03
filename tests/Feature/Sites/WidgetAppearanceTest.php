@@ -4,6 +4,7 @@ namespace Tests\Feature\Sites;
 
 use App\Domain\Sites\InvalidSiteSettingsException;
 use App\Domain\Sites\SiteSettingsService;
+use App\Domain\Sites\StoreCategory;
 use App\Domain\Sites\WidgetAppearance;
 use App\Models\Account;
 use App\Models\Site;
@@ -39,6 +40,29 @@ class WidgetAppearanceTest extends TestCase
         $this->assertSame(WidgetAppearance::THEME_DARK, $resolved[WidgetAppearance::KEY_POPUP_THEME]);
         // Untouched keys keep their defaults.
         $this->assertSame(WidgetAppearance::PLACEMENT_AFTER_ATC, $resolved[WidgetAppearance::KEY_PLACEMENT]);
+    }
+
+    public function test_ask_height_default_follows_store_category(): void
+    {
+        // A jewelry / furniture shop should NOT ask the shopper's height by default;
+        // a clothing / footwear shop should. The default follows the shop's store type.
+        $this->assertFalse(WidgetAppearance::resolve(null, StoreCategory::JEWELRY)[WidgetAppearance::KEY_ASK_HEIGHT]);
+        $this->assertFalse(WidgetAppearance::resolve(null, StoreCategory::FURNITURE)[WidgetAppearance::KEY_ASK_HEIGHT]);
+        $this->assertTrue(WidgetAppearance::resolve(null, StoreCategory::CLOTHING)[WidgetAppearance::KEY_ASK_HEIGHT]);
+        $this->assertTrue(WidgetAppearance::resolve(null, StoreCategory::FOOTWEAR)[WidgetAppearance::KEY_ASK_HEIGHT]);
+        // An unknown / null category keeps the general default (ask height).
+        $this->assertTrue(WidgetAppearance::resolve(null, null)[WidgetAppearance::KEY_ASK_HEIGHT]);
+    }
+
+    public function test_explicit_ask_height_always_overrides_the_category_default(): void
+    {
+        // The merchant can force the height question ON for a jewelry shop (explicit wins)...
+        $on = WidgetAppearance::resolve([WidgetAppearance::KEY_ASK_HEIGHT => true], StoreCategory::JEWELRY);
+        $this->assertTrue($on[WidgetAppearance::KEY_ASK_HEIGHT]);
+
+        // ...and OFF for a clothing shop, overriding that category's "ask" default.
+        $off = WidgetAppearance::resolve([WidgetAppearance::KEY_ASK_HEIGHT => false], StoreCategory::CLOTHING);
+        $this->assertFalse($off[WidgetAppearance::KEY_ASK_HEIGHT]);
     }
 
     public function test_sanitize_accepts_valid_values_and_normalises_hex(): void

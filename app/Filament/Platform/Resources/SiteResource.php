@@ -337,7 +337,7 @@ class SiteResource extends Resource
             ->color('gray')
             ->modalHeading(__('appearance.title'))
             ->modalSubmitActionLabel(__('appearance.save'))
-            ->fillForm(static fn (Site $record): array => WidgetAppearance::resolve($record->widget_appearance))
+            ->fillForm(static fn (Site $record): array => WidgetAppearance::resolve($record->widget_appearance, $record->product_category))
             ->form([
                 Select::make(WidgetAppearance::KEY_PLACEMENT)
                     ->label(__('appearance.button.placement'))
