@@ -2,29 +2,33 @@
  * A1 — KPI / stat card. Surfaces one headline number (value pre-formatted by
  * laravel-backend; the card NEVER computes). States: default/loading/empty/error.
  * TOKENS: --toa-surface --toa-border --toa-radius-card --toa-shadow-card
- *   --toa-type-kpi-size --toa-type-kpi-weight --toa-type-caption-size
- *   --to-ink --to-ink-muted --to-success --to-danger --to-warn --to-info
- *   --to-space-2 --to-space-4 --to-space-6 --to-rule-soft --to-t-base
+ *   --toa-shadow-card-hover --toa-type-kpi-size --toa-type-kpi-weight
+ *   --toa-type-eyebrow-size --toa-type-eyebrow-weight --to-track-eyebrow
+ *   --to-track-display --to-lh-display --to-ink --to-ink-muted --to-success
+ *   --to-danger --to-warn --to-info --to-space-3 --to-space-6 --to-rule-soft
+ *   --to-t-base --to-bw-input --to-bw-input-focus
  * ==========================================================================*/
 
 .to-kpi {
     display: flex;
     flex-direction: column;
-    gap: var(--to-space-2);
-    padding: var(--to-space-6);
+    gap: var(--to-space-3);
+    padding-block: var(--to-space-6);
+    padding-inline: var(--to-space-6);
     background: var(--toa-surface);
     border: var(--to-bw-input) solid var(--toa-border);
     border-radius: var(--toa-radius-card);
     box-shadow: var(--toa-shadow-card);
     text-decoration: none;
-    /* tone accent on the inline-start edge — RTL-safe (flips automatically). */
-    border-inline-start: var(--to-space-1) solid var(--to-info);
+    /* tone accent on the inline-start edge — RTL-safe (flips automatically). A
+       hairline of colour, sparing; the oversized numeral carries the card. */
+    border-inline-start: var(--to-bw-input-focus) solid var(--to-info);
     transition: box-shadow var(--to-t-base), transform var(--to-t-base);
 }
 
 a.to-kpi:hover {
-    box-shadow: var(--to-shadow-soft);
-    transform: translateY(-1px);
+    box-shadow: var(--toa-shadow-card-hover);
+    transform: translateY(-2px);
 }
 
 .to-kpi--success { border-inline-start-color: var(--to-success); }
@@ -33,21 +37,26 @@ a.to-kpi:hover {
 .to-kpi--info    { border-inline-start-color: var(--to-info); }
 .to-kpi--neutral { border-inline-start-color: var(--to-rule); }
 
+/* Tracked uppercase eyebrow caption — the quiet label above the loud numeral. */
 .to-kpi__label {
     color: var(--to-ink-muted);
-    font-size: var(--toa-type-caption-size);
-    font-weight: var(--to-fw-medium);
-    letter-spacing: var(--to-track-label);
+    font-size: var(--toa-type-eyebrow-size);
+    font-weight: var(--toa-type-eyebrow-weight);
+    letter-spacing: var(--to-track-eyebrow);
     text-transform: uppercase;
+    order: -1;
 }
 
+/* The hero: oversized Heebo Black 900, tight display leading, tabular. */
 .to-kpi__value {
     color: var(--to-ink);
     font-size: var(--toa-type-kpi-size);
     font-weight: var(--toa-type-kpi-weight);
     line-height: var(--to-lh-display);
+    letter-spacing: var(--to-track-display);
     /* numerals stay logical-direction safe; the formatter handles HE. */
     font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
 }
 
 .to-kpi__sub {

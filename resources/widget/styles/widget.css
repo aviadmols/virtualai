@@ -1,48 +1,76 @@
 /*
-  Tray On storefront widget styles. Scoped INSIDE the Shadow root — host CSS can't bleed
-  in and these can't bleed out. Structural classes only; the dynamic per-site values
-  (button bg/text, popup accent, theme) arrive as CSS custom properties set on :host by
-  shell.js (e.g. --ton-button-bg). No raw colors are hardcoded for the configurable
-  surfaces; the few neutral structural tokens below are widget-internal defaults.
+  Tray On storefront widget styles — the premium, customer-facing moment, in Aviad's
+  Tabuzzco / Heebo language: editorial monochrome (ink/paper + ONE config accent),
+  SHARP outline buttons that INVERT on hover, 7px image frames with the signature
+  layered soft shadow, underline-only inputs, generous whitespace, slow 0.5s calm motion.
+  Scoped INSIDE the Shadow root — host CSS can't bleed in and these can't bleed out.
+  The dynamic per-site values (button bg/text, popup accent, theme) arrive as CSS custom
+  properties set on :host by shell.js (e.g. --ton-button-bg). No raw colors are hardcoded
+  for the configurable surfaces; the neutral structural tokens below are the widget's own
+  single declaration site (its private token block, separate from the admin --toa-*).
 
   RTL: logical properties only (margin-inline, inset-inline, text-align:start). The widget
   inherits the host `dir`; HE mirrors automatically. Directional glyphs flip via [dir=rtl].
 */
 
 :host {
-  /* Widget-internal structural tokens (neutral; not the merchant's brand). */
-  --ton-radius: 14px;
-  --ton-radius-sm: 8px;
-  --ton-gap: 12px;
-  --ton-pad: 20px;
-  --ton-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --ton-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
-  --ton-overlay: rgba(0, 0, 0, 0.55);
+  /* ---- Tabuzzco radius: sharp buttons (0), 7px image/card frames ---- */
+  --ton-radius: 7px;
+  --ton-radius-sm: 4px;
+  --ton-radius-sharp: 0;
+  --ton-radius-pill: 999px;
+
+  /* ---- Generous whitespace ---- */
+  --ton-gap: 16px;
+  --ton-gap-lg: 28px;
+  --ton-pad: 32px;
+
+  /* ---- Heebo first (single bilingual family); clean grotesk fallbacks so the
+     structure still reads editorial if the storefront lacks the webfont ---- */
+  --ton-font: 'Heebo', 'Assistant', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  /* ---- Signature layered soft shadow (the premium lift) ---- */
+  --ton-shadow: rgba(0, 0, 0, 0.16) 0 47px 46px -27px, rgba(0, 0, 0, 0.08) 0 4px 16px 0;
+  --ton-shadow-frame: rgba(0, 0, 0, 0.16) 0 24px 30px -20px, rgba(0, 0, 0, 0.06) 0 2px 10px 0;
+  --ton-overlay: rgba(10, 10, 12, 0.62);
   --ton-z: 2147483000;
+
+  /* ---- Slow / calm motion (Tabuzzco signature) ---- */
+  --ton-t: 0.5s ease;
+  --ton-t-fast: 0.3s ease;
+
+  /* ---- Tracked labels ---- */
+  --ton-track-eyebrow: 4px;
+  --ton-track-button: 2px;
 
   /* Theme surfaces — overridden by [data-theme] below; accent comes from config. */
   --ton-surface: #ffffff;
-  --ton-text: #14141a;
+  --ton-text: #0a0a0c;
   --ton-muted: #6b6b76;
-  --ton-border: #e6e6ec;
-  --ton-field-bg: #f7f7f9;
+  --ton-border: #bcbcbc;
+  --ton-hairline: #e6e6ec;
+  --ton-field-bg: #ffffff;
 
   /* Defaults; shell.js overrides with the per-site appearance config. */
-  --ton-button-bg: #111111;
+  --ton-button-bg: #0a0a0c;
   --ton-button-text: #ffffff;
-  --ton-accent: #111111;
+  --ton-accent: #0a0a0c;
+  --ton-on-accent: #ffffff;      /* text/icon on an accent fill */
+  --ton-danger: #c4452d;         /* error tone (Tabuzzco status red) */
+  --ton-scrim: rgba(10, 10, 12, 0.55); /* zoom/loading label scrims */
 
   all: initial;
   font-family: var(--ton-font);
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .ton-root[data-theme='dark'] {
-  --ton-surface: #1b1b22;
+  --ton-surface: #141418;
   --ton-text: #f4f4f7;
   --ton-muted: #a6a6b3;
-  --ton-border: #34343e;
-  --ton-field-bg: #26262f;
+  --ton-border: #4a4a55;
+  --ton-hairline: #2b2b33;
+  --ton-field-bg: #141418;
 }
 
 *,
@@ -51,28 +79,34 @@
   box-sizing: border-box;
 }
 
-/* ---- Injected button (lives on the host page, under add-to-cart) ---- */
+/* ---- Injected button (lives on the host page, under add-to-cart) ----
+   Tabuzzco: SHARP corners, a tracked slightly-uppercased label, a slow calm hover.
+   The fill/text respect the merchant's per-site config; on hover it INVERTS to an
+   outline (border in the config colour, transparent fill) for the premium tell. */
 .ton-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  margin-block-start: 10px;
-  padding: 12px 18px;
-  border: 0;
-  border-radius: var(--ton-radius-sm);
+  margin-block-start: 12px;
+  padding: 15px 22px;
+  border: 1.5px solid var(--ton-button-bg);
+  border-radius: var(--ton-radius-sharp);
   background: var(--ton-button-bg);
   color: var(--ton-button-text);
   font: inherit;
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: var(--ton-track-button);
   cursor: pointer;
-  transition: filter 0.15s ease, transform 0.06s ease;
+  transition: background var(--ton-t), color var(--ton-t), border-color var(--ton-t);
 }
 
 .ton-button:hover {
-  filter: brightness(1.08);
+  background: transparent;
+  color: var(--ton-button-bg);
+  border-color: var(--ton-button-bg);
 }
 
 .ton-button:active {
@@ -134,7 +168,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 440px;
+  max-width: 460px;
   max-height: calc(100vh - 32px);
   overflow-y: auto;
   padding: var(--ton-pad);
@@ -147,40 +181,55 @@
 
 .ton-modal__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-block-end: var(--ton-gap);
+  gap: 12px;
+  margin-block-end: var(--ton-gap-lg);
 }
 
+/* Big, tight editorial title (Heebo Black). */
 .ton-modal__title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
 }
 
+/* Sharp close affordance — a hairline square, not a grey circle. */
 .ton-modal__close {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--ton-field-bg);
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--ton-hairline);
+  border-radius: var(--ton-radius-sharp);
+  background: transparent;
   color: var(--ton-text);
   font-size: 18px;
   cursor: pointer;
+  transition: background var(--ton-t), color var(--ton-t), border-color var(--ton-t);
 }
 
+.ton-modal__close:hover {
+  background: var(--ton-text);
+  color: var(--ton-surface);
+  border-color: var(--ton-text);
+}
+
+/* Tracked uppercase eyebrow (the product name / step) — a rule, not a pill fill. */
 .ton-modal__chip {
   display: inline-block;
   margin-block-end: var(--ton-gap);
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--ton-field-bg);
+  padding: 0;
+  background: transparent;
   color: var(--ton-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: var(--ton-track-eyebrow);
+  text-transform: uppercase;
 }
 
 /* ---- Gallery strip (past try-ons, atop the form) ---- */
@@ -189,29 +238,38 @@
 }
 
 .ton-gallery__title {
-  margin-block-end: 6px;
-  font-size: 13px;
+  margin-block-end: 10px;
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: var(--ton-track-eyebrow);
+  text-transform: uppercase;
   color: var(--ton-muted);
 }
 
 .ton-gallery__strip {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
-  padding-block-end: 4px;
+  padding-block-end: 6px;
 }
 
+/* 7px frame with the signature soft shadow — a small premium print. */
 .ton-gallery__thumb {
   flex: none;
-  width: 64px;
-  height: 80px;
+  width: 66px;
+  height: 84px;
   padding: 0;
-  border: 1px solid var(--ton-border);
-  border-radius: var(--ton-radius-sm);
+  border: 0;
+  border-radius: var(--ton-radius);
   overflow: hidden;
   background: var(--ton-field-bg);
+  box-shadow: var(--ton-shadow-frame);
   cursor: pointer;
+  transition: transform var(--ton-t-fast);
+}
+
+.ton-gallery__thumb:hover {
+  transform: translateY(-2px);
 }
 
 .ton-gallery__img {
@@ -221,34 +279,41 @@
   object-fit: cover;
 }
 
-/* ---- Form fields ---- */
+/* ---- Form fields — underline-only Tabuzzco inputs ---- */
 .ton-field {
-  margin-block-end: var(--ton-gap);
+  margin-block-end: var(--ton-gap-lg);
 }
 
 .ton-label {
   display: block;
-  margin-block-end: 6px;
-  font-size: 13px;
+  margin-block-end: 8px;
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: var(--ton-track-eyebrow);
+  text-transform: uppercase;
+  color: var(--ton-muted);
 }
 
+/* No box, no rounded corners — only a bottom rule that thickens to 2px ink on focus. */
 .ton-input,
 .ton-select {
   width: 100%;
-  padding: 11px 12px;
-  border: 1px solid var(--ton-border);
-  border-radius: var(--ton-radius-sm);
-  background: var(--ton-field-bg);
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--ton-border);
+  border-radius: var(--ton-radius-sharp);
+  background: transparent;
   color: var(--ton-text);
   font: inherit;
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 500;
+  transition: border-color var(--ton-t-fast);
 }
 
 .ton-input:focus,
 .ton-select:focus {
-  outline: 2px solid var(--ton-accent);
-  outline-offset: 1px;
+  outline: none;
+  border-bottom: 2px solid var(--ton-text);
 }
 
 /* ---- Photo upload ---- */
@@ -257,18 +322,24 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 22px;
+  gap: 8px;
+  padding: 34px 22px;
   border: 1.5px dashed var(--ton-border);
-  border-radius: var(--ton-radius-sm);
-  background: var(--ton-field-bg);
+  border-radius: var(--ton-radius);
+  background: transparent;
   color: var(--ton-muted);
   text-align: center;
   cursor: pointer;
+  transition: border-color var(--ton-t-fast), background var(--ton-t-fast);
+}
+
+.ton-upload:hover {
+  border-color: var(--ton-text);
 }
 
 .ton-upload__prompt {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 15px;
   color: var(--ton-text);
 }
 
@@ -280,10 +351,12 @@
   display: none;
 }
 
+/* 7px frame + the signature layered shadow — the shopper's photo reads like a print. */
 .ton-preview {
   position: relative;
-  border-radius: var(--ton-radius-sm);
+  border-radius: var(--ton-radius);
   overflow: hidden;
+  box-shadow: var(--ton-shadow-frame);
 }
 
 .ton-preview__img {
@@ -328,30 +401,38 @@
   text-decoration: underline;
 }
 
-/* ---- Primary action ---- */
+/* ---- Primary action — sharp accent fill that INVERTS to an outline on hover ---- */
 .ton-cta {
   width: 100%;
-  margin-block-start: 4px;
-  padding: 13px 18px;
-  border: 0;
-  border-radius: var(--ton-radius-sm);
+  margin-block-start: 8px;
+  padding: 16px 20px;
+  border: 1.5px solid var(--ton-accent);
+  border-radius: var(--ton-radius-sharp);
   background: var(--ton-accent);
-  color: #ffffff;
+  color: var(--ton-on-accent);
   font: inherit;
   font-weight: 700;
   font-size: 15px;
+  letter-spacing: var(--ton-track-button);
   cursor: pointer;
+  transition: background var(--ton-t), color var(--ton-t), border-color var(--ton-t);
+}
+
+.ton-cta:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ton-accent);
 }
 
 .ton-cta:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .ton-error {
-  margin-block-start: 8px;
-  color: #d23a3a;
+  margin-block-start: 10px;
+  color: var(--ton-danger);
   font-size: 13px;
+  font-weight: 500;
 }
 
 /* ---- Loading + result ---- */
@@ -384,9 +465,10 @@
   justify-content: center;
   min-height: 220px;
   max-height: 62vh;
-  border-radius: var(--ton-radius-sm);
+  border-radius: var(--ton-radius);
   overflow: hidden;
   background: var(--ton-field-bg);
+  box-shadow: var(--ton-shadow-frame);
   cursor: zoom-in;
   touch-action: none;
 }
@@ -415,9 +497,9 @@
   inset-block-end: 8px;
   inset-inline-end: 8px;
   padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.58);
-  color: #fff;
+  border-radius: var(--ton-radius-pill);
+  background: var(--ton-scrim);
+  color: var(--ton-on-accent);
   font-size: 12px;
   line-height: 1.4;
   pointer-events: none;
@@ -442,9 +524,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--ton-radius-sm);
+  border-radius: var(--ton-radius);
   overflow: hidden;
   background: var(--ton-field-bg);
+  box-shadow: var(--ton-shadow-frame);
 }
 
 .ton-loading__img {
@@ -484,9 +567,9 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 18px 22px;
-  border-radius: 14px;
-  background: rgba(18, 18, 20, 0.5);
+  padding: 18px 24px;
+  border-radius: var(--ton-radius);
+  background: var(--ton-scrim);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   text-align: center;
@@ -494,43 +577,60 @@
 
 .ton-loading__label .ton-modal__title,
 .ton-loading__label .ton-upload__hint {
-  color: #fff;
+  color: var(--ton-on-accent);
 }
 
 .ton-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-block-start: var(--ton-gap);
+  gap: 10px;
+  margin-block-start: var(--ton-gap-lg);
 }
 
+/* Secondary result actions — sharp ink outline that inverts on hover. */
 .ton-action {
-  padding: 11px 12px;
+  padding: 13px 12px;
   border: 1px solid var(--ton-border);
-  border-radius: var(--ton-radius-sm);
-  background: var(--ton-surface);
+  border-radius: var(--ton-radius-sharp);
+  background: transparent;
   color: var(--ton-text);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: var(--ton-track-button);
   cursor: pointer;
+  transition: background var(--ton-t), color var(--ton-t), border-color var(--ton-t);
 }
 
+.ton-action:hover {
+  background: var(--ton-text);
+  color: var(--ton-surface);
+  border-color: var(--ton-text);
+}
+
+/* The one primary — add-to-cart — is the accent fill; inverts to an outline. */
 .ton-action--primary {
   grid-column: 1 / -1;
   background: var(--ton-accent);
-  color: #ffffff;
-  border-color: transparent;
+  color: var(--ton-on-accent);
+  border-color: var(--ton-accent);
+}
+
+.ton-action--primary:hover {
+  background: transparent;
+  color: var(--ton-accent);
+  border-color: var(--ton-accent);
 }
 
 .ton-toast {
-  margin-block-start: 8px;
-  padding: 8px 12px;
-  border-radius: var(--ton-radius-sm);
+  margin-block-start: 10px;
+  padding: 10px 12px;
+  border-radius: var(--ton-radius-sharp);
+  border-inline-start: 2px solid var(--ton-accent);
   background: var(--ton-field-bg);
   color: var(--ton-text);
   font-size: 13px;
-  text-align: center;
+  text-align: start;
 }
 
 /* ---- Page-level "your try-on is ready" notification ----
@@ -560,7 +660,7 @@
 }
 
 .ton-notification--error {
-  border-inline-start: 3px solid #d23a3a;
+  border-inline-start: 3px solid var(--ton-danger);
 }
 
 .ton-notification__main {
@@ -603,14 +703,20 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--ton-field-bg);
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--ton-hairline);
+  border-radius: var(--ton-radius-sharp);
+  background: transparent;
   color: var(--ton-text);
   font-size: 16px;
   cursor: pointer;
+  transition: background var(--ton-t), color var(--ton-t);
+}
+
+.ton-notification__close:hover {
+  background: var(--ton-text);
+  color: var(--ton-surface);
 }
 
 @keyframes ton-notify-in {

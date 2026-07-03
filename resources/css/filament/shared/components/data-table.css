@@ -3,8 +3,8 @@
  * table classes (we do NOT re-template Filament's table Blade). Hairline rules,
  * brand-soft selected-row tint, compact rows, sticky header, brand filter pill.
  * TOKENS: --toa-border --toa-surface --toa-surface-alt --toa-accent-soft
- *   --toa-accent --to-rule-soft --to-z-sticky --toa-type-caption-size
- *   --to-track-label --to-fw-medium --to-ink-muted --to-space-2..6
+ *   --toa-accent --to-rule-soft --to-z-sticky --toa-type-eyebrow-size
+ *   --to-track-eyebrow --to-fw-semibold --to-ink-subtle --to-ink-muted --to-space-2..6
  *   --toa-radius-control --to-bw-input --to-t-fast
  * ==========================================================================*/
 
@@ -25,13 +25,13 @@
     background-color: var(--toa-accent-soft);
 }
 
-/* header cells: uppercase tracked caption, sticky at the sticky z-layer. */
+/* header cells: uppercase tracked eyebrow, sticky at the sticky z-layer. */
 .fi-ta-header-cell {
-    font-size: var(--toa-type-caption-size);
-    font-weight: var(--to-fw-medium);
-    letter-spacing: var(--to-track-label);
+    font-size: var(--toa-type-eyebrow-size);
+    font-weight: var(--to-fw-semibold);
+    letter-spacing: var(--to-track-eyebrow);
     text-transform: uppercase;
-    color: var(--to-ink-muted);
+    color: var(--to-ink-subtle);
 }
 .fi-ta-header {
     position: sticky;

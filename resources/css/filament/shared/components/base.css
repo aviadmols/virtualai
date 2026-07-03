@@ -1,11 +1,20 @@
 /* ============================================================================
- * Shared admin base — typography + density overrides for both panels.
- * Imported by platform/theme.css + merchant/theme.css. Variable-backed only.
- * TOKENS: --to-font --toa-bg --toa-surface --toa-border --toa-gutter
- *   --toa-type-body-size --toa-type-h-size --to-fw-medium --toa-radius-card
+ * Shared admin base — editorial Tabuzzco skin over Filament's own chrome for
+ * both panels. Imported by platform/theme.css + merchant/theme.css. We target
+ * Filament's stable classes and re-dress them in the Heebo typographic language:
+ * a paper canvas, pure-white cards on a hairline + subtle layered shadow, big
+ * tight page titles with a tracked eyebrow, sharp controls, and a sparing brand
+ * accent (active nav only). Variable-backed only — no literals.
+ * TOKENS: --to-font --toa-bg --toa-surface --toa-surface-alt --toa-border
+ *   --toa-border-strong --toa-accent --toa-accent-soft --toa-accent-line
+ *   --toa-shadow-card --toa-radius-card --toa-radius-control --to-ink --to-ink-muted
+ *   --to-ink-subtle --to-fw-* --toa-type-display-* --toa-type-h-* --toa-type-eyebrow-*
+ *   --to-track-display --to-track-eyebrow --to-track-label --to-lh-title --to-space-*
+ *   --to-r-none --to-bw-input --to-bw-input-focus
  * ==========================================================================*/
 
 /* Heebo everywhere — single bilingual stack so Hebrew never falls back. */
+.fi-body,
 .fi-main,
 .fi-sidebar,
 .fi-topbar,
@@ -13,41 +22,145 @@
     font-family: var(--to-font);
 }
 
-/* Calm canvas behind cards. */
+/* Paper canvas behind cards. */
+.fi-body,
 .fi-main-ctn {
     background-color: var(--toa-bg);
 }
 
-/* Section headings adopt the admin heading weight. */
+/* ---- Page header: a big, tight editorial title -----------------------------
+   Filament renders the page heading in .fi-header-heading; we make it the display
+   title (Black, tight tracking, near-flush leading). The subheading reads as a
+   quiet muted caption below it. */
 .fi-header-heading {
-    font-weight: var(--to-fw-medium);
+    color: var(--to-ink);
+    font-size: var(--toa-type-display-size);
+    font-weight: var(--toa-type-display-weight);
+    letter-spacing: var(--to-track-display);
+    line-height: var(--to-lh-title);
 }
 
-/* Cards/sections pick up the admin card radius + calm shadow (density reads
-   friendlier with a soft lift, not the widget's dramatic layered shadow). */
+.fi-header-subheading {
+    color: var(--to-ink-muted);
+    font-weight: var(--to-fw-light);
+}
+
+/* ---- Cards / sections: pure white, 7px, hairline + subtle layered shadow ---- */
 .fi-section,
-.fi-wi-stats-overview-stat {
+.fi-wi-stats-overview-stat,
+.fi-fo-component-ctn > .fi-section {
+    background-color: var(--toa-surface);
+    border: var(--to-bw-input) solid var(--toa-border);
     border-radius: var(--toa-radius-card);
     box-shadow: var(--toa-shadow-card);
 }
 
-/* ---- Horizon-style sidebar -------------------------------------------------
-   A calm, clean rail to match the Horizon reference: subtle uppercase group
-   labels, rounded nav items, and a clear brand "pill" behind the active item
-   (the per-panel --toa-accent-soft tint; the brand text/icon colour is already
-   applied by Filament via --primary). */
+/* Section header text — a bold Heebo heading with a tracked eyebrow feel. */
+.fi-section-header-heading {
+    color: var(--to-ink);
+    font-size: var(--toa-type-h-size);
+    font-weight: var(--toa-type-h-weight);
+    letter-spacing: var(--to-track-tight);
+}
+
+.fi-section-header-description {
+    color: var(--to-ink-muted);
+    font-weight: var(--to-fw-light);
+}
+
+/* ---- Sidebar: monochrome-leaning, editorial ---------------------------------
+   Quiet tracked-uppercase group labels; near-sharp nav items; a clear brand
+   INDICATOR BAR on the active item (logical inline-start → flips in RTL) plus the
+   soft brand tint. The accent shows up here and nowhere ambient — type carries
+   the rest. */
+.fi-sidebar,
+.fi-topbar {
+    background-color: var(--toa-surface);
+}
+
 .fi-sidebar-group-label {
-    font-size: var(--toa-type-caption-size);
+    font-size: var(--toa-type-eyebrow-size);
     font-weight: var(--to-fw-semibold);
-    letter-spacing: var(--to-track-label);
+    letter-spacing: var(--to-track-eyebrow);
     text-transform: uppercase;
     color: var(--to-ink-subtle);
 }
 
 .fi-sidebar-item-button {
     border-radius: var(--toa-radius-control);
+    font-weight: var(--to-fw-medium);
+    transition: background-color var(--to-t-fast), color var(--to-t-fast);
 }
 
-.fi-sidebar-item-active .fi-sidebar-item-button {
+.fi-sidebar-item-button:hover {
     background-color: var(--toa-accent-soft);
+}
+
+/* Active nav: soft brand tint + a solid brand indicator bar on the inline-start
+   edge (RTL-safe). The label goes bold — weight, not just colour, marks it. */
+.fi-sidebar-item-active .fi-sidebar-item-button {
+    position: relative;
+    background-color: var(--toa-accent-soft);
+    font-weight: var(--to-fw-bold);
+}
+
+.fi-sidebar-item-active .fi-sidebar-item-button::before {
+    content: "";
+    position: absolute;
+    inset-block: var(--to-space-1);
+    inset-inline-start: 0;
+    inline-size: var(--to-bw-input-focus);
+    background-color: var(--toa-accent-line);
+    border-radius: var(--to-r-pill);
+}
+
+/* Brand wordmark / logo area sits on the paper rail. */
+.fi-sidebar-header,
+.fi-topbar-ctn {
+    border-color: var(--toa-border);
+}
+
+/* ---- Native buttons: sharp Tabuzzco corners ------------------------------
+   Filament buttons default to a pill/rounded radius; flatten them to the
+   near-sharp control radius so native actions match the .to-btn language. */
+.fi-btn,
+.fi-icon-btn,
+.fi-dropdown-trigger > .fi-btn {
+    border-radius: var(--toa-radius-control);
+    font-weight: var(--to-fw-semibold);
+    letter-spacing: var(--to-track-tight);
+}
+
+/* ---- Native form fields: near-sharp, hairline, calm focus ---------------- */
+.fi-input,
+.fi-select-input,
+.fi-textarea,
+.fi-fo-field-wrp-input,
+.fi-input-wrp {
+    border-radius: var(--toa-radius-field);
+}
+
+/* Field labels read as quiet strong captions. */
+.fi-fo-field-wrp-label {
+    font-weight: var(--to-fw-semibold);
+    color: var(--to-ink);
+}
+
+/* Badges: sharpen to the control radius so status chips read editorial. */
+.fi-badge {
+    border-radius: var(--toa-radius-control);
+    font-weight: var(--to-fw-semibold);
+    letter-spacing: var(--to-track-tight);
+}
+
+/* Modals adopt the card language (7px, layered shadow). */
+.fi-modal-window {
+    border-radius: var(--toa-radius-card);
+    box-shadow: var(--to-shadow-card);
+}
+
+/* ---- RTL — layout uses logical properties throughout, so the whole admin
+   mirrors for free; the sidebar text anchor is asserted for clarity. --------- */
+[dir="rtl"] .fi-sidebar-nav {
+    text-align: start;
 }

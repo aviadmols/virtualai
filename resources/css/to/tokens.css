@@ -9,7 +9,9 @@
  * in each panel theme.css). Three layers, one base — never duplicate a value:
  *   --to-*   shared Tabuzzco anchor (locked: ink/paper/rule, Heebo, radius,
  *            shadow, motion, status colors). Both families derive from it.
- *   --toa-*  admin family — clean/dense functional SaaS (KPI density, calm chrome).
+ *   --toa-*  admin family — EDITORIAL Tabuzzco: paper canvas, 7px cards on a
+ *            hairline + subtle layered shadow, oversized Heebo-Black KPI numerals,
+ *            sharp controls. Type carries the design, not color.
  *   --tow-*  widget family — premium, Tabuzzco-grounded, host-adaptive.
  * Family layers REFERENCE the base (var(--to-…)); they never restate a value.
  * ==========================================================================*/
@@ -46,7 +48,9 @@
 
     --to-lh-body: 1.75;
     --to-lh-display: 0.95;
+    --to-lh-title: 1.02;
     --to-lh-medium: 1.2;
+    --to-track-display: -0.03em;   /* tight editorial tracking on big titles */
     --to-track-tight: -0.01em;
     --to-track-zero: 0;
     --to-track-label: 3px;
@@ -79,6 +83,10 @@
     --to-shadow-card: rgb(0 0 0 / 16%) 0 47px 46px -27px, rgb(0 0 0 / 6%) 0 2px 12px 0;
     --to-shadow-hover: rgb(0 0 0 / 16%) 0 47px 46px -27px, rgb(0 0 0 / 16%) 0 2px 12px 0;
     --to-shadow-soft: 0 5px 10px rgb(0 0 0 / 10%);
+    /* Subtler layered variant for DENSE admin cards — same two-layer signature,
+       lower spread/opacity so a wall of cards doesn't read heavy. */
+    --to-shadow-card-dense: rgb(0 0 0 / 10%) 0 22px 26px -20px, rgb(0 0 0 / 5%) 0 1px 6px 0;
+    --to-shadow-card-hover: rgb(0 0 0 / 16%) 0 34px 34px -22px, rgb(0 0 0 / 8%) 0 2px 8px 0;
 
     /* ---- 1.6 Motion (slow / calm — SIGNATURE) ------------------------ */
     --to-t-fast: 0.3s ease;
@@ -102,42 +110,56 @@
     /* ========================================================================
      * 2. Admin family — --toa-* (clean functional SaaS)
      * --toa-accent / --toa-accent-hover are the ONLY adapt-able admin tokens;
-     * each panel theme.css overrides them to its brand (platform Indigo,
-     * merchant Amber). Everything else here is locked and shared by both panels.
+     * each panel theme.css overrides them to its brand (platform deep Blue,
+     * merchant Sky/Azure). Everything else here is locked and shared by both panels.
      * ======================================================================*/
 
-    /* 2.1 Admin color — default accent is the calm near-black anchor; panels
-       override --toa-accent/-hover. The rest are locked. */
+    /* 2.1 Admin color — default accent is the near-black anchor; panels override
+       --toa-accent/-hover with ONE restrained brand hue used sparingly (active
+       nav, the single primary CTA, focus). Editorial Tabuzzco chrome: a clean,
+       near-white PAPER canvas (faintly cool, harmonizes with the blue accent, NOT
+       a heavy SaaS gray) with pure-white cards that sit on a hairline rule + a
+       subtle version of the signature
+       layered shadow. Type — not color — carries the design. */
     --toa-accent: #111111;
     --toa-accent-hover: #000000;
-    --toa-accent-soft: #f0f0ee;          /* selected-row / active-nav tint; panels override */
+    --toa-accent-soft: #f1f2f4;          /* selected-row / active-nav tint; panels override */
+    --toa-accent-line: var(--to-ink);    /* active-nav indicator bar; panels override */
     --toa-accent-on: var(--to-paper);    /* text/icon on the accent fill */
-    /* Horizon-style admin chrome: a cool light-gray canvas with white cards that
-       float on it (cooler border + soft shadow), instead of the old warm cream. */
-    --toa-bg: #f3f4f6;
-    --toa-surface: var(--to-paper);
-    --toa-surface-alt: #f9fafb;
-    --toa-border: #e5e7eb;
+    --toa-bg: #f4f6f8;                    /* clean, faintly-cool near-white paper canvas */
+    --toa-surface: var(--to-paper);      /* pure-white cards */
+    --toa-surface-alt: #f8fafb;          /* zebra / inset wells */
+    --toa-border: #e3e7ec;               /* soft neutral hairline rule (harmonizes with blue) */
+    --toa-border-strong: #d1d7de;        /* a firmer rule for card edges / dividers */
     --toa-focus: rgb(17 17 17 / 35%);    /* panels override the rgb to their brand */
 
-    /* 2.2 Admin typography (density-tuned) */
-    --toa-type-kpi-size: 28px;
+    /* 2.2 Admin typography — editorial hierarchy. KPI numerals are the hero move:
+       oversized Heebo Black 900, display line-height, tabular. Titles get a big
+       tight size; a tracked uppercase EYEBROW sits above them. */
+    --toa-type-kpi-size: clamp(2.5rem, 2rem + 1.4vw, 2.85rem);  /* ~40–46px */
     --toa-type-kpi-weight: var(--to-fw-black);
-    --toa-type-h-size: 18px;
-    --toa-type-h-weight: var(--to-fw-medium);
-    --toa-type-body-size: 14px;
+    --toa-type-display-size: clamp(1.75rem, 1.4rem + 1.2vw, 2.25rem); /* page titles */
+    --toa-type-display-weight: var(--to-fw-black);
+    --toa-type-h-size: 1.0625rem;        /* 17px section headings */
+    --toa-type-h-weight: var(--to-fw-bold);
+    --toa-type-eyebrow-size: 0.6875rem;  /* 11px tracked uppercase caption */
+    --toa-type-eyebrow-weight: var(--to-fw-semibold);
+    --toa-type-body-size: 0.875rem;      /* 14px */
     --toa-type-body-weight: var(--to-fw-regular);
     --toa-type-body-strong-weight: var(--to-fw-semibold);
-    --toa-type-caption-size: 12px;
+    --toa-type-caption-size: 0.75rem;    /* 12px */
     --toa-type-caption-weight: var(--to-fw-medium);
 
-    /* 2.3 Admin radius (softer than widget — density reads friendlier) */
-    --toa-radius-card: 12px;
-    --toa-radius-control: 8px;
-    --toa-radius-field: 8px;
+    /* 2.3 Admin radius — sharp Tabuzzco: cards take the 7px signature; controls +
+       fields go NEAR-sharp (2px) so the admin reads editorial, not bubbly.
+       Buttons are fully sharp (radius 0) via --to-r-none at the call site. */
+    --toa-radius-card: var(--to-r-card);   /* 7px signature */
+    --toa-radius-control: 2px;
+    --toa-radius-field: 2px;
 
-    /* 2.4 Admin shadow / spacing aliases */
-    --toa-shadow-card: 0 1px 3px rgb(15 23 42 / 8%), 0 1px 2px rgb(15 23 42 / 5%);
+    /* 2.4 Admin shadow / spacing aliases — the subtler layered signature. */
+    --toa-shadow-card: var(--to-shadow-card-dense);
+    --toa-shadow-card-hover: var(--to-shadow-card-hover);
     --toa-gutter: var(--to-space-6);
     /* min KPI-card track width before the band wraps (A1 auto-fit grid). */
     --toa-kpi-min: 200px;
