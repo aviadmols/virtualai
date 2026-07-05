@@ -1,13 +1,73 @@
 {{--
-    M4 / A5 — site hub page. Renders the embed-code block (PUBLIC site_key only,
-    via <x-to.embed-code>) with a two-step destructive "regenerate key" control
-    wired to the page (SiteKeyRegenerator), and the site's scanned products — each
-    row deep-links to the A4 scan-review form (M3). The page provides typed data
-    ($site, $products); this view only renders. No inline CSS, logical properties.
+    WS1 — per-shop OVERVIEW hub. Ties the current shop's tools together:
+      1. a KPI band (confirmed products, try-ons, leads, spendable credit) —
+         values are PRE-FORMATTED by the page (SiteHubMetrics); no number is
+         computed here;
+      2. quick-link cards to the shop's management surfaces (button placement,
+         try-on history, registered users, gallery, privacy);
+      3. the embed-code block (PUBLIC site_key only, via <x-to.embed-code>) with a
+         two-step destructive "regenerate key" control wired to SiteKeyRegenerator;
+      4. the shop's scanned products — each row deep-links to the A4 scan-review
+         form (M3);
+      5. a recent-activity strip (the shop's latest events).
+    The page provides typed data ($site, $products, $kpis, $activity); this view
+    only renders. No inline CSS, logical properties for RTL.
 
-    TOKENS: embed-code.css, buttons.css, data-table.css. i18n: embed.*, sites.*
+    TOKENS: kpi-grid.css, kpi-card.css, shop-hub.css, embed-code.css, buttons.css,
+      data-table.css, activity-timeline.css. i18n: sites.*, embed.*, settings.*,
+      activity.*, states.*
 --}}
 <x-filament-panels::page>
+    {{-- ===================== KPI BAND (WS1) ===================== --}}
+    <div class="to-kpi-grid">
+        @foreach($kpis as $card)
+            <x-to.kpi
+                :label="$card['label']"
+                :value="$card['value']"
+                :tone="$card['tone']"
+            />
+        @endforeach
+    </div>
+
+    {{-- ===================== QUICK-LINK CARDS (WS1) ===================== --}}
+    <x-filament::section>
+        <x-slot:heading>{{ __('sites.hub.tools.title') }}</x-slot:heading>
+        <x-slot:description>{{ __('sites.hub.tools.sub') }}</x-slot:description>
+
+        <div class="to-hub-links">
+            <x-to.hub-link
+                :href="$this->placementUrl()"
+                icon="heroicon-o-cursor-arrow-rays"
+                title="sites.hub.tools.placement.title"
+                sub="sites.hub.tools.placement.sub"
+            />
+            <x-to.hub-link
+                :href="$this->historyUrl()"
+                icon="heroicon-o-sparkles"
+                title="sites.hub.tools.history.title"
+                sub="sites.hub.tools.history.sub"
+            />
+            <x-to.hub-link
+                :href="$this->usersUrl()"
+                icon="heroicon-o-user-group"
+                title="sites.hub.tools.users.title"
+                sub="sites.hub.tools.users.sub"
+            />
+            <x-to.hub-link
+                :href="$this->galleryUrl()"
+                icon="heroicon-o-photo"
+                title="sites.hub.tools.gallery.title"
+                sub="sites.hub.tools.gallery.sub"
+            />
+            <x-to.hub-link
+                :href="$this->privacyUrl()"
+                icon="heroicon-o-shield-check"
+                title="sites.hub.tools.privacy.title"
+                sub="sites.hub.tools.privacy.sub"
+            />
+        </div>
+    </x-filament::section>
+
     {{-- ===================== EMBED CODE (A5) ===================== --}}
     <x-to.embed-code
         :siteKey="$site->site_key"
@@ -81,19 +141,6 @@
         @endforelse
     </x-filament::section>
 
-    {{-- ===================== SITE SETTINGS (M8 / M9 reach) ===================== --}}
-    <x-filament::section>
-        <x-slot:heading>{{ __('sites.settings.title') }}</x-slot:heading>
-
-        <div class="to-site-links">
-            <a href="{{ $this->galleryUrl() }}" class="to-btn to-btn--secondary">
-                <x-filament::icon icon="heroicon-o-photo" class="to-btn__icon-glyph" />
-                {{ __('settings.gallery.nav') }}
-            </a>
-            <a href="{{ $this->privacyUrl() }}" class="to-btn to-btn--secondary">
-                <x-filament::icon icon="heroicon-o-shield-check" class="to-btn__icon-glyph" />
-                {{ __('settings.privacy.nav') }}
-            </a>
-        </div>
-    </x-filament::section>
+    {{-- ===================== RECENT ACTIVITY (WS1 strip) ===================== --}}
+    <x-to.site-activity :events="$activity" />
 </x-filament-panels::page>

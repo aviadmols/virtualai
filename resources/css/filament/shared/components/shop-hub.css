@@ -1,0 +1,96 @@
+/* ============================================================================
+ * WS1 — Per-shop OVERVIEW hub. The quick-link cards that tie a shop's tools
+ * together: a responsive auto-fit grid of tappable cards, each an icon tile +
+ * title/sub + a trailing chevron. Mirrors the KPI-card frame (paper surface,
+ * hairline, gentle radius, the subtler layered shadow, calm hover lift) so the
+ * hub reads as one card family. Pure layout + token references — no colour /
+ * value literals; RTL is a logical flip (only the chevron glyph mirrors).
+ * TOKENS: --toa-surface --toa-border --toa-radius-card --toa-shadow-card
+ *   --toa-shadow-card-hover --toa-accent --toa-accent-soft --toa-accent-line
+ *   --to-ink --to-ink-muted --to-ink-subtle --to-space-2..6 --toa-kpi-min
+ *   --toa-type-h-size --toa-type-caption-size --to-fw-semibold --to-fw-medium
+ *   --to-r-control --to-bw-input --to-t-base --to-t-fast
+ * ==========================================================================*/
+
+/* The quick-link grid — same auto-fit density language as the KPI band. */
+.to-hub-links {
+    display: grid;
+    gap: var(--to-space-4);
+    grid-template-columns: repeat(auto-fit, minmax(var(--toa-kpi-min), 1fr));
+}
+
+/* One quick-link card — the whole card is the link. */
+.to-hub-link {
+    display: flex;
+    align-items: center;
+    gap: var(--to-space-4);
+    padding-block: var(--to-space-4);
+    padding-inline: var(--to-space-5);
+    background: var(--toa-surface);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-card);
+    box-shadow: var(--toa-shadow-card);
+    text-decoration: none;
+    transition: box-shadow var(--to-t-base), transform var(--to-t-base),
+                border-color var(--to-t-fast);
+}
+
+.to-hub-link:hover {
+    box-shadow: var(--toa-shadow-card-hover);
+    transform: translateY(-2px);
+    border-color: var(--toa-accent-line);
+}
+
+/* leading icon tile — a soft accent-tinted square holding the glyph. */
+.to-hub-link__icon {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--to-space-10);
+    block-size: var(--to-space-10);
+    border-radius: var(--to-r-control);
+    background: var(--toa-accent-soft);
+    color: var(--toa-accent);
+}
+
+.to-hub-link__glyph {
+    inline-size: var(--to-space-5);
+    block-size: var(--to-space-5);
+}
+
+.to-hub-link__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-1);
+    flex: 1 1 auto;
+    min-inline-size: 0;
+}
+
+.to-hub-link__title {
+    color: var(--to-ink);
+    font-size: var(--toa-type-h-size);
+    font-weight: var(--to-fw-semibold);
+}
+
+.to-hub-link__sub {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    line-height: var(--to-lh-medium);
+}
+
+/* trailing affordance chevron — mutes at rest, brightens on hover; a directional
+   glyph, so it mirrors in RTL (the arrow, never text). */
+.to-hub-link__chevron {
+    flex: none;
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+    color: var(--to-ink-subtle);
+    transition: color var(--to-t-fast);
+}
+.to-hub-link:hover .to-hub-link__chevron {
+    color: var(--toa-accent);
+}
+[dir="rtl"] .to-hub-link__chevron {
+    transform: scaleX(-1);
+}

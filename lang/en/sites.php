@@ -56,6 +56,44 @@ return [
     'settings' => [
         'title' => 'Site settings',
     ],
+    // WS1 — the per-shop Overview hub (KPI band, quick-link cards, recent activity).
+    'hub' => [
+        'kpi' => [
+            'products' => 'Confirmed products',
+            'generations' => 'Try-ons (30d)',
+            'leads' => 'Registered users',
+            'balance' => 'Spendable credit',
+        ],
+        'tools' => [
+            'title' => 'Manage this shop',
+            'sub' => 'Everything for this shop in one place.',
+            'placement' => [
+                'title' => 'Button placement',
+                'sub' => 'Pick where the Tray On button sits on your product page.',
+            ],
+            'history' => [
+                'title' => 'Try-on history',
+                'sub' => 'Every try-on your shoppers generated on this shop.',
+            ],
+            'users' => [
+                'title' => 'Registered users',
+                'sub' => 'Your leads and what each one did on your shop.',
+            ],
+            'gallery' => [
+                'title' => 'Gallery',
+                'sub' => 'The on-site wall of successful try-ons.',
+            ],
+            'privacy' => [
+                'title' => 'Privacy & retention',
+                'sub' => 'How long uploaded photos are kept, and shopper privacy.',
+            ],
+        ],
+        'activity' => [
+            'title' => 'Recent activity',
+            'subtitle' => 'The latest things that happened on this shop.',
+            'empty' => 'No activity yet',
+        ],
+    ],
     'products' => [
         'title' => 'Products',
         'singular' => 'Product',

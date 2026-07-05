@@ -4,6 +4,7 @@ namespace App\Filament\Platform\Resources\SiteResource\Pages;
 
 use App\Domain\Platform\PlatformSiteWriter;
 use App\Filament\Platform\Resources\SiteResource;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +21,20 @@ class EditSite extends EditRecord
     protected static string $resource = SiteResource::class;
 
     private const SAVED_TITLE = 'platform.sites.updated';
+
+    /**
+     * Page-header actions. "Open shop workspace" is the audited drill-in bridge — it
+     * jumps the operator into this shop's merchant workspace instead of only the Edit
+     * form (the CRUD-only landing that confused operators).
+     *
+     * @return array<int, Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            SiteResource::workspaceHeaderAction(),
+        ];
+    }
 
     /** Route the update through the audited cross-account write seam. */
     protected function handleRecordUpdate(Model $record, array $data): Model

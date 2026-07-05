@@ -4,6 +4,7 @@ namespace App\Filament\Platform\Resources;
 
 use App\Domain\Platform\PlatformProductQuery;
 use App\Domain\Platform\PlatformSettings;
+use App\Domain\Platform\PlatformShopDrillIn;
 use App\Domain\Platform\PlatformSiteQuery;
 use App\Domain\Platform\PlatformSiteWriter;
 use App\Domain\Scan\ScanProductJob;
@@ -29,6 +30,8 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Routing\Redirector;
 
 /**
  * P3 — Sites (cross-account, full CRUD via audited seams).
@@ -72,6 +75,13 @@ class SiteResource extends Resource
 
     // The "is this site configured?" verify-setup checklist (modal) view.
     private const VERIFY_MODAL_VIEW = 'filament.platform.resources.site.verify-setup';
+
+    // "Open shop workspace" drill-in bridge — action name, icon, secondary tone + i18n keys.
+    private const ACTION_WORKSPACE = 'workspace';
+    private const WORKSPACE_ICON = 'heroicon-o-arrow-top-right-on-square';
+    private const WORKSPACE_COLOR = 'gray';
+    private const WORKSPACE_LABEL = 'platform.sites.workspace.label';
+    private const WORKSPACE_TOOLTIP = 'platform.sites.workspace.tooltip';
 
     public static function getModelLabel(): string
     {
@@ -156,6 +166,7 @@ class SiteResource extends Resource
                     ->alignEnd(),
             ])
             ->actions([
+                self::workspaceAction(),
                 self::scanAction(),
                 self::productsAction(),
                 self::verifyAction(),
@@ -208,6 +219,49 @@ class SiteResource extends Resource
         ) > 0;
 
         return $hasConfirmedProduct ? self::STATE_READY : self::STATE_PENDING;
+    }
+
+    /**
+     * "Open shop workspace" (table row) — the audited drill-in bridge: jump straight into
+     * THIS shop's merchant workspace (its tools), instead of only the admin Edit form. The
+     * click records an audited drill-in trace (super-admin only) and redirects to the
+     * merchant Dashboard scoped to the site's tenant. Access is already permitted by
+     * User::canAccessTenant; this only surfaces + logs it.
+     */
+    private static function workspaceAction(): Action
+    {
+        return Action::make(self::ACTION_WORKSPACE)
+            ->label(__(self::WORKSPACE_LABEL))
+            ->tooltip(__(self::WORKSPACE_TOOLTIP))
+            ->icon(self::WORKSPACE_ICON)
+            ->color(self::WORKSPACE_COLOR)
+            ->action(static fn (Site $record) => self::openWorkspace($record));
+    }
+
+    /**
+     * "Open shop workspace" (Edit/View page header) — the same audited bridge as the row
+     * action, exposed as a header Action for the site page. Public so EditSite can attach it.
+     */
+    public static function workspaceHeaderAction(): \Filament\Actions\Action
+    {
+        return \Filament\Actions\Action::make(self::ACTION_WORKSPACE)
+            ->label(__(self::WORKSPACE_LABEL))
+            ->tooltip(__(self::WORKSPACE_TOOLTIP))
+            ->icon(self::WORKSPACE_ICON)
+            ->color(self::WORKSPACE_COLOR)
+            ->action(static fn (Site $record) => self::openWorkspace($record));
+    }
+
+    /**
+     * Record the audited drill-in for this shop, then redirect the operator into its
+     * merchant workspace. Both steps go through PlatformShopDrillIn (super-admin guarded).
+     */
+    private static function openWorkspace(Site $site): RedirectResponse|Redirector
+    {
+        $bridge = app(PlatformShopDrillIn::class);
+        $bridge->record($site);
+
+        return redirect()->away($bridge->workspaceUrl($site));
     }
 
     /**

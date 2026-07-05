@@ -56,6 +56,10 @@ class ActivityEvent extends Model
 
     public const KIND_ACCOUNT_RESTORED = 'account_restored';
 
+    // Audited super-admin "Open shop workspace" drill-in: a super-admin entered a
+    // specific shop's merchant workspace. Explicit + logged (canAccessTenant permits it).
+    public const KIND_PLATFORM_SHOP_DRILL_IN = 'platform_shop_drill_in';
+
     // Site control-plane actions (merchant / platform admin).
     public const KIND_SITE_KEY_REGENERATED = 'site_key_regenerated';
 

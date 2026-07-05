@@ -2,11 +2,19 @@
 
 namespace App\Filament\Merchant\Resources\SiteResource\Pages;
 
+use App\Domain\Activity\EndUserActivityItem;
+use App\Domain\Activity\SiteActivityTimeline;
+use App\Domain\Credits\CreditMath;
+use App\Domain\Reporting\SiteHubMetrics;
+use App\Domain\Reporting\SiteHubMetricsBuilder;
 use App\Domain\Scan\ScanProductJob;
 use App\Domain\Sites\SiteKeyRegenerator;
 use App\Filament\Merchant\Pages\Gallery;
 use App\Filament\Merchant\Pages\PrivacySettings;
 use App\Filament\Merchant\Pages\ReviewProduct;
+use App\Filament\Merchant\Pages\TryOnHistory;
+use App\Filament\Merchant\Pages\WidgetAppearanceSettings;
+use App\Filament\Merchant\Resources\EndUserResource;
 use App\Filament\Merchant\Resources\SiteResource;
 use App\Models\Product;
 use App\Models\Site;
@@ -17,15 +25,20 @@ use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Support\Collection;
 
 /**
- * M4 / A5 — the site hub. A record-bound page (the {record} resolves through the
- * resource's account-scoped query, so a merchant only ever opens their own site).
- * Surfaces the embed-code block (the PUBLIC site_key only) with a destructive
- * "regenerate key" action wired to SiteKeyRegenerator, plus the site's scanned
- * products — each linking to the A4 scan-review form (M3).
+ * WS1 — the per-shop OVERVIEW hub. A record-bound page (the {record} resolves
+ * through the resource's account-scoped query, so a merchant only ever opens their
+ * own shop). Ties the shop's tools together: a KPI band (confirmed products,
+ * try-ons over the window, leads, spendable credit), quick-link cards to the shop's
+ * management surfaces (button placement, try-on history, registered users, gallery,
+ * privacy), the embed-code block (the PUBLIC site_key only) with a destructive
+ * "regenerate key" action wired to SiteKeyRegenerator, the shop's scanned products
+ * — each linking to the A4 scan-review form (M3) — and a recent-activity strip.
  *
- * The page renders typed data only: products are read through the site's
- * account-scoped relation; the regenerate action returns the new public key and
- * the widget_secret is NEVER touched or shown.
+ * The page renders typed data only: the KPIs come from a SiteHubMetrics snapshot
+ * (account+site-scoped, aggregated in PHP — NEVER in Blade), products through the
+ * shop's account-scoped relation, and the activity strip through SiteActivityTimeline.
+ * The regenerate action returns the new public key and the widget_secret is NEVER
+ * touched or shown.
  */
 class ViewSite extends ViewRecord
 {
@@ -45,6 +58,21 @@ class ViewSite extends ViewRecord
 
     // Max length of a pasted product URL (guards the scan input).
     private const SCAN_URL_MAX = 2048;
+
+    // KPI-band label keys (sites.hub.kpi.*), one per SiteHubMetrics field the band shows.
+    private const KPI_LABEL_PRODUCTS = 'sites.hub.kpi.products';
+    private const KPI_LABEL_GENERATIONS = 'sites.hub.kpi.generations';
+    private const KPI_LABEL_LEADS = 'sites.hub.kpi.leads';
+    private const KPI_LABEL_BALANCE = 'sites.hub.kpi.balance';
+
+    // KPI accent tones (StatusBadge vocabulary → the KPI card edge).
+    private const TONE_NEUTRAL = 'neutral';
+    private const TONE_INFO = 'info';
+    private const TONE_SUCCESS = 'success';
+    private const TONE_WARN = 'warn';
+
+    // How many recent activity rows the hub strip shows.
+    private const ACTIVITY_LIMIT = 6;
 
     /** The two-step destructive confirm + the in-flight/error states (Alpine-free,
         Livewire-driven so the server owns the rotation). */
@@ -133,6 +161,87 @@ class ViewSite extends ViewRecord
         return PrivacySettings::getUrl(['site' => $this->getRecord()->getKey()]);
     }
 
+    /**
+     * The deep link to the button-placement visual picker for THIS shop, opened
+     * straight onto the picker (?pick=1) — the quickest path to place the button.
+     */
+    public function placementUrl(): string
+    {
+        return WidgetAppearanceSettings::getUrl(['site' => $this->getRecord()->getKey(), 'pick' => 1]);
+    }
+
+    /** The deep link to this shop's try-on history (WS2). */
+    public function historyUrl(): string
+    {
+        return TryOnHistory::getUrl();
+    }
+
+    /** The deep link to this shop's registered users / leads list (M5). */
+    public function usersUrl(): string
+    {
+        return EndUserResource::getUrl('index');
+    }
+
+    /**
+     * The KPI band for this shop, as a flat render-ready array. Each entry carries
+     * its i18n label key, a PRE-FORMATTED value string, and a tone. The value is
+     * aggregated + formatted in PHP (SiteHubMetrics → here); the view never computes
+     * a number.
+     *
+     * @return array<int,array{label:string,value:string,tone:string}>
+     */
+    public function kpis(): array
+    {
+        $metrics = $this->metrics();
+
+        return [
+            [
+                'label' => self::KPI_LABEL_PRODUCTS,
+                'value' => $this->int($metrics->productsConfirmed),
+                'tone' => self::TONE_NEUTRAL,
+            ],
+            [
+                'label' => self::KPI_LABEL_GENERATIONS,
+                'value' => $this->int($metrics->generationsInWindow),
+                'tone' => self::TONE_INFO,
+            ],
+            [
+                'label' => self::KPI_LABEL_LEADS,
+                'value' => $this->int($metrics->leadsTotal),
+                'tone' => self::TONE_INFO,
+            ],
+            [
+                'label' => self::KPI_LABEL_BALANCE,
+                'value' => $this->usd($metrics->spendableMicroUsd),
+                'tone' => $metrics->isLowBalance ? self::TONE_WARN : self::TONE_SUCCESS,
+            ],
+        ];
+    }
+
+    /** The shop's recent activity (newest first) as immutable timeline DTOs. */
+    public function activity(): Collection
+    {
+        return app(SiteActivityTimeline::class)->forSite($this->getRecord(), self::ACTIVITY_LIMIT);
+    }
+
+    /** The account+site-scoped hub snapshot for this shop. */
+    private function metrics(): SiteHubMetrics
+    {
+        return app(SiteHubMetricsBuilder::class)->build($this->getRecord());
+    }
+
+    /** Locale-aware integer formatting (display only — no aggregation here). */
+    private function int(int $value): string
+    {
+        return number_format($value);
+    }
+
+    /** Integer micro-USD of selling value → a $X.XX display string. */
+    private function usd(int $microUsd): string
+    {
+        return '$'.number_format(CreditMath::microToUsd($microUsd), 2);
+    }
+
     /** Open the destructive two-step confirm. */
     public function askRegenerate(): void
     {
@@ -178,6 +287,8 @@ class ViewSite extends ViewRecord
         return [
             'site' => $this->getRecord(),
             'products' => $this->products(),
+            'kpis' => $this->kpis(),
+            'activity' => $this->activity(),
         ];
     }
 }

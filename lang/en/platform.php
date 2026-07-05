@@ -162,6 +162,11 @@ return [
             'heading' => 'Install snippet',
             'close' => 'Close',
         ],
+        // "Open shop workspace" — the audited super-admin drill-in bridge.
+        'workspace' => [
+            'label' => 'Open shop workspace',
+            'tooltip' => 'Jump into this shop\'s merchant workspace and tools.',
+        ],
         'field' => [
             'account' => 'Account',
             'name' => 'Site name',
