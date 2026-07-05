@@ -7,6 +7,7 @@ use App\Domain\Platform\PlatformSettings;
 use App\Domain\Platform\PlatformSiteQuery;
 use App\Domain\Platform\PlatformSiteWriter;
 use App\Domain\Scan\ScanProductJob;
+use App\Domain\Sites\InvalidSiteSettingsException;
 use App\Domain\Sites\WidgetAppearance;
 use App\Filament\Platform\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Platform\Resources\SiteResource\Pages\EditSite;
@@ -337,11 +338,23 @@ class SiteResource extends Resource
             ->color('gray')
             ->modalHeading(__('appearance.title'))
             ->modalSubmitActionLabel(__('appearance.save'))
-            ->fillForm(static fn (Site $record): array => WidgetAppearance::resolve($record->widget_appearance, $record->product_category))
+            // Custom (visually-picked) placement is a merchant-only feature (it needs the shop's
+            // visual picker). This preset modal can't select it, so a stored 'custom' is shown as a
+            // safe preset with a note — the merchant's Widget Appearance page stays the source of truth.
+            ->fillForm(static function (Site $record): array {
+                $resolved = WidgetAppearance::resolve($record->widget_appearance, $record->product_category);
+
+                if (($resolved[WidgetAppearance::KEY_PLACEMENT] ?? null) === WidgetAppearance::PLACEMENT_CUSTOM) {
+                    $resolved[WidgetAppearance::KEY_PLACEMENT] = WidgetAppearance::PLACEMENT_AFTER_ATC;
+                }
+
+                return $resolved;
+            })
             ->form([
                 Select::make(WidgetAppearance::KEY_PLACEMENT)
                     ->label(__('appearance.button.placement'))
-                    ->options(self::placementOptions())
+                    ->options(self::presetPlacementOptions())
+                    ->helperText(__('appearance.placement.custom_platform_note'))
                     ->required(),
                 TextInput::make(WidgetAppearance::KEY_LABEL)
                     ->label(__('appearance.button.label'))
@@ -365,23 +378,40 @@ class SiteResource extends Resource
                     ->helperText(__('appearance.popup.ask_height_help')),
             ])
             ->action(static function (Site $record, array $data): void {
-                app(PlatformSiteWriter::class)->update($record, [
-                    'widget_appearance' => WidgetAppearance::sanitize($data),
-                ]);
+                try {
+                    app(PlatformSiteWriter::class)->update($record, [
+                        'widget_appearance' => WidgetAppearance::sanitize($data),
+                    ]);
 
-                Notification::make()
-                    ->success()
-                    ->title(__('appearance.saved'))
-                    ->send();
+                    Notification::make()
+                        ->success()
+                        ->title(__('appearance.saved'))
+                        ->send();
+                } catch (InvalidSiteSettingsException | \Throwable $e) {
+                    // A bad appearance value (or any failure) is a soft, user-facing notice —
+                    // never a 500. Mirrors the merchant WidgetAppearanceSettings::save() guard.
+                    Notification::make()
+                        ->danger()
+                        ->title(__('appearance.errors.save_failed'))
+                        ->send();
+                }
             });
     }
 
-    /** Placement value => localised label (shared with the merchant appearance page). */
-    private static function placementOptions(): array
+    /**
+     * Placement value => localised label, PRESETS ONLY. 'custom' is excluded: it requires the
+     * merchant's visual picker (not available in this preset modal), so it can never be selected
+     * here — the guard against the InvalidSiteSettingsException 500 on a custom-without-anchor save.
+     */
+    private static function presetPlacementOptions(): array
     {
         $options = [];
 
         foreach (WidgetAppearance::PLACEMENTS as $placement) {
+            if ($placement === WidgetAppearance::PLACEMENT_CUSTOM) {
+                continue;
+            }
+
             $options[$placement] = __('appearance.placement.'.$placement);
         }
 

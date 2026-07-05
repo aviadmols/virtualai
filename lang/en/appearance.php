@@ -33,6 +33,7 @@ return [
         'fixed_bottom_right' => 'Fixed — bottom right',
         'fixed_bottom_left' => 'Fixed — bottom left',
         'custom' => 'Custom — picked visually',
+        'custom_platform_note' => 'Custom (visually-picked) placement is managed on the shop’s Widget Appearance page.',
     ],
     'visual' => [
         'pick' => 'Pick visually',
