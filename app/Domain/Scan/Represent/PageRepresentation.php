@@ -8,6 +8,8 @@ namespace App\Domain\Scan\Represent;
  * NOT raw full HTML (that blows the token budget and buries the signal). Carries:
  *  - cleanedHtml: scripts/styles/SVG/comments/chrome stripped, structure + product
  *    nodes kept, capped to the token budget;
+ *  - rawHtml: the ORIGINAL fetched HTML (styles + links intact) — NOT sent to the
+ *    model; kept so the visual placement picker can render a faithful preview;
  *  - structuredData: the lifted JSON-LD / OG / microdata (highest-confidence);
  *  - candidateHints: per selector-role candidate nodes with stable attributes;
  *  - screenshotDataUrl: the headless full-page screenshot (the model's safety net);
@@ -30,6 +32,7 @@ final readonly class PageRepresentation
         public string $fetchedVia,
         public ?string $screenshotDataUrl,
         public ScanDom $dom,
+        public string $rawHtml = '',
     ) {}
 
     public function hasScreenshot(): bool

@@ -4,14 +4,17 @@ namespace Tests\Feature\Filament\Merchant;
 
 use App\Domain\Scan\Fetch\FetchResult;
 use App\Domain\Scan\Fetch\PageSource;
+use App\Domain\Scan\Preview\PreviewSnapshotStore;
 use App\Domain\Sites\WidgetAppearance;
 use App\Filament\Merchant\Pages\WidgetAppearanceSettings;
 use App\Models\Account;
+use App\Models\Product;
 use App\Models\Site;
 use App\Models\User;
 use App\Support\Tenant;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -77,6 +80,32 @@ class WidgetPlacementPickerTest extends TestCase
         $this->assertSame(WidgetAppearance::PLACEMENT_CUSTOM, $stored[WidgetAppearance::KEY_PLACEMENT]);
         $this->assertSame('#add-to-cart', $stored[WidgetAppearance::KEY_CUSTOM_ANCHOR]);
         $this->assertSame(WidgetAppearance::POSITION_BEFORE, $stored[WidgetAppearance::KEY_CUSTOM_POSITION]);
+    }
+
+    public function test_open_picker_previews_the_scanned_product_from_its_snapshot(): void
+    {
+        config()->set('trayon.media.disk', 's3');
+        Storage::fake('s3');
+
+        Tenant::run($this->account->id, function (): void {
+            $url = 'https://shop.example/p/42';
+            $product = Product::factory()->forSite($this->site)->create([
+                'status' => Product::STATUS_CONFIRMED,
+                'source_url' => $url,
+                'source_url_hash' => sha1($url),
+            ]);
+            app(PreviewSnapshotStore::class)->put($product, self::PAGE_HTML);
+
+            $component = Livewire::test(WidgetAppearanceSettings::class)
+                ->call('openPicker')
+                ->assertSet('pickerOpen', true)
+                ->assertSet('previewSource', 'snapshot')
+                ->assertSet('previewError', null);
+
+            // Previewed straight from the stored snapshot — no live fetch was needed.
+            $this->assertNotNull($component->get('previewToken'));
+            $this->assertStringContainsString('product__title', $component->instance()->previewSrcdoc());
+        });
     }
 
     public function test_verify_pick_reports_uniqueness_against_the_cached_dom(): void

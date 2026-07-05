@@ -50,6 +50,7 @@ final class RepresentationBuilder
             fetchedVia: $fetch->fetchedVia,
             screenshotDataUrl: $fetch->screenshotDataUrl,
             dom: $dom,
+            rawHtml: $html,
         );
     }
 

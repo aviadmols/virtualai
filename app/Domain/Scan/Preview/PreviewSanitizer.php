@@ -21,20 +21,76 @@ final class PreviewSanitizer
     // (the preview must look like the live page); only these are stripped.
     private const STRIP_TAGS = ['script', 'noscript', 'template', 'iframe', 'object', 'embed', 'applet'];
 
-    // Injected into <head>: base (relative-asset resolution to the live store) + no-referrer.
+    // Injected into <head>: force UTF-8 (we transcode the body to it) + base
+    // (relative-asset resolution to the live store) + no-referrer.
+    private const CHARSET_META = '<meta charset="utf-8">';
     private const REFERRER_META = '<meta name="referrer" content="no-referrer">';
 
     public function sanitize(string $html, string $baseHref, string $pickerScript): string
     {
+        // Normalize to valid UTF-8 FIRST: many storefronts (esp. Hebrew IL shops)
+        // serve windows-1255/latin bytes. Left raw they render as mojibake in the
+        // iframe AND break the json_encode Livewire runs on every re-render (500).
+        $html = $this->toUtf8($html);
         $html = $this->stripTags($html);
         $html = $this->stripEventHandlers($html);
         $html = $this->stripJavascriptUris($html);
         $html = $this->stripMetaRefresh($html);
         $html = $this->stripExistingBase($html);
+        $html = $this->stripCharsetMeta($html);
         $html = $this->injectHead($html, $baseHref);
         $html = $this->injectPicker($html, $pickerScript);
 
         return $html;
+    }
+
+    /**
+     * Coerce arbitrary page bytes into valid UTF-8. Best-effort transcode from a
+     * declared non-UTF-8 charset (iconv handles windows-1255/latin); then a hard
+     * pass that drops any remaining invalid byte sequences so the output is ALWAYS
+     * valid UTF-8 — safe to embed in the iframe and to json_encode.
+     */
+    private function toUtf8(string $html): string
+    {
+        if ($html === '' || mb_check_encoding($html, 'UTF-8')) {
+            return $html;
+        }
+
+        $charset = $this->declaredCharset($html);
+
+        if ($charset !== null && strtoupper($charset) !== 'UTF-8') {
+            $converted = @iconv($charset, 'UTF-8//IGNORE', $html);
+
+            if (is_string($converted) && $converted !== '' && mb_check_encoding($converted, 'UTF-8')) {
+                return $converted;
+            }
+        }
+
+        $clean = @iconv('UTF-8', 'UTF-8//IGNORE', $html);
+
+        if (is_string($clean) && mb_check_encoding($clean, 'UTF-8')) {
+            return $clean;
+        }
+
+        return mb_convert_encoding($html, 'UTF-8', 'UTF-8');
+    }
+
+    /** The charset declared in a <meta charset> / <meta http-equiv content-type>, or null. */
+    private function declaredCharset(string $html): ?string
+    {
+        if (preg_match('/<meta[^>]+charset\s*=\s*["\']?\s*([a-z0-9\-]+)/i', $html, $m)) {
+            return $m[1];
+        }
+
+        return null;
+    }
+
+    /** Drop the merchant's own charset declarations — we force UTF-8 to match our transcode. */
+    private function stripCharsetMeta(string $html): string
+    {
+        $html = preg_replace('#<meta\b[^>]*charset\s*=\s*["\']?[a-z0-9\-]+["\']?[^>]*>#is', '', $html) ?? $html;
+
+        return preg_replace('#<meta\b[^>]*http-equiv\s*=\s*["\']?\s*content-type[^>]*>#is', '', $html) ?? $html;
     }
 
     /** Remove executable / external-content subtrees (and their unclosed variants). */
@@ -86,7 +142,9 @@ final class PreviewSanitizer
      */
     private function injectHead(string $html, string $baseHref): string
     {
-        $inject = '<base href="'.htmlspecialchars($baseHref, ENT_QUOTES).'">'.self::REFERRER_META;
+        $inject = self::CHARSET_META
+            .'<base href="'.htmlspecialchars($baseHref, ENT_QUOTES).'">'
+            .self::REFERRER_META;
 
         if (preg_match('#<head\b[^>]*>#i', $html, $m, PREG_OFFSET_CAPTURE)) {
             $at = $m[0][1] + strlen($m[0][0]);

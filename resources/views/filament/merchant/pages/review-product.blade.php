@@ -261,5 +261,18 @@
                 {{ __('scan.action.confirm') }}
             </button>
         </div>
+
+        {{-- Confirmed → hand off to the visual button-placement picker for this page. --}}
+        @if($review->status === \App\Models\Product::STATUS_CONFIRMED)
+            <div class="to-scan-confirm">
+                <span class="to-scan-confirm__reason to-scan-confirm__reason--ok">
+                    <x-filament::icon icon="heroicon-o-cursor-arrow-rays" class="to-scan-confirm__reason-glyph" />
+                    {{ __('scan.place.sub') }}
+                </span>
+                <a href="{{ $this->placeButtonUrl() }}" class="to-btn to-btn--primary" wire:navigate>
+                    {{ __('scan.place.cta') }}
+                </a>
+            </div>
+        @endif
     </div>
 </x-filament-panels::page>

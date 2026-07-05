@@ -60,6 +60,10 @@ return [
         'count' => ':count item(s) still need your review',
     ],
     'confirmed' => 'Product confirmed and live',
+    'place' => [
+        'sub' => 'Now place the Tray On button exactly where you want it on this page.',
+        'cta' => 'Place the button visually',
+    ],
     'firstgen' => [
         'test' => 'Test on a live product page',
         'success' => 'Your widget is live',

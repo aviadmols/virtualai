@@ -4,6 +4,8 @@ namespace App\Filament\Merchant\Pages;
 
 use App\Domain\Scan\Fetch\FetchException;
 use App\Domain\Scan\Preview\PreviewFetcher;
+use App\Domain\Scan\Preview\PreviewResult;
+use App\Domain\Scan\Preview\PreviewSnapshotStore;
 use App\Domain\Scan\Represent\ScanDom;
 use App\Domain\Sites\InvalidSiteSettingsException;
 use App\Domain\Sites\SiteSettingsService;
@@ -23,6 +25,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
@@ -80,6 +83,9 @@ class WidgetAppearanceSettings extends Page implements HasForms
 
     public ?string $previewFinalUrl = null;
 
+    /** Where the current preview came from: 'snapshot' (scanned page) or 'live' (manual URL). */
+    public ?string $previewSource = null;
+
     public ?string $previewError = null;
 
     public ?string $pickedSelector = null;
@@ -122,6 +128,12 @@ class WidgetAppearanceSettings extends Page implements HasForms
         $this->siteId = (int) $resolved->getKey();
         $this->hasSite = true;
         $this->form->fill(WidgetAppearance::resolve($resolved->widget_appearance, $resolved->product_category));
+
+        // Deep-link from the scan-review flow (?pick=1): open the picker straight onto
+        // the just-scanned product. Guarded so a bad param never 500s the page load.
+        if (filter_var(request()->query('pick'), FILTER_VALIDATE_BOOLEAN)) {
+            $this->openPicker();
+        }
     }
 
     public function form(Form $form): Form
@@ -171,13 +183,31 @@ class WidgetAppearanceSettings extends Page implements HasForms
 
     // === Visual placement picker actions ===
 
-    /** Open the full-screen picker, defaulting the URL to a scanned product's page when possible. */
+    /**
+     * Open the full-screen picker. The PRIMARY path renders the merchant's most-recently
+     * scanned product straight from the stored snapshot (no live fetch) — so "scan a
+     * product → see the visual preview" just works. Fully guarded: any failure opens the
+     * picker with a soft message + the manual-URL fallback, never a 500.
+     */
     public function openPicker(): void
     {
         $this->previewError = null;
+        $this->pickVerdict = null;
+        $this->pickedSelector = null;
 
-        if (blank($this->previewUrl)) {
-            $this->previewUrl = $this->defaultPreviewUrl();
+        try {
+            $product = $this->latestScannedProduct();
+
+            if ($product !== null) {
+                $this->previewUrl = $product->source_url;
+                $this->loadProductPreview($product);
+            } elseif (blank($this->previewUrl)) {
+                $this->previewUrl = $this->site()?->domain ?: null;
+            }
+        } catch (\Throwable $e) {
+            Log::error('widget picker openPicker failed', ['site_id' => $this->siteId, 'error' => $e->getMessage()]);
+            $this->previewToken = null;
+            $this->previewError = __('appearance.visual.errors.load_failed');
         }
 
         $this->pickerOpen = true;
@@ -224,12 +254,37 @@ class WidgetAppearanceSettings extends Page implements HasForms
             $this->previewError = $e->merchantMessage();
 
             return;
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            Log::warning('widget picker live preview failed', ['site_id' => $this->siteId, 'error' => $e->getMessage()]);
             $this->previewError = __('appearance.visual.errors.load_failed');
 
             return;
         }
 
+        $this->cachePreview($preview, $url);
+    }
+
+    /** Load the picker preview from a scanned product's stored snapshot (no network). */
+    private function loadProductPreview(Product $product): void
+    {
+        $html = app(PreviewSnapshotStore::class)->get($product);
+
+        if ($html === null) {
+            // No snapshot yet (older scan, or storage unavailable) — leave the stage empty;
+            // the merchant can still load the URL live via the fallback.
+            $this->previewToken = null;
+            $this->previewSource = null;
+
+            return;
+        }
+
+        $preview = app(PreviewFetcher::class)->previewFromHtml($html, (string) $product->source_url, $this->pickerScript());
+        $this->cachePreview($preview, (string) $product->source_url, 'snapshot');
+    }
+
+    /** Cache the sanitized preview + expose it to the iframe (shared by snapshot + live paths). */
+    private function cachePreview(PreviewResult $preview, string $url, string $source = 'live'): void
+    {
         $token = sha1($url);
 
         Cache::put($this->previewCacheKey($token), [
@@ -240,6 +295,7 @@ class WidgetAppearanceSettings extends Page implements HasForms
 
         $this->previewToken = $token;
         $this->previewFinalUrl = $preview->finalUrl;
+        $this->previewSource = $source;
     }
 
     /** Verify a picked selector resolves against the cached preview DOM (exactly one = good). */
@@ -257,7 +313,14 @@ class WidgetAppearanceSettings extends Page implements HasForms
             ? $position
             : WidgetAppearance::POSITION_AFTER;
 
-        $count = ScanDom::fromHtml((string) $entry['raw'], (string) ($entry['final_url'] ?? ''))->count($selector);
+        try {
+            $count = ScanDom::fromHtml((string) $entry['raw'], (string) ($entry['final_url'] ?? ''))->count($selector);
+        } catch (\Throwable $e) {
+            Log::warning('widget picker verifyPick failed', ['site_id' => $this->siteId, 'error' => $e->getMessage()]);
+            $this->pickVerdict = ['ok' => false, 'count' => 0, 'reason' => 'none'];
+
+            return;
+        }
 
         $this->pickedSelector = $selector;
         $this->pickedPosition = $position;
@@ -371,16 +434,18 @@ class WidgetAppearanceSettings extends Page implements HasForms
         return 'widget_preview:'.(int) $this->siteId.':'.$token;
     }
 
-    /** Default the preview URL to a confirmed product's page for this site, else the site domain. */
-    private function defaultPreviewUrl(): ?string
+    /**
+     * The merchant's most-recently scanned product for this site (confirmed preferred,
+     * else a draft) — the page the picker previews. Account-scoped by BelongsToAccount.
+     */
+    private function latestScannedProduct(): ?Product
     {
-        $url = Product::query()
+        return Product::query()
             ->where('site_id', (int) $this->siteId)
-            ->where('status', Product::STATUS_CONFIRMED)
+            ->whereIn('status', [Product::STATUS_CONFIRMED, Product::STATUS_DRAFT])
+            ->orderByRaw("CASE status WHEN '".Product::STATUS_CONFIRMED."' THEN 0 ELSE 1 END")
             ->latest('id')
-            ->value('source_url');
-
-        return $url ?: ($this->site()?->domain ?: null);
+            ->first();
     }
 
     /** The in-iframe picker script, inlined into the sanitized preview (read once). */

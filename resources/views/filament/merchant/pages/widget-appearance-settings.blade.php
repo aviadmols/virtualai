@@ -61,6 +61,12 @@
                         <div>
                             <p class="to-place-eyebrow">{{ __('appearance.visual.eyebrow') }}</p>
                             <h2 class="to-place-title">{{ __('appearance.visual.modal_title') }}</h2>
+                            @if ($previewFinalUrl)
+                                <p class="to-place-subtitle">
+                                    {{ $previewSource === 'snapshot' ? __('appearance.visual.from_scan') : __('appearance.visual.previewing') }}
+                                    <span dir="ltr">{{ $previewFinalUrl }}</span>
+                                </p>
+                            @endif
                         </div>
                         <x-filament::button type="button" color="gray" icon="heroicon-o-x-mark" wire:click="closePicker">
                             {{ __('appearance.visual.cancel') }}
@@ -74,7 +80,7 @@
                             wire:model="previewUrl"
                             placeholder="{{ __('appearance.visual.url_placeholder') }}"
                         />
-                        <x-filament::button type="button" wire:click="loadPreview" wire:target="loadPreview" wire:loading.attr="disabled">
+                        <x-filament::button type="button" color="gray" wire:click="loadPreview" wire:target="loadPreview" wire:loading.attr="disabled">
                             <span wire:loading.remove wire:target="loadPreview">{{ __('appearance.visual.load') }}</span>
                             <span wire:loading wire:target="loadPreview">{{ __('appearance.visual.loading') }}</span>
                         </x-filament::button>

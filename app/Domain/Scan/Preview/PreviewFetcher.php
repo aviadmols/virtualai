@@ -36,4 +36,19 @@ final class PreviewFetcher
             fetchedVia: $fetch->fetchedVia,
         );
     }
+
+    /**
+     * Build a preview from ALREADY-FETCHED HTML (the scan snapshot) — no network, no
+     * headless render, no SSRF surface. This is the primary path: the page was fetched
+     * once at scan time, so the picker renders instantly and reliably from the stored copy.
+     */
+    public function previewFromHtml(string $rawHtml, string $baseUrl, string $pickerScript): PreviewResult
+    {
+        return new PreviewResult(
+            sanitizedHtml: $this->sanitizer->sanitize($rawHtml, $baseUrl, $pickerScript),
+            rawHtml: $rawHtml,
+            finalUrl: $baseUrl,
+            fetchedVia: 'snapshot',
+        );
+    }
 }

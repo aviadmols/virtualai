@@ -111,6 +111,16 @@ class ReviewProduct extends Page
         return __(self::TITLE);
     }
 
+    /**
+     * Deep-link to the widget-appearance visual placement picker, pre-opened on this
+     * just-scanned product (?pick=1). This is the "scan a product → place the button on
+     * your page" hand-off shown once the scan is confirmed.
+     */
+    public function placeButtonUrl(): string
+    {
+        return WidgetAppearanceSettings::getUrl(['site' => $this->siteId, 'pick' => 1]);
+    }
+
     /** The fresh read model built from the (possibly just-confirmed) product. */
     public function review(): ScanReview
     {

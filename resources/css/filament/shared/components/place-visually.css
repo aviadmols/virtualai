@@ -68,6 +68,12 @@
     color: var(--to-ink);
 }
 
+.to-place-subtitle {
+    margin-block-start: var(--to-space-1);
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-ink-muted);
+}
+
 .to-place-urlbar {
     display: flex;
     gap: var(--to-space-3);

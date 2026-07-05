@@ -5,6 +5,7 @@ namespace Tests\Feature\Scan;
 use App\Domain\Scan\Fetch\FetchException;
 use App\Domain\Scan\Fetch\FetchResult;
 use App\Domain\Scan\Fetch\PageSource;
+use App\Domain\Scan\Preview\PreviewSnapshotStore;
 use App\Domain\Scan\ScanConstants;
 use App\Domain\Scan\ScanProductJob;
 use App\Models\Account;
@@ -14,6 +15,7 @@ use App\Support\Tenant;
 use Database\Seeders\AiControlPlaneSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -156,6 +158,28 @@ class ScanProductJobTest extends TestCase
         }
         $this->assertSame(1, $selectors[ScanConstants::ROLE_ADD_TO_CART]['matched_count']);
         $this->assertFalse($selectors[ScanConstants::ROLE_ADD_TO_CART]['needs_review']);
+    }
+
+    public function test_scan_stores_a_page_snapshot_for_the_visual_placement_picker(): void
+    {
+        config()->set('trayon.media.disk', 's3');
+        Storage::fake('s3');
+
+        $account = Account::factory()->create();
+        $site = Site::factory()->forAccount($account)->create();
+        $this->fakeFetch();
+        $this->mockExtraction();
+
+        $this->dispatch($account, $site);
+
+        $product = Tenant::run($account, fn () => Product::where('site_id', $site->id)->first());
+        $this->assertNotNull($product);
+
+        // The picker reads the RAW fetched page (styles intact) back from the media disk —
+        // no live re-fetch at click time.
+        $snapshot = app(PreviewSnapshotStore::class)->get($product);
+        $this->assertNotNull($snapshot);
+        $this->assertStringContainsString('html', strtolower($snapshot));
     }
 
     public function test_scan_never_auto_approves_and_confirm_is_required(): void

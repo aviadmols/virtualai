@@ -4,6 +4,7 @@ namespace App\Domain\Scan;
 
 use App\Domain\Scan\Fetch\FetchException;
 use App\Domain\Scan\Map\MappedProduct;
+use App\Domain\Scan\Preview\PreviewSnapshotStore;
 use App\Jobs\TenantAwareJob;
 use App\Models\Product;
 use App\Models\Site;
@@ -70,7 +71,11 @@ final class ScanProductJob extends TenantAwareJob implements ShouldBeUnique
             $representation = $scanner->represent($this->url);
             $mapped = $scanner->extract($representation, $site);
 
-            $this->persist($site, $mapped);
+            $product = $this->persist($site, $mapped);
+
+            // Keep a faithful copy of the fetched page so the visual placement picker
+            // can render it later WITHOUT a fresh live fetch. Fail-soft by contract.
+            app(PreviewSnapshotStore::class)->put($product, $representation->rawHtml);
         } catch (FetchException $e) {
             $this->persistFailure($site, $e);
         }
@@ -83,9 +88,9 @@ final class ScanProductJob extends TenantAwareJob implements ShouldBeUnique
      * untouched (a re-scan over a confirmed product is an explicit, diffed action
      * handled above this job).
      */
-    private function persist(Site $site, MappedProduct $mapped): void
+    private function persist(Site $site, MappedProduct $mapped): Product
     {
-        DB::transaction(function () use ($site, $mapped): void {
+        return DB::transaction(function () use ($site, $mapped): Product {
             $product = $this->existingScannable($site)
                 ?? new Product([
                     'site_id' => $site->getKey(),
@@ -113,6 +118,8 @@ final class ScanProductJob extends TenantAwareJob implements ShouldBeUnique
                     'confidence' => $row['confidence'] ?? null,
                 ]);
             }
+
+            return $product;
         });
     }
 

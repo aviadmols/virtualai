@@ -29,6 +29,20 @@ class PreviewSanitizerTest extends TestCase
         $this->assertStringContainsString('<link rel="stylesheet" href="/a.css">', $out);
     }
 
+    public function test_it_normalises_non_utf8_bytes_to_valid_utf8(): void
+    {
+        // Windows-1255/latin high bytes (invalid as UTF-8) — real IL storefronts serve these.
+        // Left raw they render as mojibake AND break the json_encode Livewire runs each render (500).
+        $bad = "\xE7\xE5\xEC\xF6\xE4";
+        $out = $this->sanitize('<html><head><meta charset="windows-1255"></head><body><h1>'.$bad.'</h1></body></html>');
+
+        $this->assertTrue(mb_check_encoding($out, 'UTF-8'), 'sanitized output must be valid UTF-8');
+        $this->assertNotFalse(json_encode(['html' => $out]), 'sanitized output must survive json_encode');
+        // We force the preview charset to UTF-8 (matching our transcode) and drop the merchant's.
+        $this->assertStringContainsString('<meta charset="utf-8">', $out);
+        $this->assertStringNotContainsString('windows-1255', $out);
+    }
+
     public function test_it_removes_inline_event_handlers(): void
     {
         $out = $this->sanitize('<body><div onclick="steal()" onmouseover=\'x()\'>hi</div><button onload=go>y</button></body>');
