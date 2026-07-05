@@ -2,11 +2,11 @@
  * A8 — Admin CTA family. Variants: primary (filled accent) / secondary (outline)
  * / destructive (red) / ghost (text-only). States: default/hover/focus/disabled/
  * loading. Variants are modifier classes — never per-call inline overrides.
- * Tabuzzco buttons: SHARP corners (radius 0), outline-default that INVERTS on
- * hover (ink border + text → ink fill + paper text), a slow 0.5s calm transition.
- * Filled accent is reserved for the ONE primary CTA. A tracked, slightly
- * uppercased label reads editorial.
- * TOKENS: --toa-accent --toa-accent-hover --toa-accent-on --toa-focus --to-r-none
+ * Tabuzzco buttons: SOFTENED to a gentle radius (--toa-radius-button, was sharp
+ * radius 0), outline-default that INVERTS on hover (ink border + text → ink fill +
+ * paper text), a slow 0.5s calm transition. Filled accent is reserved for the ONE
+ * primary CTA. A tracked, slightly uppercased label reads editorial.
+ * TOKENS: --toa-accent --toa-accent-hover --toa-accent-on --toa-focus --toa-radius-button
  *   --toa-type-body-size --to-fw-semibold --to-track-button --to-ink --to-paper
  *   --to-danger --toa-border-strong --to-space-2 --to-space-3 --to-space-5 --to-t-base
  * ==========================================================================*/
@@ -18,7 +18,7 @@
     gap: var(--to-space-2);
     padding-block: var(--to-space-3);
     padding-inline: var(--to-space-5);
-    border-radius: var(--to-r-none);
+    border-radius: var(--toa-radius-button);
     border: var(--to-bw-button) solid transparent;
     font-family: var(--to-font);
     font-size: var(--toa-type-body-size);

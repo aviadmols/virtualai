@@ -14,9 +14,12 @@
 */
 
 :host {
-  /* ---- Tabuzzco radius: sharp buttons (0), 7px image/card frames ---- */
-  --ton-radius: 7px;
-  --ton-radius-sm: 4px;
+  /* ---- Radius: SOFTENED (user retune) — gentle-rounded controls + larger image/card
+     frames so the storefront modal feels premium-soft, not stark. --ton-radius-sharp
+     is kept as a true 0 for the few places a hard edge is deliberate. ---- */
+  --ton-radius: 12px;         /* raised from 7px — modal / image / card frames */
+  --ton-radius-control: 8px;  /* NEW — gentle rounding for buttons / inputs */
+  --ton-radius-sm: 6px;
   --ton-radius-sharp: 0;
   --ton-radius-pill: 999px;
 
@@ -29,10 +32,11 @@
      structure still reads editorial if the storefront lacks the webfont ---- */
   --ton-font: 'Heebo', 'Assistant', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 
-  /* ---- Signature layered soft shadow (the premium lift) ---- */
-  --ton-shadow: rgba(0, 0, 0, 0.16) 0 47px 46px -27px, rgba(0, 0, 0, 0.08) 0 4px 16px 0;
-  --ton-shadow-frame: rgba(0, 0, 0, 0.16) 0 24px 30px -20px, rgba(0, 0, 0, 0.06) 0 2px 10px 0;
-  --ton-overlay: rgba(10, 10, 12, 0.62);
+  /* ---- Signature layered soft shadow — LIGHTENED (user retune): lower spread +
+     opacity, cool graphite tint, so the modal + frames float rather than weigh. ---- */
+  --ton-shadow: rgba(28, 32, 39, 0.14) 0 28px 40px -24px, rgba(28, 32, 39, 0.06) 0 4px 14px 0;
+  --ton-shadow-frame: rgba(28, 32, 39, 0.11) 0 18px 26px -20px, rgba(28, 32, 39, 0.05) 0 2px 9px 0;
+  --ton-overlay: rgba(28, 32, 39, 0.52);
   --ton-z: 2147483000;
 
   /* ---- Slow / calm motion (Tabuzzco signature) ---- */
@@ -43,21 +47,24 @@
   --ton-track-eyebrow: 4px;
   --ton-track-button: 2px;
 
-  /* Theme surfaces — overridden by [data-theme] below; accent comes from config. */
+  /* Theme surfaces — overridden by [data-theme] below; accent comes from config.
+     SOFTENED (user retune): inks derive from the cool graphite slate, hairlines
+     gentle + cool — the modal reads delicate + modern, not stark black on white. */
   --ton-surface: #ffffff;
-  --ton-text: #0a0a0c;
-  --ton-muted: #6b6b76;
-  --ton-border: #bcbcbc;
-  --ton-hairline: #e6e6ec;
+  --ton-text: #1c2027;           /* cool graphite (was #0a0a0c) */
+  --ton-muted: #5b6472;          /* harmonized slate muted (was #6b6b76) */
+  --ton-border: #d3d9e0;         /* gentle cool hairline (was #bcbcbc) */
+  --ton-hairline: #eef1f5;       /* faint cool divider (was #e6e6ec) */
   --ton-field-bg: #ffffff;
 
-  /* Defaults; shell.js overrides with the per-site appearance config. */
-  --ton-button-bg: #0a0a0c;
+  /* Defaults; shell.js overrides with the per-site appearance config. Softened so an
+     unconfigured site still reads premium-soft, not pure black. */
+  --ton-button-bg: #1c2027;
   --ton-button-text: #ffffff;
-  --ton-accent: #0a0a0c;
+  --ton-accent: #1c2027;
   --ton-on-accent: #ffffff;      /* text/icon on an accent fill */
   --ton-danger: #c4452d;         /* error tone (Tabuzzco status red) */
-  --ton-scrim: rgba(10, 10, 12, 0.55); /* zoom/loading label scrims */
+  --ton-scrim: rgba(28, 32, 39, 0.5); /* zoom/loading label scrims */
 
   all: initial;
   font-family: var(--ton-font);
@@ -65,12 +72,12 @@
 }
 
 .ton-root[data-theme='dark'] {
-  --ton-surface: #141418;
-  --ton-text: #f4f4f7;
-  --ton-muted: #a6a6b3;
-  --ton-border: #4a4a55;
-  --ton-hairline: #2b2b33;
-  --ton-field-bg: #141418;
+  --ton-surface: #1c2027;        /* cool graphite surface (matches the softened ink family) */
+  --ton-text: #f3f5f9;
+  --ton-muted: #a3adbd;
+  --ton-border: #3a4150;
+  --ton-hairline: #2a303b;
+  --ton-field-bg: #1c2027;
 }
 
 *,
@@ -92,7 +99,7 @@
   margin-block-start: 12px;
   padding: 15px 22px;
   border: 1.5px solid var(--ton-button-bg);
-  border-radius: var(--ton-radius-sharp);
+  border-radius: var(--ton-radius-control);
   background: var(--ton-button-bg);
   color: var(--ton-button-text);
   font: inherit;
@@ -187,16 +194,17 @@
   margin-block-end: var(--ton-gap-lg);
 }
 
-/* Big, tight editorial title (Heebo Black). */
+/* Big, tight editorial title — SOFTENED from Heebo Black 900 to ExtraBold 800 so
+   it reads refined against the gentler palette (matches the admin KPI retune). */
 .ton-modal__title {
   margin: 0;
   font-size: 30px;
-  font-weight: 900;
+  font-weight: 800;
   line-height: 1.02;
   letter-spacing: -0.03em;
 }
 
-/* Sharp close affordance — a hairline square, not a grey circle. */
+/* Close affordance — a gentle-rounded hairline square, not a grey circle. */
 .ton-modal__close {
   display: inline-flex;
   flex: none;
@@ -205,7 +213,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid var(--ton-hairline);
-  border-radius: var(--ton-radius-sharp);
+  border-radius: var(--ton-radius-sm);
   background: transparent;
   color: var(--ton-text);
   font-size: 18px;
@@ -401,13 +409,13 @@
   text-decoration: underline;
 }
 
-/* ---- Primary action — sharp accent fill that INVERTS to an outline on hover ---- */
+/* ---- Primary action — gentle-rounded accent fill that INVERTS to an outline on hover ---- */
 .ton-cta {
   width: 100%;
   margin-block-start: 8px;
   padding: 16px 20px;
   border: 1.5px solid var(--ton-accent);
-  border-radius: var(--ton-radius-sharp);
+  border-radius: var(--ton-radius-control);
   background: var(--ton-accent);
   color: var(--ton-on-accent);
   font: inherit;
@@ -587,11 +595,11 @@
   margin-block-start: var(--ton-gap-lg);
 }
 
-/* Secondary result actions — sharp ink outline that inverts on hover. */
+/* Secondary result actions — gentle-rounded ink outline that inverts on hover. */
 .ton-action {
   padding: 13px 12px;
   border: 1px solid var(--ton-border);
-  border-radius: var(--ton-radius-sharp);
+  border-radius: var(--ton-radius-control);
   background: transparent;
   color: var(--ton-text);
   font: inherit;
@@ -625,7 +633,7 @@
 .ton-toast {
   margin-block-start: 10px;
   padding: 10px 12px;
-  border-radius: var(--ton-radius-sharp);
+  border-radius: var(--ton-radius-sm);
   border-inline-start: 2px solid var(--ton-accent);
   background: var(--ton-field-bg);
   color: var(--ton-text);
@@ -706,7 +714,7 @@
   width: 28px;
   height: 28px;
   border: 1px solid var(--ton-hairline);
-  border-radius: var(--ton-radius-sharp);
+  border-radius: var(--ton-radius-sm);
   background: transparent;
   color: var(--ton-text);
   font-size: 16px;

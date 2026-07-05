@@ -17,13 +17,17 @@
  * ==========================================================================*/
 
 :root {
-    /* ---- 1.1 Shared color — monochrome anchor + status (LOCKED) -------- */
-    --to-ink: #000000;
+    /* ---- 1.1 Shared color — monochrome anchor + status ----------------
+       SOFTENED (user override of the pure-black / stark lock): the ink is a cool
+       graphite slate — refined, modern, still ≥ AA on paper — not #000. The muted
+       + subtle inks are re-derived in the SAME cool-slate hue so headings, meta,
+       and labels read as one calm family instead of neutral greys. */
+    --to-ink: #1c2027;          /* cool graphite (was #000000) — soft near-black */
     --to-paper: #ffffff;
-    --to-rule: #bcbcbc;
-    --to-rule-soft: #efefef;
-    --to-ink-muted: #6b7280;
-    --to-ink-subtle: #9ca3af;
+    --to-rule: #d3d9e0;         /* gentle hairline (was #bcbcbc) — cool, not hard */
+    --to-rule-soft: #eef1f5;    /* faint cool divider (was #efefef) */
+    --to-ink-muted: #5b6472;    /* cool slate muted (was #6b7280) — harmonized */
+    --to-ink-subtle: #97a1b0;   /* cool slate subtle (was #9ca3af) */
 
     --to-success: #2d8a5a;
     --to-success-bg: #e7f2ec;
@@ -34,8 +38,9 @@
     --to-info: #2d6a8a;
     --to-info-bg: #e5eff4;
 
-    /* Modal/overlay backdrop scrim (shared by admin overlays; the widget has its own). */
-    --to-scrim: rgb(0 0 0 / 55%);
+    /* Modal/overlay backdrop scrim (shared by admin overlays; the widget has its own).
+       Lighter + cool-tinted so the dimmed page feels airy, not a heavy black wash. */
+    --to-scrim: rgb(28 32 39 / 48%);
 
     /* ---- 1.2 Typography — Heebo, the only typeface -------------------- */
     --to-font: "Heebo", system-ui, sans-serif;
@@ -77,19 +82,29 @@
     --to-space-24: 96px;
     --to-space-32: 128px;
 
-    /* ---- 1.4 Radius -------------------------------------------------- */
+    /* ---- 1.4 Radius --------------------------------------------------
+       SOFTENED: gentle rounding is the single biggest "more delicate / modern"
+       lever, per the user. --to-r-none stays a true 0 (semantic zero, still used
+       where a hard edge is deliberate), but a new --to-r-control adds a small
+       radius that buttons + fields + chips now reference instead of 0, and the
+       card radius is raised for a softer, floatier frame. */
     --to-r-none: 0;
-    --to-r-card: 7px;
+    --to-r-control: 8px;   /* NEW — gentle rounding for buttons / fields / chips */
+    --to-r-card: 12px;     /* raised from 7px — softer card / modal / image frame */
     --to-r-pill: 999px;
 
-    /* ---- 1.5 Shadows (layered soft — SIGNATURE) ---------------------- */
-    --to-shadow-card: rgb(0 0 0 / 16%) 0 47px 46px -27px, rgb(0 0 0 / 6%) 0 2px 12px 0;
-    --to-shadow-hover: rgb(0 0 0 / 16%) 0 47px 46px -27px, rgb(0 0 0 / 16%) 0 2px 12px 0;
-    --to-shadow-soft: 0 5px 10px rgb(0 0 0 / 10%);
-    /* Subtler layered variant for DENSE admin cards — same two-layer signature,
-       lower spread/opacity so a wall of cards doesn't read heavy. */
-    --to-shadow-card-dense: rgb(0 0 0 / 10%) 0 22px 26px -20px, rgb(0 0 0 / 5%) 0 1px 6px 0;
-    --to-shadow-card-hover: rgb(0 0 0 / 16%) 0 34px 34px -22px, rgb(0 0 0 / 8%) 0 2px 8px 0;
+    /* ---- 1.5 Shadows (layered soft — SIGNATURE) ----------------------
+       LIGHTENED (user: cards feel too heavy). Same two-layer signature, but the
+       big layer's spread + opacity drop hard and the tint is cool graphite
+       (28 32 39) instead of pure black, so cards read light + floaty, not weighty.
+       (47px/16% -> ~28px/10%). */
+    --to-shadow-card: rgb(28 32 39 / 9%) 0 28px 34px -24px, rgb(28 32 39 / 5%) 0 2px 8px 0;
+    --to-shadow-hover: rgb(28 32 39 / 12%) 0 34px 40px -22px, rgb(28 32 39 / 8%) 0 3px 10px 0;
+    --to-shadow-soft: 0 4px 12px rgb(28 32 39 / 7%);
+    /* Subtler layered variant for DENSE admin cards — even lighter so a wall of
+       cards floats rather than stacks up as shadow. */
+    --to-shadow-card-dense: rgb(28 32 39 / 7%) 0 16px 22px -18px, rgb(28 32 39 / 4%) 0 1px 5px 0;
+    --to-shadow-card-hover: rgb(28 32 39 / 11%) 0 26px 30px -20px, rgb(28 32 39 / 6%) 0 2px 8px 0;
 
     /* ---- 1.6 Motion (slow / calm — SIGNATURE) ------------------------ */
     --to-t-fast: 0.3s ease;
@@ -124,25 +139,28 @@
        a heavy SaaS gray) with pure-white cards that sit on a hairline rule + a
        subtle version of the signature
        layered shadow. Type — not color — carries the design. */
-    --toa-accent: #111111;
-    --toa-accent-hover: #000000;
-    --toa-accent-soft: #f1f2f4;          /* selected-row / active-nav tint; panels override */
+    --toa-accent: var(--to-ink);         /* default accent = the soft graphite ink */
+    --toa-accent-hover: #0e1116;         /* one notch darker than ink for hover */
+    --toa-accent-soft: #eef1f6;          /* selected-row / active-nav tint; panels override */
     --toa-accent-line: var(--to-ink);    /* active-nav indicator bar; panels override */
     --toa-accent-on: var(--to-paper);    /* text/icon on the accent fill */
-    --toa-bg: #f4f6f8;                    /* clean, faintly-cool near-white paper canvas */
+    --toa-bg: #f5f7fb;                    /* SOFTENED — airy, faintly-cool near-white (was #f4f6f8, warmer/lighter, less grey) */
     --toa-surface: var(--to-paper);      /* pure-white cards */
-    --toa-surface-alt: #f8fafb;          /* zebra / inset wells */
-    --toa-border: #e3e7ec;               /* soft neutral hairline rule (harmonizes with blue) */
-    --toa-border-strong: #d1d7de;        /* a firmer rule for card edges / dividers */
-    --toa-focus: rgb(17 17 17 / 35%);    /* panels override the rgb to their brand */
+    --toa-surface-alt: #f7f9fc;          /* zebra / inset wells — cool, barely-there */
+    --toa-border: #e6eaf1;               /* SOFTENED hairline (was #e3e7ec) — gentle, cool */
+    --toa-border-strong: #d7dde6;        /* SOFTENED firmer rule (was #d1d7de) */
+    --toa-focus: rgb(28 32 39 / 30%);    /* panels override the rgb to their brand */
 
     /* 2.2 Admin typography — editorial hierarchy. KPI numerals are the hero move:
        oversized Heebo Black 900, display line-height, tabular. Titles get a big
        tight size; a tracked uppercase EYEBROW sits above them. */
     --toa-type-kpi-size: clamp(2.5rem, 2rem + 1.4vw, 2.85rem);  /* ~40–46px */
-    --toa-type-kpi-weight: var(--to-fw-black);
+    /* SOFTENED: dropped from Black 900 to ExtraBold 800 — the oversized numeral is
+       still the editorial hero, but reads refined against the gentler palette
+       instead of harsh. Rendered in the soft graphite ink, not pure black. */
+    --toa-type-kpi-weight: var(--to-fw-extrabold);
     --toa-type-display-size: clamp(1.75rem, 1.4rem + 1.2vw, 2.25rem); /* page titles */
-    --toa-type-display-weight: var(--to-fw-black);
+    --toa-type-display-weight: var(--to-fw-extrabold);  /* softened from Black 900 */
     --toa-type-h-size: 1.0625rem;        /* 17px section headings */
     --toa-type-h-weight: var(--to-fw-bold);
     --toa-type-eyebrow-size: 0.6875rem;  /* 11px tracked uppercase caption */
@@ -153,12 +171,15 @@
     --toa-type-caption-size: 0.75rem;    /* 12px */
     --toa-type-caption-weight: var(--to-fw-medium);
 
-    /* 2.3 Admin radius — sharp Tabuzzco: cards take the 7px signature; controls +
-       fields go NEAR-sharp (2px) so the admin reads editorial, not bubbly.
-       Buttons are fully sharp (radius 0) via --to-r-none at the call site. */
-    --toa-radius-card: var(--to-r-card);   /* 7px signature */
-    --toa-radius-control: 2px;
-    --toa-radius-field: 2px;
+    /* 2.3 Admin radius — SOFTENED: gentle rounding replaces the sharp Tabuzzco
+       edges (user override). Cards take the raised card radius; controls, fields,
+       and buttons take the gentle --to-r-control (8px) so the admin reads modern
+       and delicate, not bubbly and not stark. --toa-radius-button is NEW so
+       buttons.css references a token instead of the hardcoded --to-r-none. */
+    --toa-radius-card: var(--to-r-card);        /* raised card radius (12px) */
+    --toa-radius-control: 6px;                  /* gentle (was 2px) — sidebar items, badges, chips */
+    --toa-radius-field: var(--to-r-control);    /* gentle 8px (was 2px) — inputs, selects */
+    --toa-radius-button: var(--to-r-control);   /* NEW — gentle 8px buttons (was radius 0) */
 
     /* 2.4 Admin shadow / spacing aliases — the subtler layered signature. */
     --toa-shadow-card: var(--to-shadow-card-dense);
@@ -178,11 +199,13 @@
      * adapt-able; everything else is locked Tabuzzco.
      * ======================================================================*/
 
-    /* 3.1 Widget color */
+    /* 3.1 Widget color — SOFTENED to match the storefront modal retune (the live
+       values live on --ton-* in widget.css; this is the single-sourced mirror).
+       Overlay is lighter + cool-tinted; inks derive from the soft graphite. */
     --tow-accent: var(--to-ink);
     --tow-accent-on: var(--to-paper);
     --tow-surface: var(--to-paper);
-    --tow-overlay: rgb(0 0 0 / 55%);
+    --tow-overlay: rgb(28 32 39 / 52%);
     --tow-hairline: var(--to-rule-soft);
 
     /* 3.2 Widget typography (the premium moments) */
@@ -193,8 +216,9 @@
     --tow-type-button-size: 13px;
     --tow-type-caption-size: 13px;
 
-    /* 3.3 Widget radius / motion (locked Tabuzzco) */
-    --tow-radius-button: var(--to-r-none);
+    /* 3.3 Widget radius / motion — SOFTENED: gentle rounding on the button (was
+       sharp radius 0); image + card frames take the raised card radius. */
+    --tow-radius-button: var(--to-r-control);
     --tow-radius-image: var(--to-r-card);
     --tow-radius-chip: var(--to-r-pill);
     --tow-t-button: var(--to-t-base);
