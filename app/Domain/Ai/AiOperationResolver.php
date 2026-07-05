@@ -147,6 +147,14 @@ final class AiOperationResolver
             fallbackProvider: $fallback !== null
                 ? $this->providerForModel($operationKey, $fallback)
                 : ImageGenerationProvider::PROVIDER_OPENROUTER,
+            // The per-model price hints from the catalog. For a flat-rate provider
+            // (BytePlus) this is the authoritative per-image charge — single-sourced
+            // here, never a service literal. Null when the model carries no hint; the
+            // caller falls back to the operation estimate (OperationConfig::flatRate*).
+            modelCostHintMicroUsd: $this->costHintForModel($operationKey, $model),
+            fallbackModelCostHintMicroUsd: $fallback !== null
+                ? $this->costHintForModel($operationKey, $fallback)
+                : null,
         );
 
         return new ResolvedOperation(
@@ -318,6 +326,21 @@ final class AiOperationResolver
         return is_string($provider) && $provider !== ''
             ? $provider
             : ImageGenerationProvider::PROVIDER_OPENROUTER;
+    }
+
+    /**
+     * The per-model price hint (micro-USD) for a model id, read from the catalog. Null
+     * when the id isn't catalogued or carries no hint (e.g. an operation default not in
+     * ai_models) — the caller then falls back to the operation estimate.
+     */
+    private function costHintForModel(string $operationKey, string $modelId): ?int
+    {
+        $hint = AiModel::query()
+            ->forOperation($operationKey)
+            ->where('model_id', $modelId)
+            ->value('cost_hint_micro_usd');
+
+        return $hint !== null ? (int) $hint : null;
     }
 
     /**

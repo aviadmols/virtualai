@@ -6,12 +6,16 @@ use App\Domain\Credits\CreditMath;
 use App\Domain\Generation\GenerateTryOnJob;
 use App\Domain\Generation\GenerationFailureCode;
 use App\Models\ActivityEvent;
+use App\Models\AiModel;
+use App\Models\AiOperation;
 use App\Models\CreditLedger;
 use App\Models\EndUser;
 use App\Models\Generation;
 use App\Support\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 /**
@@ -207,5 +211,126 @@ class GenerateTryOnJobTest extends TestCase
         $this->assertContains(ActivityEvent::KIND_GENERATION_RESERVED, $kinds);
         $this->assertContains(ActivityEvent::KIND_GENERATION_PROCESSING, $kinds);
         $this->assertContains(ActivityEvent::KIND_GENERATION_SUCCEEDED, $kinds);
+    }
+
+    // === BytePlus (flat-rate provider) money-path — the cost_unavailable fix ===
+
+    private const BYTEPLUS_BASE = 'https://ark.ap-southeast.bytepluses.com/api/v3';
+    private const BYTEPLUS_GEN = self::BYTEPLUS_BASE.'/images/generations';
+
+    /**
+     * Make a BytePlus (Seedream) model the sole try-on model with the given per-image
+     * price hint (micro-USD; null = no price). Removes the OpenRouter default/fallback so
+     * EVERY usable attempt is flat-rate — the exact shape that hit cost_unavailable.
+     */
+    private function useBytePlusOnlyModel(?int $costHintMicroUsd): void
+    {
+        config()->set('services.byteplus.api_key', 'bp-real-key');
+        config()->set('services.byteplus.base_url', self::BYTEPLUS_BASE);
+        config()->set('services.byteplus.timeout', 30);
+        config()->set('services.byteplus.probe_model', 'seedream-5-0-260128');
+        Sleep::fake();
+
+        // Drop the OpenRouter default + fallback so no attempt can return an inline cost.
+        AiOperation::query()->where('operation_key', 'try_on_generation')
+            ->update(['default_model' => 'seedream-5-0-260128', 'fallback_model' => null]);
+        AiModel::query()->where('operation_key', 'try_on_generation')
+            ->where('provider', AiModel::PROVIDER_OPENROUTER)
+            ->update(['is_active' => false, 'is_default' => false, 'is_fallback' => false]);
+
+        AiModel::query()->where('operation_key', 'try_on_generation')
+            ->where('model_id', 'seedream-5-0-260128')
+            ->update([
+                'is_active' => true,
+                'is_default' => true,
+                'is_fallback' => false,
+                'cost_hint_micro_usd' => $costHintMicroUsd,
+            ]);
+    }
+
+    /** Fake a successful BytePlus images/generations response (b64 image, no cost field). */
+    private function fakeBytePlusSuccess(): void
+    {
+        $png = "\x89PNG\r\n\x1a\nSEEDREAM-TRYON";
+
+        Http::fake([
+            self::BYTEPLUS_GEN => Http::response([
+                'model' => 'seedream-5-0-260128',
+                'data' => [['b64_json' => base64_encode($png)]],
+            ], 200),
+        ]);
+    }
+
+    public function test_byteplus_model_without_a_price_fails_before_any_provider_call(): void
+    {
+        // (a) A flat-rate model with NO configured price must be caught BEFORE the reserve
+        // and BEFORE any BytePlus HTTP request — no render wasted, no charge, nothing held.
+        $this->useBytePlusOnlyModel(costHintMicroUsd: null);
+        // Also clear the operation estimate so the fallback price chain is truly empty.
+        AiOperation::query()->where('operation_key', 'try_on_generation')
+            ->update(['estimated_cost_micro_usd' => null]);
+        Http::fake(); // record everything; assert nothing is sent
+
+        $context = $this->makeContext();
+        $generation = $this->makePendingGeneration($context);
+
+        $this->runJob($context, $generation);
+
+        // ZERO provider calls — the failure happened before the BytePlus request.
+        Http::assertNothingSent();
+
+        $generation->refresh();
+        $this->assertSame(Generation::STATUS_CANCELLED, $generation->status);
+        $this->assertSame(GenerationFailureCode::AI_COST_NOT_CONFIGURED, $generation->failure_code);
+        $this->assertNull($generation->charge_ledger_id);
+        // The stamped message is actionable: it names the model + points to the price.
+        $this->assertStringContainsString('seedream-5-0-260128', (string) $generation->meta[Generation::META_FAILURE_MESSAGE]);
+
+        // No charge, balance intact, nothing reserved, free try NOT consumed.
+        $account = $context['account']->fresh();
+        $this->assertSame(self::FIVE_DOLLARS_MICRO, $account->balance_micro_usd);
+        $this->assertSame(0, $account->reserved_micro_usd);
+        $charges = Tenant::run($context['account'], fn () => CreditLedger::query()
+            ->where('type', CreditLedger::TYPE_CHARGE)->count());
+        $this->assertSame(0, $charges);
+        $this->assertSame(0, $context['endUser']->fresh()->generations_used);
+    }
+
+    public function test_byteplus_model_with_a_price_generates_and_charges_price_times_markup(): void
+    {
+        // (b) A flat-rate model WITH a per-image price charges price × markup from the
+        // per-model cost hint — proving AiModel.cost_hint_micro_usd now drives the charge.
+        $priceMicro = 35_000; // $0.035 per image
+        $this->useBytePlusOnlyModel(costHintMicroUsd: $priceMicro);
+        $this->fakeBytePlusSuccess();
+
+        $context = $this->makeContext();
+        $generation = $this->makePendingGeneration($context);
+
+        $this->runJob($context, $generation);
+
+        $generation->refresh();
+        $this->assertSame(Generation::STATUS_SUCCEEDED, $generation->status);
+        $this->assertNotNull($generation->result_image_path);
+        $this->assertNotNull($generation->charge_ledger_id);
+
+        // The charge = per-image price × the default 2.5 markup, at the selling value.
+        $priceUsd = CreditMath::microToUsd($priceMicro);
+        $expectedCharge = CreditMath::chargeMicroUsd($priceUsd, 2.5);
+        $this->assertSame(CreditMath::usdToMicro($priceUsd), $generation->actual_cost_micro_usd);
+
+        $account = $context['account']->fresh();
+        $this->assertSame(self::FIVE_DOLLARS_MICRO - $expectedCharge, $account->balance_micro_usd);
+        $this->assertSame(0, $account->reserved_micro_usd);
+
+        $charges = Tenant::run($context['account'], fn () => CreditLedger::query()
+            ->where('type', CreditLedger::TYPE_CHARGE)->get());
+        $this->assertCount(1, $charges);
+        $this->assertSame(-$expectedCharge, $charges->first()->amount_micro_usd);
+
+        // The BytePlus endpoint WAS called (unlike the price-less case).
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/images/generations')
+            && $req['model'] === 'seedream-5-0-260128');
+        $this->assertSame(1, $context['endUser']->fresh()->generations_used);
     }
 }

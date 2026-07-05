@@ -52,17 +52,20 @@ final class TryOnGenerationCaller
         ImagePayload $variantImage,
         array $vars = [],
     ): TryOnResult {
-        $attempts = [[$config->provider, $config->model]];
+        // Each attempt carries its OWN flat-rate price (the resolved per-model cost hint,
+        // else the operation estimate). It is the authoritative charge for a flat-rate
+        // provider (BytePlus); OpenRouter ignores it (it returns a real inline cost).
+        $attempts = [[$config->provider, $config->model, $config->flatRatePriceMicroUsd()]];
 
         if ($config->fallbackModel !== null && $config->fallbackModel !== '') {
-            $attempts[] = [$config->fallbackProvider, $config->fallbackModel];
+            $attempts[] = [$config->fallbackProvider, $config->fallbackModel, $config->fallbackFlatRatePriceMicroUsd()];
         }
 
         $last = null;
 
-        foreach ($attempts as [$providerId, $modelId]) {
+        foreach ($attempts as [$providerId, $modelId, $flatRatePriceMicroUsd]) {
             try {
-                return $this->attempt($config, $providerId, $modelId, $shopperImage, $variantImage, $vars);
+                return $this->attempt($config, $providerId, $modelId, $flatRatePriceMicroUsd, $shopperImage, $variantImage, $vars);
             } catch (OpenRouterException $e) {
                 $last = $e; // step to the next (fallback) provider/model, if any
             }
@@ -85,6 +88,7 @@ final class TryOnGenerationCaller
         OperationConfig $config,
         string $providerId,
         string $modelId,
+        ?int $flatRatePriceMicroUsd,
         ImagePayload $shopperImage,
         ImagePayload $variantImage,
         array $vars,
@@ -114,7 +118,10 @@ final class TryOnGenerationCaller
         return new TryOnResult(
             imageBytes: $bytes,
             mimeType: $mime,
-            cost: $provider->parseCost($response, $config->estimatedCostMicroUsd),
+            // The flat-rate price is this attempt's authoritative charge for BytePlus;
+            // OpenRouter uses its inline cost and treats this only as the unavailable
+            // estimate carrier — so parseCost stays honest on both providers.
+            cost: $provider->parseCost($response, $flatRatePriceMicroUsd),
             modelUsed: $modelUsed,
             openrouterGenerationId: $provider->extractGenerationId($response),
         );

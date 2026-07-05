@@ -123,6 +123,15 @@ class AiModelResource extends Resource
                         ->numeric()
                         ->prefix('$')
                         ->step('0.000001')
+                        // A BytePlus (flat-rate) model returns no cost, so its per-image price
+                        // IS the charge — it can't be saved price-less (that was the silent
+                        // cost_unavailable). Required + strictly positive when provider=byteplus.
+                        ->required(fn (Get $get): bool => $get('provider') === AiModel::PROVIDER_BYTEPLUS)
+                        ->minValue(fn (Get $get): ?string => $get('provider') === AiModel::PROVIDER_BYTEPLUS ? '0.000001' : null)
+                        ->validationMessages([
+                            'required' => __('platform.models.field.cost_hint_required_byteplus'),
+                            'min' => __('platform.models.field.cost_hint_required_byteplus'),
+                        ])
                         // Entered + shown in USD; stored as integer micro-USD. Both directions
                         // convert in-field so the price persists (a second conversion on the
                         // page previously nulled it). number_format avoids scientific notation

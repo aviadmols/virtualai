@@ -80,4 +80,43 @@ class AiModelCostHintTest extends TestCase
         Livewire::test(EditAiModel::class, ['record' => $model->getRouteKey()])
             ->assertFormSet(['cost_hint_micro_usd' => '0.035']);
     }
+
+    public function test_a_byteplus_model_cannot_be_saved_without_a_per_image_price(): void
+    {
+        // (c) A flat-rate model returns no cost, so its per-image price IS the charge — the
+        // form must reject a price-less BytePlus model (that silent gap caused cost_unavailable).
+        Livewire::test(CreateAiModel::class)
+            ->fillForm([
+                'model_id' => 'seedream-5-0-260128',
+                'operation_key' => 'try_on_generation',
+                'provider' => AiModel::PROVIDER_BYTEPLUS,
+                'cost_hint_micro_usd' => null, // no price
+                'cost_unit' => AiModel::UNIT_PER_IMAGE,
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['cost_hint_micro_usd']);
+
+        $this->assertDatabaseMissing('ai_models', ['model_id' => 'seedream-5-0-260128']);
+    }
+
+    public function test_an_openrouter_model_may_be_saved_without_a_price(): void
+    {
+        // The requirement is BytePlus-only: OpenRouter returns a real inline cost, so a
+        // missing price hint is fine (it's only an estimate/display value there).
+        Livewire::test(CreateAiModel::class)
+            ->fillForm([
+                'model_id' => 'google/gemini-2.5-flash-image',
+                'operation_key' => 'try_on_generation',
+                'provider' => AiModel::PROVIDER_OPENROUTER,
+                'cost_hint_micro_usd' => null,
+                'cost_unit' => AiModel::UNIT_PER_IMAGE,
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('ai_models', [
+            'model_id' => 'google/gemini-2.5-flash-image',
+            'cost_hint_micro_usd' => null,
+        ]);
+    }
 }

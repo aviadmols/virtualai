@@ -73,6 +73,14 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
     private const VAR_VARIANT = 'variant';
     private const VAR_HEIGHT = 'height';
 
+    // The actionable message stamped on an AI_COST_NOT_CONFIGURED failure — names the
+    // flat-rate model and says exactly where to set its per-image price. i18n (en/he 1:1).
+    private const MSG_COST_NOT_CONFIGURED = 'platform.generation.cost_not_configured';
+
+    // Stamped on a COST_UNAVAILABLE failure: the model produced an image but returned no
+    // usable cost (provider-neutral — OpenRouter lag or a flat-rate price that vanished).
+    private const MSG_COST_UNAVAILABLE = 'platform.generation.cost_unavailable';
+
     public function __construct(
         int $accountId,
         public readonly int $siteId,
@@ -127,6 +135,17 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         // fall back to the scanned product_type, then the generic global prompt.
         $promptType = $site->product_category ?: $product->product_type;
         $config = $this->resolver()->for(self::OPERATION_KEY, $site, $promptType);
+
+        // Fail EARLY on a mis-configured flat-rate model (BytePlus with no per-image
+        // price), BEFORE reserving or calling the provider — so no render is wasted on a
+        // generation that could never charge honestly. Skipped when any attempt is an
+        // OpenRouter model (that returns a real inline cost, knowable only after the call).
+        if ($config->flatRatePriceMissing()) {
+            $this->failOnMisconfiguration($generation, $config);
+
+            return;
+        }
+
         $estimate = $this->estimator()->estimateMicroUsd($config);
 
         if (! $this->passesCreditGate($generation, $endUser, $estimate)) {
@@ -167,7 +186,7 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         // can never reach CreditMath::chargeMicroUsd() on ANY path. On a missing cost:
         // release the reservation, write NO charge row, and do NOT consume a free try.
         if (! $result->cost->available || $result->cost->costUsd === null) {
-            $this->finalizeFailure($generation, $reservation, GenerationFailureCode::COST_UNAVAILABLE, 'OpenRouter returned no usable cost.');
+            $this->finalizeFailure($generation, $reservation, GenerationFailureCode::COST_UNAVAILABLE, (string) __(self::MSG_COST_UNAVAILABLE));
 
             return;
         }
@@ -286,6 +305,37 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
     }
 
     /**
+     * Fail a generation whose resolved config could NEVER charge honestly — a flat-rate
+     * (BytePlus) model with no configured per-image price. Detected BEFORE the reserve
+     * and the provider call: no reservation was taken (nothing to release) and no model
+     * ran, so this is a pending -> cancelled exit (the only legal pre-processing exit),
+     * exactly like a gate denial. Stamps AI_COST_NOT_CONFIGURED + an actionable message
+     * naming the model and where to set its price, into failure_code + the activity trace.
+     */
+    private function failOnMisconfiguration(Generation $generation, OperationConfig $config): void
+    {
+        $message = (string) __(self::MSG_COST_NOT_CONFIGURED, ['model' => $config->model]);
+
+        $generation->forceFill([
+            'failure_code' => GenerationFailureCode::AI_COST_NOT_CONFIGURED,
+            'meta' => array_merge($generation->meta ?? [], [
+                Generation::META_FAILURE_MESSAGE => $message,
+            ]),
+        ])->save();
+
+        $generation->transitionTo(Generation::STATUS_CANCELLED, [
+            'failure_code' => GenerationFailureCode::AI_COST_NOT_CONFIGURED,
+            'model' => $config->model,
+        ]);
+
+        $this->recordActivity(ActivityEvent::KIND_GENERATION_FAILED, $generation, [
+            'failure_code' => GenerationFailureCode::AI_COST_NOT_CONFIGURED,
+            'message' => $message,
+            'model' => $config->model,
+        ]);
+    }
+
+    /**
      * Resolve the AI bag, assemble the prompt vars, and call the OpenRouter try-on.
      * The shopper photo comes from the stored source; the variant image from the
      * selected variant. Prompt substitution happens INSIDE the caller (strtr).
@@ -363,7 +413,7 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         $costUsd = $result->cost->costUsd;
 
         if ($costUsd === null) {
-            $this->finalizeFailure($generation, $reservation, GenerationFailureCode::COST_UNAVAILABLE, 'OpenRouter returned no usable cost.');
+            $this->finalizeFailure($generation, $reservation, GenerationFailureCode::COST_UNAVAILABLE, (string) __(self::MSG_COST_UNAVAILABLE));
 
             return;
         }

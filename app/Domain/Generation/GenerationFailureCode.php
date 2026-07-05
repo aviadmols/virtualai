@@ -22,6 +22,7 @@ final class GenerationFailureCode
     // The model/storage failures (the reservation is released; NO charge row).
     public const AI_CALL_FAILED = 'ai_call_failed';              // any classified OpenRouterException
     public const COST_UNAVAILABLE = 'cost_unavailable';          // no real cost came back — cannot charge honestly
+    public const AI_COST_NOT_CONFIGURED = 'ai_cost_not_configured'; // flat-rate model has NO configured price — caught BEFORE the provider call
     public const STORAGE_FAILED = 'storage_failed';              // result bytes could not be stored
     public const INTERNAL_ERROR = 'internal_error';              // an unexpected exception on the worker
 
@@ -32,6 +33,7 @@ final class GenerationFailureCode
         self::ACCOUNT_INACTIVE,
         self::AI_CALL_FAILED,
         self::COST_UNAVAILABLE,
+        self::AI_COST_NOT_CONFIGURED,
         self::STORAGE_FAILED,
         self::INTERNAL_ERROR,
     ];

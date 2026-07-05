@@ -278,6 +278,7 @@ return [
             'is_fallback' => 'Fallback for operation',
             'cost_hint' => 'Cost hint',
             'cost_hint_help' => 'Price per image (BytePlus) or per 1K tokens (OpenRouter), in USD — e.g. 0.03. Required for a BytePlus model to charge.',
+            'cost_hint_required_byteplus' => 'A BytePlus model needs a per-image price (in USD, above 0) — it returns no cost, so this is the price you charge.',
             'cost_unit' => 'Cost unit',
             'is_active' => 'Active',
         ],
@@ -542,5 +543,12 @@ return [
             'page_uid' => 'Payment page UID',
             'webhook_secret' => 'Webhook secret',
         ],
+    ],
+
+    // Diagnostic messages stamped on a generation's failure_code + activity trace, shown
+    // to the super-admin (they are the ones who fix the config). Not shopper-facing.
+    'generation' => [
+        'cost_not_configured' => 'Try-on could not run: the model ":model" is a BytePlus model with no per-image price. Set its price (in USD) on the AI models page before using it.',
+        'cost_unavailable' => 'The model produced an image but returned no usable cost, so nothing was charged. Check the model on the AI models page.',
     ],
 ];
