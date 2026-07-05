@@ -76,6 +76,26 @@ final class Tenant
     }
 
     /**
+     * Bind an account for the REST OF THE HTTP REQUEST (not a closure window).
+     *
+     * The merchant panel needs this because Filament runs a Livewire "update"
+     * (every Save / action / pick) on a SEPARATE terminal middleware pipeline: the
+     * tenant middleware's $next returns immediately, so a run()-scoped bind would
+     * clear before the component method executes. This binds for the whole request
+     * instead, mirroring Filament::setTenant's lifetime.
+     *
+     * Leak-safe by construction: it FIRST clears any stale binding (so a prior
+     * request can never bleed in), then re-binds. BindMerchantAccount calls this at
+     * the very start of every merchant request (GET and Livewire update), before any
+     * component runs, so the request always starts from a clean, correct account.
+     */
+    public static function bindForRequest(Account|int $account): void
+    {
+        self::$accountId = null;
+        self::set($account);
+    }
+
+    /**
      * Force-clear the tenant context. Test/CLI escape hatch only — product code
      * relies on run()'s finally to clear, never a manual clear.
      */

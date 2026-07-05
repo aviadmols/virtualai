@@ -115,15 +115,21 @@ class User extends Authenticatable implements FilamentUser, HasTenants
 
     /**
      * The shops (Site tenants) this user may switch between in the merchant panel — the security
-     * boundary for the switcher. A merchant sees ONLY their account's sites (via the audited seam,
-     * read through the normal account scope). A super-admin's list is empty: they reach a shop by
-     * drill-in URL (gated by canAccessTenant), not the menu. account_id === null → empty (fail-closed).
+     * boundary for the switcher AND the source of getDefaultTenant (the shop a panel URL built with
+     * no explicit tenant resolves to). A user with an account_id sees ONLY their account's sites
+     * (via the audited seam, read through the normal account scope) — this now INCLUDES a super-admin
+     * who ALSO owns an account, so a super-admin+owner behaves like a normal owner (their own shops
+     * resolve, Save / redirects work, instead of getDefaultTenant being null → /merchant/new).
+     *
+     * A PURE super-admin (account_id === null) has an EMPTY list: they reach any shop by drill-in URL
+     * (gated by canAccessTenant), not the switcher. account_id === null → empty (fail-closed): the
+     * only accounts a user can list are their OWN, never another account's.
      *
      * @return Collection<int, Site>
      */
     public function getTenants(Panel $panel): Collection
     {
-        if ($this->isSuperAdmin() || $this->account_id === null) {
+        if ($this->account_id === null) {
             return collect();
         }
 

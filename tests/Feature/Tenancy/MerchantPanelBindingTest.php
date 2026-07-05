@@ -48,10 +48,11 @@ class MerchantPanelBindingTest extends TestCase
     }
 
     /**
-     * Run a payload INSIDE the merchant binding as the given (or no) auth user, and
-     * return what the payload observed. The middleware contract requires $next to return
-     * a Response, so the payload result is captured via a side-channel while $next returns
-     * a real Response — exactly the binding window a Filament request renders inside.
+     * Run a payload INSIDE the merchant binding as the given (or no) auth user, and return what the
+     * payload observed. The bind is now REQUEST-LIFETIME (it must survive to the Livewire-update
+     * component method, which runs after the terminal persistent-middleware pipeline), so this
+     * helper clears the binding afterwards to emulate request termination — keeping each case
+     * isolated exactly as the app()->terminating() clear does per real request.
      */
     private function throughMiddleware(?User $user, callable $payload): mixed
     {
@@ -59,14 +60,18 @@ class MerchantPanelBindingTest extends TestCase
         $request->setUserResolver(static fn () => $user);
 
         $observed = null;
-        (new BindMerchantAccount)->handle(
-            $request,
-            static function () use ($payload, &$observed): Response {
-                $observed = $payload();
+        try {
+            app(BindMerchantAccount::class)->handle(
+                $request,
+                static function () use ($payload, &$observed): Response {
+                    $observed = $payload();
 
-                return new Response('ok');
-            },
-        );
+                    return new Response('ok');
+                },
+            );
+        } finally {
+            Tenant::clear(); // emulate app()->terminating(): request-lifetime bind cleared at request end
+        }
 
         return $observed;
     }
@@ -101,17 +106,61 @@ class MerchantPanelBindingTest extends TestCase
         }
     }
 
-    public function test_binding_clears_after_the_request_so_nothing_leaks_to_the_next(): void
+    public function test_binding_survives_the_middleware_next_but_clears_at_request_end(): void
     {
         $account = Account::factory()->create();
         $owner = User::factory()->forAccount($account)->create();
 
         $this->assertFalse(Tenant::check());
 
+        // The bind is request-lifetime: it is set while the payload runs (inside $next)...
         $bound = $this->throughMiddleware($owner, fn () => Tenant::current());
-
         $this->assertSame($account->id, $bound);
-        // Tenant::run's finally cleared the binding once the request finished.
+
+        // ...and throughMiddleware's finally (emulating app()->terminating()) clears it, so nothing
+        // leaks to the next request.
+        $this->assertFalse(Tenant::check());
+    }
+
+    public function test_the_bind_is_NOT_cleared_by_the_terminal_middleware_pipeline_returning(): void
+    {
+        // Regression guard for the write-path bug: on a Livewire update the tenant middleware's
+        // $next returns immediately (terminal pipeline). The bind must still be ACTIVE afterwards so
+        // the component's Save / action runs account-scoped. Prove handle() leaves it bound (only
+        // request-termination clears it), unlike the old run()-scoped bind that cleared on $next.
+        $account = Account::factory()->create();
+        $owner = User::factory()->forAccount($account)->create();
+
+        $request = Request::create('/merchant', 'GET');
+        $request->setUserResolver(static fn () => $owner);
+
+        try {
+            app(BindMerchantAccount::class)->handle(
+                $request,
+                static fn (): Response => new Response('ok'), // terminal $next, like the update pipeline
+            );
+
+            // Still bound AFTER handle() returned — this is what makes Save / pick work on updates.
+            $this->assertTrue(Tenant::check());
+            $this->assertSame($account->id, Tenant::current());
+        } finally {
+            Tenant::clear();
+        }
+    }
+
+    public function test_a_stale_binding_is_replaced_not_merged_so_accounts_never_bleed(): void
+    {
+        // Simulate a previous request leaving a binding behind (e.g. terminating not yet run):
+        // the next merchant request must REPLACE it with its own account, never keep the stale one.
+        $accountA = Account::factory()->create();
+        $accountB = Account::factory()->create();
+        $ownerB = User::factory()->forAccount($accountB)->create();
+
+        Tenant::bindForRequest($accountA->id); // stale binding from a prior request
+
+        $bound = $this->throughMiddleware($ownerB, fn () => Tenant::current());
+
+        $this->assertSame($accountB->id, $bound, 'the stale account A binding must be replaced by B');
         $this->assertFalse(Tenant::check());
     }
 
