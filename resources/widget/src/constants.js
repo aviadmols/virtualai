@@ -62,6 +62,8 @@ export const APPEARANCE = {
   popupTheme: 'popup_theme',
   popupAccent: 'popup_accent',
   askHeight: 'ask_height',
+  customAnchor: 'custom_anchor_selector',
+  customPosition: 'custom_position',
 };
 
 // Placement values (WidgetAppearance::PLACEMENT_*).
@@ -70,6 +72,15 @@ export const PLACEMENT = {
   beforeAtc: 'before_add_to_cart',
   fixedBR: 'fixed_bottom_right',
   fixedBL: 'fixed_bottom_left',
+  custom: 'custom',
+};
+
+// Where the button sits relative to a custom anchor (WidgetAppearance::POSITION_*).
+export const POSITION = {
+  before: 'before',
+  after: 'after',
+  prepend: 'prepend',
+  append: 'append',
 };
 
 export const POPUP_THEME = { light: 'light', dark: 'dark' };

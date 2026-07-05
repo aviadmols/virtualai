@@ -74,6 +74,17 @@ export function onIdle(fn, timeout) {
   }
 }
 
+/** document.querySelector that never throws on a malformed/empty selector (returns null).
+ *  A merchant-supplied custom anchor is arbitrary text — it must never break the host page. */
+export function safeQuery(selector) {
+  if (!selector || typeof selector !== 'string') return null;
+  try {
+    return document.querySelector(selector);
+  } catch {
+    return null;
+  }
+}
+
 /** Read a CSS selector from the per-site config, tolerating both shapes:
  *  a flat string ("button.add-to-cart") OR the scanner's object ({ primary: "..." }). */
 export function selectorString(selectorConfig, role) {

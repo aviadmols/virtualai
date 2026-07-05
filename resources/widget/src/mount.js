@@ -5,9 +5,9 @@
 // selected variant so the modal/result/cart reference the SAME variant the shopper sees.
 // Teardown disconnects the observer, removes the button + shell, and clears listeners.
 
-import { MOUNT_SENTINEL_ATTR, APPEARANCE, OBSERVER_DEBOUNCE_MS, EVENTS } from './constants.js';
+import { MOUNT_SENTINEL_ATTR, APPEARANCE, PLACEMENT, OBSERVER_DEBOUNCE_MS, EVENTS } from './constants.js';
 import { state } from './state.js';
-import { debounce } from './dom.js';
+import { debounce, safeQuery } from './dom.js';
 import { findAddToCart, readSelectedVariant } from './pdp.js';
 import * as button from './button.js';
 import * as shell from './shell.js';
@@ -58,13 +58,23 @@ function inject() {
   }
   if (liveFound) return;
 
+  const appearance = state.config.appearance;
   const anchor = findAddToCart(selectors);
-  // Fixed placements don't need an anchor; inline placements do.
-  const needsAnchor = placement !== 'fixed_bottom_right' && placement !== 'fixed_bottom_left';
-  if (needsAnchor && !anchor) return; // theme not ready; the observer will fire again
 
-  wrapper = button.build(state.config.appearance);
-  button.place(wrapper, anchor, placement);
+  // Custom placement carries the merchant-picked anchor + position; the add-to-cart anchor is
+  // its runtime fallback (place() uses it if the custom selector no longer resolves).
+  const custom = placement === PLACEMENT.custom
+    ? { selector: appearance[APPEARANCE.customAnchor], position: appearance[APPEARANCE.customPosition] }
+    : null;
+  const customAnchor = custom ? safeQuery(custom.selector) : null;
+
+  // Fixed placements need no anchor. Inline placements need the add-to-cart anchor. Custom needs
+  // EITHER its own anchor OR the add-to-cart fallback — else the theme isn't ready; retry later.
+  const isFixed = placement === PLACEMENT.fixedBR || placement === PLACEMENT.fixedBL;
+  if (! isFixed && ! anchor && ! customAnchor) return;
+
+  wrapper = button.build(appearance);
+  button.place(wrapper, anchor, placement, custom);
 }
 
 /** Re-read the selected variant; emit a change event when it differs. */

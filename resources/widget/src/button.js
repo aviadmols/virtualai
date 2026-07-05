@@ -6,9 +6,9 @@
 // MOUNT_SENTINEL_ATTR so injection is idempotent (never duplicated).
 
 import widgetCss from '../styles/widget.css';
-import { MOUNT_SENTINEL_ATTR, APPEARANCE, PLACEMENT } from './constants.js';
+import { MOUNT_SENTINEL_ATTR, APPEARANCE, PLACEMENT, POSITION } from './constants.js';
 import { t } from './i18n.js';
-import { el } from './dom.js';
+import { el, safeQuery } from './dom.js';
 
 const GLYPH = '✦';
 
@@ -120,23 +120,62 @@ function setVar(root, name, value) {
 }
 
 /**
- * Place the wrapper relative to the add-to-cart anchor per the placement config. Fixed
- * placements append to <body> (a screen corner); inline placements insert after/before
- * the anchor (default: after — the button lives BELOW add-to-cart).
+ * Place the wrapper per the placement config. Fixed placements append to <body> (a screen
+ * corner); CUSTOM places relative to the merchant-picked host anchor (visual picker); inline
+ * placements insert after/before the add-to-cart anchor (default: after — below add-to-cart).
+ *
+ * `custom` = { selector, position } (only for PLACEMENT.custom). If the custom anchor no longer
+ * resolves on the live page, we FALL BACK to the add-to-cart anchor so the button never vanishes.
  */
-export function place(wrapper, anchor, placement) {
+export function place(wrapper, anchor, placement, custom) {
   if (placement === PLACEMENT.fixedBR || placement === PLACEMENT.fixedBL) {
     document.body.appendChild(wrapper);
     return;
   }
 
-  const parent = anchor.parentNode;
+  // Custom anchor wins when it resolves; otherwise fall through to the add-to-cart placement.
+  if (placement === PLACEMENT.custom && custom && placeCustom(wrapper, custom)) {
+    return;
+  }
+
+  const parent = anchor && anchor.parentNode;
   if (!parent) return;
 
   if (placement === PLACEMENT.beforeAtc) {
     parent.insertBefore(wrapper, anchor);
   } else {
-    // Default after_add_to_cart: insert immediately AFTER the anchor (below it).
+    // Default after_add_to_cart (and the custom fallback): insert AFTER the anchor (below it).
     parent.insertBefore(wrapper, anchor.nextSibling);
   }
+}
+
+/**
+ * Place the wrapper at the merchant's custom anchor + position. Returns false (→ caller falls
+ * back to add-to-cart) when the anchor is missing/malformed or the position needs a parent it
+ * doesn't have. before/after insert as siblings; prepend/append go inside the anchor.
+ */
+function placeCustom(wrapper, custom) {
+  const target = safeQuery(custom && custom.selector);
+  if (!target) return false;
+
+  const position = custom.position;
+
+  if (position === POSITION.prepend) {
+    target.insertBefore(wrapper, target.firstChild);
+    return true;
+  }
+  if (position === POSITION.append) {
+    target.appendChild(wrapper);
+    return true;
+  }
+
+  const parent = target.parentNode;
+  if (!parent) return false; // before/after need a parent (e.g. anchor is <html>)
+
+  if (position === POSITION.before) {
+    parent.insertBefore(wrapper, target);
+  } else {
+    parent.insertBefore(wrapper, target.nextSibling); // after (default)
+  }
+  return true;
 }

@@ -282,6 +282,63 @@ async function galleryGate(browser) {
   return failures;
 }
 
+/**
+ * Custom placement gate (the visual picker's runtime path): (1) a resolvable merchant-picked
+ * anchor -> the button is placed relative to THAT element, not add-to-cart; (2) a custom anchor
+ * that no longer resolves on the live page -> the button falls back to after add-to-cart so it
+ * never vanishes.
+ */
+async function customPlacementGate(browser) {
+  console.log('\n=== custom placement (picked anchor + runtime fallback) ===');
+  let failures = 0;
+  let appearanceOverride = {};
+
+  const openPage = async () => {
+    const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await page.route('**/widget/v1/bootstrap*', (route) => {
+      const body = bootstrapBody('en');
+      Object.assign(body.site.appearance, appearanceOverride);
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    });
+    await page.route('**/widget/v1/gallery*', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [] }) }));
+    return page;
+  };
+
+  // (1) A resolvable custom anchor: place the button immediately BEFORE the price element.
+  try {
+    appearanceOverride = { button_placement: 'custom', custom_anchor_selector: '.product__price', custom_position: 'before' };
+    const page = await openPage();
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    const placed = await page.evaluate((sentinel) => {
+      const price = document.querySelector('.product__price');
+      const btn = document.querySelector('[' + sentinel + ']');
+      return !!btn && price.previousElementSibling === btn && btn.parentNode === price.parentNode;
+    }, SENTINEL);
+    assert(placed, 'resolvable custom anchor: button placed at the picked element (before .product__price)');
+    await page.close();
+  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+
+  // (2) A custom anchor that does NOT resolve: fall back to after add-to-cart.
+  try {
+    appearanceOverride = { button_placement: 'custom', custom_anchor_selector: '#nope-not-here', custom_position: 'before' };
+    const page = await openPage();
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    const fellBack = await page.evaluate((sentinel) => {
+      const atc = document.querySelector('#add-to-cart');
+      const btn = document.querySelector('[' + sentinel + ']');
+      const below = btn ? !!(atc.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING) : false;
+      return !!btn && below && btn.parentNode === atc.parentNode;
+    }, SENTINEL);
+    assert(fellBack, 'missing custom anchor: button falls back to after add-to-cart');
+    await page.close();
+  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+
+  return failures;
+}
+
 async function run() {
   const server = await startServer();
   // Prefer bundled Chromium; fall back to system Chrome (the existing visual harnesses do).
@@ -438,6 +495,9 @@ async function run() {
 
   // --- gallery gate (past try-ons strip -> tap to view) ---
   failures += await galleryGate(browser);
+
+  // --- custom placement gate (visual picker anchor + runtime fallback) ---
+  failures += await customPlacementGate(browser);
 
   await browser.close();
   server.close();
