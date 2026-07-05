@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Tenancy;
 
+use App\Domain\Activity\ActivityRecorder;
 use App\Domain\Leads\LeadAttemptHistory;
 use App\Filament\Merchant\Resources\EndUserResource\Pages\ViewEndUser;
 use App\Filament\Merchant\Resources\SiteResource\Pages\ViewSite;
@@ -131,6 +132,35 @@ class MerchantResourceRecordIsolationTest extends TestCase
             Livewire::test(ViewEndUser::class, ['record' => $ownLead->getRouteKey()])
                 ->assertOk()
                 ->assertSee('Owner A Lead');
+        });
+    }
+
+    public function test_view_end_user_renders_the_activity_timeline_for_the_owner(): void
+    {
+        $ownSite = Site::factory()->forAccount($this->accountA)->create();
+        Filament::setTenant($ownSite); // shop-centric panel: bind the active shop
+
+        $ownLead = $this->asMerchantA(function () use ($ownSite): EndUser {
+            $lead = EndUser::factory()->forSite($ownSite)->create(['full_name' => 'Owner A Lead']);
+            app(ActivityRecorder::class)->record(
+                kind: \App\Models\ActivityEvent::KIND_LEAD_REGISTERED,
+                subject: $lead,
+            );
+
+            return $lead;
+        });
+
+        // The page exposes the timeline and the view renders its section heading.
+        $this->asMerchantA(function () use ($ownLead): void {
+            $component = Livewire::test(ViewEndUser::class, ['record' => $ownLead->getRouteKey()]);
+            $component->assertOk()->assertSee(__('activity.timeline.title'));
+
+            $timeline = $component->instance()->getTimeline();
+            $this->assertCount(1, $timeline);
+            $this->assertSame(
+                \App\Models\ActivityEvent::KIND_LEAD_REGISTERED,
+                $timeline->first()->kind,
+            );
         });
     }
 

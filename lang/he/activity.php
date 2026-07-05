@@ -34,5 +34,13 @@ return [
         'generation_succeeded' => 'יצירה הצליחה',
         'generation_failed' => 'יצירה נכשלה',
         'generation_cancelled' => 'יצירה בוטלה',
+        'generation_status_changed' => 'סטטוס היצירה השתנה',
+    ],
+
+    // ציר פעילות פר-משתמש-קצה בכרטיס הליד של הסוחר (WS3).
+    'timeline' => [
+        'title' => 'ציר פעילות',
+        'subtitle' => 'כל מה שהקונה עשה בחנות שלך.',
+        'empty' => 'אין עדיין פעילות',
     ],
 ];

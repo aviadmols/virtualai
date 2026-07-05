@@ -1,0 +1,96 @@
+/* ============================================================================
+ * WS3 — Per-end-user activity timeline (merchant lead card). A calm, editorial
+ * log of everything a shopper did: a header (title + subtitle) over a vertical
+ * list of events, each a dot + label/detail + a trailing relative timestamp.
+ * Mirrors the A7 lead-card frame so the two read as one card family.
+ * TOKENS: --toa-surface --toa-border --toa-radius-card --toa-shadow-card
+ *   --to-ink --to-ink-muted --to-ink-subtle --to-rule-soft --to-space-1..6
+ *   --toa-type-h-size --toa-type-body-size --toa-type-caption-size
+ *   --toa-type-eyebrow-size --to-fw-medium --to-fw-semibold --to-r-pill
+ *   --toa-accent-line --toa-surface-alt --to-bw-input
+ * ==========================================================================*/
+
+.to-timeline {
+    display: flex;
+    flex-direction: column;
+    background: var(--toa-surface);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-card);
+    box-shadow: var(--toa-shadow-card);
+    overflow: hidden;
+    margin-block-start: var(--to-space-6);
+}
+
+/* --- header: title + subtitle --- */
+.to-timeline__header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-1);
+    padding: var(--to-space-6);
+    border-block-end: var(--to-bw-input) solid var(--to-rule-soft);
+}
+
+.to-timeline__title {
+    color: var(--to-ink);
+    font-size: var(--toa-type-h-size);
+    font-weight: var(--to-fw-semibold);
+}
+
+.to-timeline__subtitle {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+}
+
+/* --- event list --- */
+.to-timeline__list {
+    display: flex;
+    flex-direction: column;
+}
+
+.to-timeline__row {
+    display: flex;
+    align-items: center;
+    gap: var(--to-space-4);
+    padding-block: var(--to-space-4);
+    padding-inline: var(--to-space-6);
+}
+.to-timeline__row + .to-timeline__row {
+    border-block-start: var(--to-bw-input) solid var(--to-rule-soft);
+}
+
+/* the timeline node marker — a small accent dot on the leading edge. */
+.to-timeline__dot {
+    flex: none;
+    inline-size: var(--to-space-2);
+    block-size: var(--to-space-2);
+    border-radius: var(--to-r-pill);
+    background: var(--toa-accent-line);
+}
+
+.to-timeline__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-1);
+    flex: 1 1 auto;
+    min-inline-size: 0;
+}
+
+.to-timeline__label {
+    color: var(--to-ink);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-timeline__detail {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    overflow-wrap: anywhere;
+}
+
+.to-timeline__when {
+    flex: none;
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-caption-size);
+    /* logical end alignment so timestamps sit on the trailing edge in both dirs. */
+    text-align: end;
+}

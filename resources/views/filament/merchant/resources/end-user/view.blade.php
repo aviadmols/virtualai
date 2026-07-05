@@ -1,11 +1,13 @@
 {{--
-    M6 / A7 — lead card page view. Wraps the <x-to.lead-card> component in the
-    Filament page chrome. The attempts are LeadAttempt DTOs from the page
-    ($this->getAttempts(), via LeadAttemptHistory) — account-scoped, with signed
-    thumbnails or a purged flag; the component renders, never queries.
+    M6 / A7 + WS3 — lead card page view. Wraps the <x-to.lead-card> component and
+    the per-end-user <x-to.activity-timeline> in the Filament page chrome. The
+    attempts (LeadAttempt) and timeline events (EndUserActivityItem) are immutable
+    DTOs from the page ($this->getAttempts() via LeadAttemptHistory,
+    $this->getTimeline() via EndUserActivityTimeline) — both account-scoped; the
+    components render, never query.
 
-    TOKENS: lead-card.css (via <x-to.lead-card>).
-    i18n: leads.*, status.lead.*, status.generation.* (inside the component).
+    TOKENS: lead-card.css, activity-timeline.css (via the components).
+    i18n: leads.*, status.lead.*, status.generation.*, activity.* (inside the components).
 --}}
 <x-filament-panels::page>
     @php($lead = $this->getRecord())
@@ -16,4 +18,6 @@
         :status="$lead->status"
         :attempts="$this->getAttempts()"
     />
+
+    <x-to.activity-timeline :events="$this->getTimeline()" />
 </x-filament-panels::page>

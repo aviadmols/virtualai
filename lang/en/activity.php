@@ -34,5 +34,13 @@ return [
         'generation_succeeded' => 'Generation succeeded',
         'generation_failed' => 'Generation failed',
         'generation_cancelled' => 'Generation cancelled',
+        'generation_status_changed' => 'Generation status changed',
+    ],
+
+    // Per-end-user activity timeline on the merchant lead card (WS3).
+    'timeline' => [
+        'title' => 'Activity timeline',
+        'subtitle' => 'Everything this shopper did on your shop.',
+        'empty' => 'No activity yet',
     ],
 ];

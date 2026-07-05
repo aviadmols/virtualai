@@ -2,6 +2,7 @@
 
 namespace App\Filament\Merchant\Resources\EndUserResource\Pages;
 
+use App\Domain\Activity\EndUserActivityTimeline;
 use App\Domain\Leads\LeadAttemptHistory;
 use App\Filament\Merchant\Resources\EndUserResource;
 use Illuminate\Contracts\Support\Htmlable;
@@ -33,5 +34,15 @@ class ViewEndUser extends \Filament\Resources\Pages\ViewRecord
     public function getAttempts(): Collection
     {
         return app(LeadAttemptHistory::class)->for($this->getRecord());
+    }
+
+    /**
+     * The lead's activity timeline (newest first) as immutable EndUserActivityItem
+     * DTOs — everything this shopper did on the shop. Account-scoped through
+     * EndUserActivityTimeline::for(); this page never queries activity_events itself.
+     */
+    public function getTimeline(): Collection
+    {
+        return app(EndUserActivityTimeline::class)->for($this->getRecord());
     }
 }
