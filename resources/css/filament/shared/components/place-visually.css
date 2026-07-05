@@ -1,0 +1,209 @@
+/* ============================================================================
+ * Visual button-placement picker — the settings summary row + the full-screen
+ * preview overlay (URL bar, sandboxed iframe stage, position/corner panel).
+ * Variable-backed only; logical properties for RTL. No inline CSS, no literals.
+ * TOKENS: --to-space-* --to-ink(-muted/-subtle) --to-paper --to-rule --to-font
+ *   --toa-surface(-alt) --toa-border --toa-accent(-on) --toa-radius-card(-field)
+ *   --to-r-card --to-shadow-card --to-bw-input(-focus) --to-z-overlay --to-t-base --to-scrim
+ *   --to-fw-* --to-track-label --toa-type-* --to-success(-bg) --to-warn(-bg) --to-danger(-bg)
+ * ==========================================================================*/
+
+/* ---- Settings summary row (in the appearance form) ---------------------- */
+.to-place-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--to-space-4);
+    flex-wrap: wrap;
+}
+
+.to-place-summary__text {
+    font-size: var(--toa-type-body-size);
+    color: var(--to-ink);
+}
+
+/* ---- Full-screen overlay ------------------------------------------------ */
+.to-place-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--to-z-overlay);
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    padding: var(--to-space-6);
+    background: var(--to-scrim);
+}
+
+.to-place-dialog {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    inline-size: min(1200px, 100%);
+    block-size: 100%;
+    background: var(--toa-surface);
+    border-radius: var(--toa-radius-card);
+    box-shadow: var(--to-shadow-card);
+}
+
+.to-place-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--to-space-4);
+    padding: var(--to-space-5) var(--to-space-6);
+    border-block-end: var(--to-bw-input) solid var(--toa-border);
+}
+
+.to-place-eyebrow {
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-semibold);
+    letter-spacing: var(--to-track-label);
+    text-transform: uppercase;
+    color: var(--to-ink-subtle);
+}
+
+.to-place-title {
+    font-size: var(--toa-type-h-size);
+    font-weight: var(--to-fw-black);
+    color: var(--to-ink);
+}
+
+.to-place-urlbar {
+    display: flex;
+    gap: var(--to-space-3);
+    padding: var(--to-space-4) var(--to-space-6) 0;
+}
+
+.to-place-url {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    padding: var(--to-space-2) var(--to-space-1);
+    font-family: var(--to-font);
+    font-size: var(--toa-type-body-size);
+    color: var(--to-ink);
+    background: transparent;
+    border: 0;
+    border-block-end: var(--to-bw-input-focus) solid var(--to-rule);
+    transition: border-color var(--to-t-base);
+}
+
+.to-place-url:focus {
+    outline: none;
+    border-block-end-color: var(--to-ink);
+}
+
+.to-place-error {
+    margin: var(--to-space-3) var(--to-space-6) 0;
+    padding: var(--to-space-2) var(--to-space-3);
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-danger);
+    background: var(--to-danger-bg);
+    border-radius: var(--toa-radius-field);
+}
+
+/* ---- Body: preview stage + control panel -------------------------------- */
+.to-place-body {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: 1fr minmax(240px, 300px);
+    gap: var(--to-space-5);
+    min-block-size: 0;
+    padding: var(--to-space-5) var(--to-space-6) var(--to-space-6);
+}
+
+.to-place-stage {
+    min-inline-size: 0;
+    min-block-size: 0;
+    overflow: hidden;
+    background: var(--toa-surface-alt);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-card);
+}
+
+.to-place-frame-wrap,
+.to-place-frame {
+    inline-size: 100%;
+    block-size: 100%;
+}
+
+.to-place-frame {
+    display: block;
+    border: 0;
+    background: var(--to-paper);
+}
+
+.to-place-empty {
+    display: grid;
+    place-items: center;
+    block-size: 100%;
+    padding: var(--to-space-8);
+}
+
+.to-place-empty__hint {
+    max-inline-size: 32ch;
+    text-align: center;
+    font-size: var(--toa-type-body-size);
+    color: var(--to-ink-muted);
+}
+
+.to-place-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-5);
+}
+
+.to-place-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+}
+
+.to-place-label {
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    letter-spacing: var(--to-track-label);
+    text-transform: uppercase;
+    color: var(--to-ink-muted);
+}
+
+.to-place-positions,
+.to-place-corners {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--to-space-2);
+}
+
+.to-place-pos.is-active {
+    background: var(--toa-accent);
+    color: var(--toa-accent-on);
+    border-color: var(--toa-accent);
+}
+
+.to-place-verdict {
+    padding: var(--to-space-2) var(--to-space-3);
+    font-size: var(--toa-type-caption-size);
+    border-radius: var(--toa-radius-field);
+}
+
+.to-place-verdict--ok {
+    color: var(--to-success);
+    background: var(--to-success-bg);
+}
+
+.to-place-verdict--warn {
+    color: var(--to-warn);
+    background: var(--to-warn-bg);
+}
+
+.to-place-actions {
+    margin-block-start: auto;
+    display: flex;
+    gap: var(--to-space-3);
+    justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+    .to-place-body {
+        grid-template-columns: 1fr;
+    }
+}

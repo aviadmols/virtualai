@@ -34,6 +34,9 @@
     --to-info: #2d6a8a;
     --to-info-bg: #e5eff4;
 
+    /* Modal/overlay backdrop scrim (shared by admin overlays; the widget has its own). */
+    --to-scrim: rgb(0 0 0 / 55%);
+
     /* ---- 1.2 Typography — Heebo, the only typeface -------------------- */
     --to-font: "Heebo", system-ui, sans-serif;
     --to-fw-thin: 100;

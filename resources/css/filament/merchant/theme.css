@@ -27,6 +27,7 @@
 @import '../shared/components/buy-credits.css';
 @import '../shared/components/gallery.css';
 @import '../shared/components/settings-form.css';
+@import '../shared/components/place-visually.css';
 
 @config 'tailwind.config.js';
 
