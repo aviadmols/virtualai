@@ -836,6 +836,73 @@ The lookup axis. File each entry under exactly one category; cross-link the rest
 
 ## pdp-scan
 
+### TS-PDPSCAN-006 — a private helper named `hydrate*` is hijacked as a Livewire lifecycle hook → route-model-binds its typed param every request
+- **Date:** 2026-07-05
+- **Category:** pdp-scan
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `livewire`, `lifecycle-hook`, `hydrate`, `route-model-binding`, `scan-review`, `role-picker`, `ws4`
+
+- **SYMPTOM:** Adding a private helper `hydrateDimensionPicks(Product $product)` to the
+  `ReviewProduct` Livewire page broke EVERY `->call(...)` on that page (and the existing
+  `ScanReviewAndEmbedTest` cases that call after mount) with
+  `ErrorException: Array to string conversion` originating in `ModelNotFoundException::setModel`
+  → `Livewire\ImplicitlyBoundMethod::getImplicitBinding`. The page rendered on mount but any
+  subsequent Livewire request 500'd.
+- **CONTEXT / TRIGGER:** WS4 scan-review visual role picker. The helper seeded dimension-pick
+  state from `physical_dimensions` and took a typed `Product` parameter; it was called from the
+  existing `hydrateFromReview()` (which is param-less and had always been harmless).
+- **ROOT CAUSE:** Livewire treats ANY component method whose name starts with a reserved
+  lifecycle prefix (`hydrate`, `dehydrate`, `mount`, `updating`, `updated`, `rendering`,
+  `rendered`, `boot`, …) as a LIFECYCLE HOOK and invokes it on the matching lifecycle event via
+  the container, resolving its parameters. On `hydrate`, it tries to implicitly ROUTE-MODEL-BIND
+  a class-typed parameter (`Product $product`) from the request payload → `resolveRouteBinding`
+  returns null → `ModelNotFoundException`. The param-less `hydrateFromReview()` never tripped this
+  because a hook with no args is a harmless no-op call; the typed-param version is not.
+- **SOLUTION:** Rename the helper off the reserved prefix — `seedDimensionPicks(Product $product)`
+  (`app/Filament/Merchant/Pages/ReviewProduct.php`), called from `hydrateFromReview()` exactly as
+  before. Behaviour identical; Livewire no longer treats it as a hook. VERIFIED:
+  `ScanReviewAndEmbedTest` back to green + the new `ScanReviewRolePickerTest` (5 cases) passes;
+  full suite `php artisan test` → 601 passed.
+- **PREVENTION:** Never name a Livewire component's private helper with a lifecycle-hook prefix
+  (`hydrate*`/`dehydrate*`/`mount*`/`updat*`/`render*`/`boot*`). Use a neutral verb (`seed*`,
+  `prime*`, `loadX`). A helper that takes a typed model param is especially dangerous under a
+  hook prefix because Livewire will try to route-model-bind it every request. The existing
+  param-less `hydrateFromReview()` masked the rule because a no-arg hook call is silent.
+- **RELATED:** [[pdp-scanner]], [[admin-design-system]], [[app/Filament/Merchant/Pages/ReviewProduct.php]],
+  [[tests/Feature/Filament/Merchant/ScanReviewRolePickerTest.php]]
+
+### TS-PDPSCAN-007 — the physical_dimensions summary row `{{ $dimValue }}` blows up on a NESTED dimension group (picks / size_map)
+- **Date:** 2026-07-05
+- **Category:** pdp-scan
+- **Severity:** minor
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `blade`, `physical-dimensions`, `nested-array`, `htmlspecialchars`, `scan-review`, `ws4`
+
+- **SYMPTOM:** After confirming a product with visually-picked size/weight, re-rendering the
+  scan-review page threw `htmlspecialchars(): Argument #1 ($string) must be of type string, array
+  given (View: review-product.blade.php)` in the `@case('physical_dimensions')` field-row.
+- **CONTEXT / TRIGGER:** WS4. The dimensions summary row iterated `physical_dimensions` as
+  `$dimKey => $dimValue` and echoed `{{ $dimValue }}`. The dimension JSON now legitimately holds
+  NESTED groups: `picks` (`size` → `{selector,value}`) written by the confirm path, and the
+  AI-extracted `size_map` (`M` → `{chest:100}`). Both are arrays, so `{{ $dimValue }}` (which runs
+  `htmlspecialchars` via `e()`) fataled. The `size_map` shape would have hit this too, but no prior
+  test confirmed-then-re-rendered a product carrying dimensions.
+- **ROOT CAUSE:** `physical_dimensions` is a free-form JSON bag mixing scalar leaves (chest: 100)
+  and nested groups; a summary row that assumes every value is scalar is wrong by construction.
+- **SOLUTION:** Guard the echo — `{{ is_scalar($dimValue) ? $dimValue : __('scan.field.dimensions') }}`
+  in `resources/views/filament/merchant/pages/review-product.blade.php`: scalars print, nested
+  groups render their localized group label instead of exploding. VERIFIED by
+  `ScanReviewRolePickerTest::test_picking_a_dimension_role_reads_the_value_and_round_trips_into_physical_dimensions`
+  (previously RED on this exact throw, now green).
+- **PREVENTION:** When rendering a free-form JSON bag in Blade, never `{{ $value }}` a bag entry
+  without an `is_scalar()`/`is_array()` guard — mixed scalar-and-nested shapes are the norm for
+  a `physical_dimensions`/`meta`-style column. Summarise nested groups; only echo scalars.
+- **RELATED:** [[pdp-scanner]], [[admin-design-system]], [[app/Domain/Scan/Review/ConfirmScanAction.php]],
+  [[resources/views/filament/merchant/pages/review-product.blade.php]]
+
 ### TS-PDPSCAN-005 — A4 scan-review i18n keys: the read model references 5 keys not yet in lang/*/scan.php
 - **Date:** 2026-06-29
 - **Category:** pdp-scan

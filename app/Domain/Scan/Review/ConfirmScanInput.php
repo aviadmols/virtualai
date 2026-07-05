@@ -23,12 +23,14 @@ final readonly class ConfirmScanInput
      * @param  array<string,string>  $selectors  role => chosen CSS selector (manual or detected)
      * @param  array<int,array<string,mixed>>  $variants  corrected ProductVariant rows
      * @param  array<int,string>  $reviewedKeys  ConfirmGate identifiers ("field:price") the merchant reviewed
+     * @param  array<string,array{selector:string,value:?string}>  $dimensionPicks  dimension role => picked source + read value
      */
     public function __construct(
         public array $fieldValues,
         public array $selectors,
         public array $variants,
         public array $reviewedKeys,
+        public array $dimensionPicks = [],
     ) {}
 
     /**
@@ -44,6 +46,7 @@ final readonly class ConfirmScanInput
                 (array) ($payload['reviewed_keys'] ?? []),
                 'is_string',
             )),
+            dimensionPicks: self::onlyKnownDimensionPicks((array) ($payload['dimension_picks'] ?? [])),
         );
     }
 
@@ -84,6 +87,45 @@ final readonly class ConfirmScanInput
             if (isset($selectors[$role]) && is_string($selectors[$role])) {
                 $out[$role] = $selectors[$role];
             }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Keep only the known dimension roles (size / weight), each normalised to a
+     * {selector, value} pair. A pick with a blank selector is dropped — nothing to
+     * persist. The value is whatever the server-side DimensionPicker read; it is
+     * accepted here only as a scalar string (never an array/object from the client).
+     *
+     * @param  array<string,mixed>  $picks
+     * @return array<string,array{selector:string,value:?string}>
+     */
+    private static function onlyKnownDimensionPicks(array $picks): array
+    {
+        $out = [];
+
+        foreach (ScanConstants::DIMENSION_ROLES as $role) {
+            $pick = $picks[$role] ?? null;
+
+            if (! is_array($pick)) {
+                continue;
+            }
+
+            $selector = is_string($pick[ScanConstants::DIMENSION_PICK_SELECTOR] ?? null)
+                ? trim($pick[ScanConstants::DIMENSION_PICK_SELECTOR])
+                : '';
+
+            if ($selector === '') {
+                continue;
+            }
+
+            $value = $pick[ScanConstants::DIMENSION_PICK_VALUE] ?? null;
+
+            $out[$role] = [
+                ScanConstants::DIMENSION_PICK_SELECTOR => $selector,
+                ScanConstants::DIMENSION_PICK_VALUE => is_scalar($value) ? (string) $value : null,
+            ];
         }
 
         return $out;

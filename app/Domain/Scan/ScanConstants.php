@@ -35,6 +35,39 @@ final class ScanConstants
         self::ROLE_VARIATIONS,
     ];
 
+    // === DIMENSION ROLES (physical size + weight) ===
+    // The merchant can visually mark WHERE size/weight are read on the page, just
+    // like the six selector roles above. But these are a SEPARATE set on purpose,
+    // NOT appended to SELECTOR_ROLES, because SELECTOR_ROLES is the widget-RUNTIME
+    // selector contract: it is shipped to the storefront in detected_selectors, it
+    // is iterated by ScanReview to build the ConfirmGate's blocking selector rows,
+    // and it drives per-selector confidence. Size/weight are never queried by the
+    // widget at runtime — their selector is used ONCE at confirm time to read a
+    // value INTO Product.physical_dimensions (a fit hint for the try-on prompt).
+    // Keeping them apart means: (a) detected_selectors stays exactly the six runtime
+    // roles the widget expects; (b) an empty size/weight pick never turns into a
+    // not_detected blocking row that would break every existing product's confirm;
+    // (c) the persisted picked selector + its read value live under
+    // physical_dimensions, next to the AI-extracted dimensions, not in the runtime bag.
+    public const ROLE_SIZE = 'size';
+
+    public const ROLE_WEIGHT = 'weight';
+
+    public const DIMENSION_ROLES = [
+        self::ROLE_SIZE,
+        self::ROLE_WEIGHT,
+    ];
+
+    // How a picked dimension is stored inside Product.physical_dimensions: the
+    // dimension roles nest under this key as { size: {selector, value}, ... } so
+    // the merchant-marked source is auditable and re-readable, and never collides
+    // with the AI-extracted dimension keys (chest/length/material/…) at the top level.
+    public const DIMENSION_PICKS_KEY = 'picks';
+
+    public const DIMENSION_PICK_SELECTOR = 'selector';
+
+    public const DIMENSION_PICK_VALUE = 'value';
+
     // === FIELD SOURCES (trust ranking, high -> low) ===
     // Where an extracted field came from. model_inferred is the lowest-trust and
     // is ALWAYS flagged for merchant review.

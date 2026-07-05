@@ -2,6 +2,7 @@
 
 namespace App\Domain\Scan\Review;
 
+use App\Domain\Scan\ScanConstants;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Support\Tenant;
@@ -42,6 +43,7 @@ final readonly class ConfirmScanAction
             return DB::transaction(function () use ($product, $input): Product {
                 $this->applyFieldCorrections($product, $input);
                 $this->applySelectorChoices($product, $input);
+                $this->applyDimensionPicks($product, $input);
                 $this->syncVariants($product, $input);
 
                 // confirm() runs the guarded draft -> confirmed transition + saves.
@@ -106,6 +108,38 @@ final readonly class ConfirmScanAction
         }
 
         $product->detected_selectors = $detected;
+    }
+
+    /**
+     * Persist the merchant's visually-picked size/weight sources into
+     * Product.physical_dimensions under the DIMENSION_PICKS_KEY. Each pick stores
+     * the picked selector (auditable / re-verifiable) + the value read from that
+     * element at confirm time — a fit hint the try-on prompt can consume alongside
+     * the AI-extracted dimensions at the top level (which are left untouched).
+     *
+     * The read value is captured server-side (DimensionPicker); ConfirmScanInput
+     * already dropped any non-dimension role and any blank-selector pick. This is a
+     * confirm-time snapshot, NOT a widget-runtime selector, so it never touches
+     * detected_selectors.
+     */
+    private function applyDimensionPicks(Product $product, ConfirmScanInput $input): void
+    {
+        if ($input->dimensionPicks === []) {
+            return;
+        }
+
+        $dimensions = $product->physical_dimensions ?? [];
+        $picks = $dimensions[ScanConstants::DIMENSION_PICKS_KEY] ?? [];
+
+        foreach ($input->dimensionPicks as $role => $pick) {
+            $picks[$role] = [
+                ScanConstants::DIMENSION_PICK_SELECTOR => $pick[ScanConstants::DIMENSION_PICK_SELECTOR],
+                ScanConstants::DIMENSION_PICK_VALUE => $pick[ScanConstants::DIMENSION_PICK_VALUE],
+            ];
+        }
+
+        $dimensions[ScanConstants::DIMENSION_PICKS_KEY] = $picks;
+        $product->physical_dimensions = $dimensions;
     }
 
     /**

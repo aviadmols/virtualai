@@ -1,11 +1,21 @@
 /* =============================================================================
- * Tray On — placement picker. Runs INSIDE the sandboxed preview iframe
+ * Tray On — in-preview element picker. Runs INSIDE the sandboxed preview iframe
  * (sandbox="allow-scripts", opaque origin — it cannot reach the admin session).
- * The merchant hovers to highlight and clicks any element to choose where the
- * Tray On button goes; a ghost button is drawn at the pick and the chosen CSS
+ * The merchant hovers to highlight and clicks any element; the chosen CSS
  * selector is postMessage'd to the parent admin page (which re-verifies it
  * server-side). Vanilla + self-contained (no imports) — PreviewSanitizer inlines
- * this into the srcdoc as the ONLY script the preview runs.
+ * this into the srcdoc as the ONLY script the preview runs. It is NOT part of the
+ * widget src bundle (resources/widget/src/*), so the storefront gzip budget is
+ * unaffected.
+ *
+ * Two modes, one selector engine (selectorFor()):
+ *  - 'placement' (default): pick WHERE the Tray On button goes — draws a ghost
+ *    button at the pick and posts {mode:'element', position, selector, rect, tag}.
+ *  - 'role': pick WHICH element a product detail (price/title/size/…) is taken
+ *    from — persistently highlights the pick (no ghost) and posts
+ *    {mode:'role', role, selector, rect, tag}.
+ * The parent selects the mode with {source:'trayon-parent', type:'setMode',
+ * mode, role}; the default stays 'placement' so the existing flow is unchanged.
  * ==========================================================================*/
 (function () {
   'use strict';
@@ -14,13 +24,19 @@
   var PARENT = 'trayon-parent'; // messages FROM the admin page
   var GHOST_ID = '__trayon_ghost';
   var HILITE_ID = '__trayon_hilite';
+  var PICKED_ID = '__trayon_picked'; // the persistent highlight of a role pick
   var MAX_DEPTH = 6;
+
+  var MODE_PLACEMENT = 'placement';
+  var MODE_ROLE = 'role';
 
   // Static picker chrome lives in an injected <style> (never inline styles on authored markup).
   var style = document.createElement('style');
   style.textContent =
     '#__trayon_hilite{position:absolute;z-index:2147483000;pointer-events:none;border:2px solid #2563eb;' +
     'background:rgba(37,99,235,.12);border-radius:3px;}' +
+    '#__trayon_picked{position:absolute;z-index:2147482999;pointer-events:none;border:2px solid #16a34a;' +
+    'background:rgba(22,163,74,.12);border-radius:3px;}' +
     '#__trayon_ghost{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:#0a0a0c;' +
     'color:#fff;font:600 13px/1 system-ui,-apple-system,sans-serif;border:0;border-radius:0;' +
     'box-shadow:0 6px 20px rgba(0,0,0,.25);letter-spacing:.06em;}' +
@@ -32,15 +48,23 @@
   hilite.style.display = 'none';
   document.documentElement.appendChild(hilite);
 
+  var picked = document.createElement('div');
+  picked.id = PICKED_ID;
+  picked.style.display = 'none';
+  document.documentElement.appendChild(picked);
+
   var ghost = null;
   var lastSelector = null;
   var currentLabel = 'Tray On';
+  var mode = MODE_PLACEMENT; // default: the existing placement flow
+  var currentRole = null; // which detail role a 'role' pick targets
 
   function isPickable(el) {
     return (
       el &&
       el.nodeType === 1 &&
       el.id !== HILITE_ID &&
+      el.id !== PICKED_ID &&
       el.id !== GHOST_ID &&
       el !== document.documentElement &&
       el !== document.body
@@ -59,6 +83,21 @@
     hilite.style.left = r.left + 'px';
     hilite.style.width = r.width + 'px';
     hilite.style.height = r.height + 'px';
+  }
+
+  // A persistent green outline of a chosen element (role mode; no ghost button).
+  function showPicked(el) {
+    if (!el) {
+      picked.style.display = 'none';
+      return;
+    }
+    var r = rectOf(el);
+    picked.style.display = 'block';
+    picked.style.top = r.top + 'px';
+    picked.style.left = r.left + 'px';
+    picked.style.width = r.width + 'px';
+    picked.style.height = r.height + 'px';
+    if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
   }
 
   function cssEscape(s) {
@@ -185,13 +224,18 @@
       e.stopPropagation();
 
       lastSelector = selectorFor(el);
-      send('pick', {
-        mode: 'element',
-        selector: lastSelector,
-        position: 'after',
-        rect: rectOf(el),
-        tag: { name: el.tagName.toLowerCase(), id: el.id || null, classes: classListOf(el) },
-      });
+      var tag = { name: el.tagName.toLowerCase(), id: el.id || null, classes: classListOf(el) };
+
+      if (mode === MODE_ROLE) {
+        // Role mode: mark WHERE a product detail is read from. Highlight the pick
+        // persistently (no ghost button) and report it for server-side verify.
+        send('pick', { mode: MODE_ROLE, role: currentRole, selector: lastSelector, rect: rectOf(el), tag: tag });
+        showPicked(el);
+        return;
+      }
+
+      // Placement mode (default): choose where the Tray On button goes.
+      send('pick', { mode: 'element', selector: lastSelector, position: 'after', rect: rectOf(el), tag: tag });
       drawGhost(lastSelector, 'after', currentLabel);
     },
     true,
@@ -200,17 +244,25 @@
   // Defensive: block any form submit inside the preview.
   document.addEventListener('submit', function (e) { e.preventDefault(); }, true);
 
-  // Admin page → picker: move/redraw the ghost as the merchant tweaks the position, or clear it.
+  // Admin page → picker: switch mode, move/redraw the ghost, or clear.
   window.addEventListener('message', function (e) {
     var d = e.data;
     if (!d || d.source !== PARENT) return;
-    if (d.type === 'label') {
+    if (d.type === 'setMode') {
+      // Switch between placement + role picking; reset the per-mode chrome so
+      // stale visuals from the other mode never linger.
+      mode = d.mode === MODE_ROLE ? MODE_ROLE : MODE_PLACEMENT;
+      currentRole = d.role || null;
+      clearGhost();
+      showPicked(null);
+    } else if (d.type === 'label') {
       currentLabel = d.label || currentLabel;
     } else if (d.type === 'setGhost') {
       if (d.label) currentLabel = d.label;
       drawGhost(d.selector || lastSelector, d.position || 'after', currentLabel);
     } else if (d.type === 'clear') {
       clearGhost();
+      showPicked(null);
     }
   });
 
