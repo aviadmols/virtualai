@@ -119,6 +119,19 @@
 }
 .to-attempt__purged { color: var(--to-ink-subtle); }
 
+/* WS2 — try-on history reuses .to-attempt; the shopper name deep-links to the
+   lead card (the panel accent, underlined on hover only). */
+.to-attempt__shopper-link {
+    color: var(--toa-accent);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    text-decoration: none;
+    inline-size: fit-content;
+}
+.to-attempt__shopper-link:hover {
+    text-decoration: underline;
+}
+
 .to-attempt__meta {
     display: flex;
     flex-direction: column;
@@ -127,4 +140,11 @@
     flex: none;
     /* logical end alignment so timestamps sit on the trailing edge in both dirs. */
     text-align: end;
+}
+
+/* WS2 — try-on history "load more" row; centred under the list. */
+.to-history__more {
+    display: flex;
+    justify-content: center;
+    margin-block-start: var(--to-space-4);
 }
