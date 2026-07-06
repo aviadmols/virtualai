@@ -1,0 +1,101 @@
+<?php
+
+namespace Tests\Feature\Platform;
+
+use App\Domain\Platform\PlatformMailConfig;
+use App\Domain\Platform\PlatformSettings;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+/**
+ * PlatformMailConfig — the runtime binder that folds the Super-Admin-managed SMTP
+ * settings into the live mail config right before a send.
+ *
+ * Proves: apply() sets mail.default=smtp + mail.mailers.smtp.* + mail.from.* from the
+ * stored settings (encryption "none" → null scheme, port cast to int, password bound);
+ * with no host configured (DB or env) it is a no-op, so env-only / log-mailer deploys
+ * are unaffected; and an env host fallback (no DB row) still activates smtp.
+ */
+class PlatformMailConfigTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function settings(): PlatformSettings
+    {
+        return app(PlatformSettings::class);
+    }
+
+    private function binder(): PlatformMailConfig
+    {
+        return app(PlatformMailConfig::class);
+    }
+
+    private function asSuperAdmin(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+    }
+
+    private function storeFullSmtp(): void
+    {
+        $this->asSuperAdmin();
+        $this->settings()->put(PlatformSettings::SMTP_HOST, 'smtp.mailhost.test', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_PORT, '2525', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_ENCRYPTION, 'tls', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_USERNAME, 'postmaster', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_PASSWORD, 'smtp-secret-pw');
+        $this->settings()->put(PlatformSettings::MAIL_FROM_ADDRESS, 'noreply@shop.test', secret: false);
+        $this->settings()->put(PlatformSettings::MAIL_FROM_NAME, 'Shop Mailer', secret: false);
+    }
+
+    public function test_apply_binds_the_stored_smtp_config_into_the_live_mailer(): void
+    {
+        $this->storeFullSmtp();
+
+        $this->binder()->apply();
+
+        $this->assertSame('smtp', config('mail.default'));
+        $this->assertSame('smtp.mailhost.test', config('mail.mailers.smtp.host'));
+        $this->assertSame(2525, config('mail.mailers.smtp.port'));
+        $this->assertSame('tls', config('mail.mailers.smtp.scheme'));
+        $this->assertSame('postmaster', config('mail.mailers.smtp.username'));
+        $this->assertSame('smtp-secret-pw', config('mail.mailers.smtp.password'));
+        $this->assertSame('noreply@shop.test', config('mail.from.address'));
+        $this->assertSame('Shop Mailer', config('mail.from.name'));
+    }
+
+    public function test_encryption_none_maps_to_a_null_scheme(): void
+    {
+        $this->asSuperAdmin();
+        $this->settings()->put(PlatformSettings::SMTP_HOST, 'smtp.plain.test', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_ENCRYPTION, 'none', secret: false);
+
+        $this->binder()->apply();
+
+        $this->assertSame('smtp', config('mail.default'));
+        $this->assertNull(config('mail.mailers.smtp.scheme'));
+    }
+
+    public function test_apply_is_a_noop_when_no_host_is_configured(): void
+    {
+        config()->set('mail.default', 'log');
+        config()->set('mail.mailers.smtp.host', null);
+
+        $this->binder()->apply();
+
+        // Nothing was configured (DB or env) → the env-chosen mailer is untouched.
+        $this->assertSame('log', config('mail.default'));
+    }
+
+    public function test_env_host_fallback_activates_smtp_without_a_db_row(): void
+    {
+        // No DB rows; the env fallback (mail.mailers.smtp.host) supplies the host.
+        config()->set('mail.default', 'log');
+        config()->set('mail.mailers.smtp.host', 'env.smtp.test');
+
+        $this->binder()->apply();
+
+        $this->assertSame('smtp', config('mail.default'));
+        $this->assertSame('env.smtp.test', config('mail.mailers.smtp.host'));
+    }
+}

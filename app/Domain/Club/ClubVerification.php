@@ -2,9 +2,10 @@
 
 namespace App\Domain\Club;
 
+use App\Domain\Platform\PlatformMailConfig;
+use App\Mail\ClubVerificationCodeMail;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Facades\Mail;
-use App\Mail\ClubVerificationCodeMail;
 
 /**
  * ClubVerification — issue + verify the Customer-Club email one-time code.
@@ -52,6 +53,7 @@ final class ClubVerification
 
     public function __construct(
         private readonly Cache $cache,
+        private readonly PlatformMailConfig $mailConfig,
     ) {}
 
     /** The code TTL in seconds — exposed so the endpoint/UI can report expiry. */
@@ -85,6 +87,10 @@ final class ClubVerification
             [self::FIELD_CODE => $code, self::FIELD_ATTEMPTS => 0],
             self::CODE_TTL_SECONDS,
         );
+
+        // Fold the Super-Admin-managed SMTP config into the live mailer on-demand —
+        // only this send path reads it, so the widget hot path stays DB-query-free.
+        $this->mailConfig->apply();
 
         Mail::to($email)->send(new ClubVerificationCodeMail($code, self::CODE_TTL_SECONDS));
 

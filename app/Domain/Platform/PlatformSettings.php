@@ -26,6 +26,17 @@ final class PlatformSettings
     public const PAYPLUS_PAGE_UID = 'payplus.page_uid';
     public const PAYPLUS_WEBHOOK_SECRET = 'payplus.webhook_secret';
 
+    // SMTP outbound-mail settings (Super-Admin managed). Only SMTP_PASSWORD is a secret;
+    // the rest are VISIBLE config values (host/port/encryption/username/from) the admin
+    // sees and edits in the UI. Fallbacks point at Laravel's native mail.* config keys.
+    public const SMTP_HOST = 'smtp.host';
+    public const SMTP_PORT = 'smtp.port';
+    public const SMTP_ENCRYPTION = 'smtp.encryption';
+    public const SMTP_USERNAME = 'smtp.username';
+    public const SMTP_PASSWORD = 'smtp.password';
+    public const MAIL_FROM_ADDRESS = 'mail.from_address';
+    public const MAIL_FROM_NAME = 'mail.from_name';
+
     // setting key → the config()/env fallback used when the DB value is unset.
     private const CONFIG_FALLBACK = [
         self::OPENROUTER_API_KEY => 'services.openrouter.key',
@@ -34,6 +45,14 @@ final class PlatformSettings
         self::PAYPLUS_SECRET_KEY => 'services.payplus.secret_key',
         self::PAYPLUS_PAGE_UID => 'services.payplus.page_uid',
         self::PAYPLUS_WEBHOOK_SECRET => 'services.payplus.webhook_secret',
+        // Laravel-11 smtp mailer uses `scheme` (tls/ssl/null) for encryption.
+        self::SMTP_HOST => 'mail.mailers.smtp.host',
+        self::SMTP_PORT => 'mail.mailers.smtp.port',
+        self::SMTP_ENCRYPTION => 'mail.mailers.smtp.scheme',
+        self::SMTP_USERNAME => 'mail.mailers.smtp.username',
+        self::SMTP_PASSWORD => 'mail.mailers.smtp.password',
+        self::MAIL_FROM_ADDRESS => 'mail.from.address',
+        self::MAIL_FROM_NAME => 'mail.from.name',
     ];
 
     /**

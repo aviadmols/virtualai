@@ -4,15 +4,20 @@ namespace App\Filament\Platform\Pages;
 
 use App\Domain\Ai\BytePlusImageClient;
 use App\Domain\Ai\OpenRouterClient;
+use App\Domain\Platform\PlatformMailConfig;
 use App\Domain\Platform\PlatformSettings;
+use App\Mail\PlatformTestMail;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 /**
  * Platform Settings — the Super-Admin control plane for platform-wide secrets the
@@ -42,7 +47,10 @@ class Settings extends Page implements HasForms
     private const TITLE = 'platform.settings.title';
     private const SAVED = 'platform.settings.saved';
 
-    // form field → setting key. Every field here is a write-only secret.
+    // SMTP encryption choices (UI value → the smtp `scheme` PlatformMailConfig maps).
+    private const SMTP_ENCRYPTION_OPTIONS = ['tls', 'ssl', 'none'];
+
+    // form field → setting key. WRITE-ONLY secrets: blank on save KEEPS the stored value.
     private const FIELD_SETTINGS = [
         'openrouter_api_key' => PlatformSettings::OPENROUTER_API_KEY,
         'byteplus_api_key' => PlatformSettings::BYTEPLUS_API_KEY,
@@ -50,6 +58,18 @@ class Settings extends Page implements HasForms
         'payplus_secret_key' => PlatformSettings::PAYPLUS_SECRET_KEY,
         'payplus_page_uid' => PlatformSettings::PAYPLUS_PAGE_UID,
         'payplus_webhook_secret' => PlatformSettings::PAYPLUS_WEBHOOK_SECRET,
+        'smtp_password' => PlatformSettings::SMTP_PASSWORD,
+    ];
+
+    // form field → setting key. VISIBLE config values: hydrated in mount() so the admin
+    // sees the current value; blank on save CLEARS the row (falls back to the env var).
+    private const VISIBLE_SETTINGS = [
+        'smtp_host' => PlatformSettings::SMTP_HOST,
+        'smtp_port' => PlatformSettings::SMTP_PORT,
+        'smtp_encryption' => PlatformSettings::SMTP_ENCRYPTION,
+        'smtp_username' => PlatformSettings::SMTP_USERNAME,
+        'mail_from_address' => PlatformSettings::MAIL_FROM_ADDRESS,
+        'mail_from_name' => PlatformSettings::MAIL_FROM_NAME,
     ];
 
     /** @var array<string,mixed> */
@@ -75,8 +95,17 @@ class Settings extends Page implements HasForms
 
     public function mount(): void
     {
-        // Write-only: never hydrate the stored secret into the form/browser.
-        $this->form->fill();
+        // Secrets (API keys + the SMTP password) stay BLANK — write-only, never hydrated
+        // to the browser. Only the VISIBLE config values are pre-filled so the admin can
+        // see and edit the current SMTP transport.
+        $settings = app(PlatformSettings::class);
+        $hydrated = [];
+
+        foreach (self::VISIBLE_SETTINGS as $field => $key) {
+            $hydrated[$field] = $settings->resolve($key);
+        }
+
+        $this->form->fill($hydrated);
     }
 
     /**
@@ -88,7 +117,58 @@ class Settings extends Page implements HasForms
         return [
             $this->testAction('testOpenRouter', 'openrouter_api_key', 'platform.settings.openrouter', fn (?string $k) => app(OpenRouterClient::class)->checkConnection($k)),
             $this->testAction('testByteplus', 'byteplus_api_key', 'platform.settings.byteplus', fn (?string $k) => app(BytePlusImageClient::class)->checkConnection($k)),
+            $this->sendTestEmailAction(),
         ];
+    }
+
+    /**
+     * "Send test email" — applies the stored SMTP config and sends a plain test message so
+     * the admin can verify the transport without waiting for a real club signup. On failure
+     * the raw transport error is surfaced (persistent danger + "Read all"), mirroring the
+     * provider connection tests. The recipient defaults to the configured From address.
+     */
+    private function sendTestEmailAction(): Action
+    {
+        return Action::make('sendTestEmail')
+            ->label(__('platform.settings.smtp.test'))
+            ->icon('heroicon-o-envelope')
+            ->color('gray')
+            ->form([
+                TextInput::make('recipient')
+                    ->label(__('platform.settings.smtp.test_recipient'))
+                    ->email()
+                    ->required()
+                    ->default(app(PlatformSettings::class)->resolve(PlatformSettings::MAIL_FROM_ADDRESS)),
+            ])
+            ->action(function (array $data): void {
+                $recipient = (string) ($data['recipient'] ?? '');
+
+                try {
+                    // Bind the DB-stored SMTP transport, then send through it.
+                    app(PlatformMailConfig::class)->apply();
+                    Mail::to($recipient)->send(new PlatformTestMail);
+                } catch (Throwable $e) {
+                    // Keep the FULL transport error for the "Read all" panel; never log it.
+                    $this->lastTestError = trim($e->getMessage());
+
+                    Notification::make()
+                        ->danger()
+                        ->title(__('platform.settings.smtp.test_fail'))
+                        ->body(__('platform.settings.smtp.test_fail_body'))
+                        ->persistent()
+                        ->send();
+
+                    return;
+                }
+
+                $this->lastTestError = null;
+
+                Notification::make()
+                    ->success()
+                    ->title(__('platform.settings.smtp.test_ok'))
+                    ->body(__('platform.settings.smtp.test_ok_body', ['email' => $recipient]))
+                    ->send();
+            });
     }
 
     /** A provider "Test connection" header action (tests the typed value, else the saved key). */
@@ -141,6 +221,35 @@ class Settings extends Page implements HasForms
                     ->schema([
                         $this->secretField('byteplus_api_key', 'platform.settings.byteplus.api_key', PlatformSettings::BYTEPLUS_API_KEY),
                     ]),
+                Section::make(__('platform.settings.smtp.title'))
+                    ->description(__('platform.settings.smtp.sub'))
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('smtp_host')
+                            ->label(__('platform.settings.smtp.host'))
+                            ->placeholder(__('platform.settings.smtp.host_placeholder'))
+                            ->autocomplete(false),
+                        TextInput::make('smtp_port')
+                            ->label(__('platform.settings.smtp.port'))
+                            ->numeric()
+                            ->placeholder(__('platform.settings.smtp.port_placeholder')),
+                        Select::make('smtp_encryption')
+                            ->label(__('platform.settings.smtp.encryption'))
+                            ->options($this->encryptionOptions())
+                            ->native(false)
+                            ->placeholder(__('platform.settings.smtp.encryption_placeholder')),
+                        TextInput::make('smtp_username')
+                            ->label(__('platform.settings.smtp.username'))
+                            ->autocomplete(false),
+                        $this->secretField('smtp_password', 'platform.settings.smtp.password', PlatformSettings::SMTP_PASSWORD),
+                        TextInput::make('mail_from_address')
+                            ->label(__('platform.settings.smtp.from_address'))
+                            ->email()
+                            ->placeholder(__('platform.settings.smtp.from_address_placeholder')),
+                        TextInput::make('mail_from_name')
+                            ->label(__('platform.settings.smtp.from_name'))
+                            ->placeholder(__('platform.settings.smtp.from_name_placeholder')),
+                    ]),
                 Section::make(__('platform.settings.payplus.title'))
                     ->description(__('platform.settings.payplus.sub'))
                     ->columns(2)
@@ -162,19 +271,40 @@ class Settings extends Page implements HasForms
         foreach (self::FIELD_SETTINGS as $field => $key) {
             $value = $data[$field] ?? null;
 
-            // Blank keeps the current value (write-only); a filled field overwrites it.
+            // Blank keeps the current value (write-only secret); a filled field overwrites it.
             if (filled($value)) {
                 $settings->put($key, (string) $value);
             }
         }
 
-        // Never retain the entered secrets in the Livewire component state.
-        $this->form->fill();
+        foreach (self::VISIBLE_SETTINGS as $field => $key) {
+            $value = $data[$field] ?? null;
+
+            // Visible config: a blank field CLEARS the row (falls back to the env var);
+            // a filled one overwrites it. Stored non-secret so it hydrates next mount().
+            $settings->put($key, filled($value) ? (string) $value : null, secret: false);
+        }
+
+        // Never retain the entered secrets in the Livewire component state; re-hydrate
+        // the visible values so the form reflects what was just saved.
+        $this->mount();
 
         Notification::make()
             ->success()
             ->title(__(self::SAVED))
             ->send();
+    }
+
+    /** UI encryption choices (tls/ssl/none) keyed to their localized labels. */
+    private function encryptionOptions(): array
+    {
+        $options = [];
+
+        foreach (self::SMTP_ENCRYPTION_OPTIONS as $value) {
+            $options[$value] = __('platform.settings.smtp.encryption_'.$value);
+        }
+
+        return $options;
     }
 
     /**

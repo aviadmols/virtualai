@@ -3,9 +3,11 @@
 namespace Tests\Feature\Widget;
 
 use App\Domain\Club\ClubVerification;
+use App\Domain\Platform\PlatformSettings;
 use App\Mail\ClubVerificationCodeMail;
 use App\Models\ActivityEvent;
 use App\Models\EndUser;
+use App\Models\User;
 use App\Support\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -53,6 +55,26 @@ final class WidgetClubAuthTest extends TestCase
         Mail::assertSent(ClubVerificationCodeMail::class, function (ClubVerificationCodeMail $mail) {
             return $mail->hasTo(self::EMAIL) && preg_match('/^\d{6}$/', $mail->code) === 1;
         });
+    }
+
+    public function test_request_code_send_picks_up_the_db_smtp_config(): void
+    {
+        Mail::fake();
+        // A super-admin configures SMTP from the Platform settings (DB, not env).
+        $this->actingAs(User::factory()->superAdmin()->create());
+        app(PlatformSettings::class)->put(PlatformSettings::SMTP_HOST, 'smtp.db.test', secret: false);
+        config()->set('mail.default', 'log');
+
+        $ctx = $this->makeSiteContext();
+
+        $this->withHeaders($this->widgetHeaders($ctx['site'], $ctx['origin']))
+            ->postJson(self::REQUEST_ENDPOINT, ['anon_token' => self::ANON, 'email' => self::EMAIL])
+            ->assertOk()->assertJson(['ok' => true, 'code_sent' => true]);
+
+        // The send path bound the DB SMTP transport before dispatching the mail.
+        $this->assertSame('smtp', config('mail.default'));
+        $this->assertSame('smtp.db.test', config('mail.mailers.smtp.host'));
+        Mail::assertSent(ClubVerificationCodeMail::class);
     }
 
     public function test_request_code_throttles_a_rapid_repeat(): void
