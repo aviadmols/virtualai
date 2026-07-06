@@ -22,7 +22,11 @@ import {
   CLUB_STEP,
   CLUB_CODE_LENGTH,
   CLUB_REASON,
+  CLUB_TRIGGER,
+  CLUB_POSITIONS,
+  CLUB_POSITION_DEFAULT,
   STORAGE_CLUB_MEMBER_PREFIX,
+  STORAGE_CLUB_DISMISS_PREFIX,
   TRACK_INTERACTION_CLUB_JOIN,
 } from './constants.js';
 import { state } from './state.js';
@@ -33,11 +37,18 @@ import * as api from './api.js';
 import * as pricing from './pricing.js';
 import * as track from './track.js';
 
+// Time multipliers (dismissal is stored as an absolute epoch-ms expiry; the delay trigger is
+// configured in whole seconds). Named so no bare magic number appears below.
+const MS_PER_SECOND = 1000;
+const MS_PER_DAY = 86400000; // 24 * 60 * 60 * 1000
+
 let siteKey = '';
 let clubConfig = null; // the bootstrap `club` block
 let banner = null; // the floating banner element (in the notification mount)
 let overlay = null; // the login modal overlay (in the overlay mount)
 let draft = { email: '' }; // the working email across the two steps
+let showTimer = null; // the pending delay-trigger timeout id (cleared on show/teardown)
+let scrollHandler = null; // the pending scroll-trigger listener (removed on show/teardown)
 
 /** Configure the site-scoped storage key (called before init, like pending.configure). */
 export function configure(key) {
@@ -47,7 +58,9 @@ export function configure(key) {
 /**
  * Initialise the club on the idle path. A no-op unless the bootstrap says the site is club-enabled.
  * If the shopper is already a verified member (bootstrap OR a persisted local flag), skip the
- * banner and go straight to member pricing. Otherwise show the floating join banner.
+ * banner and go straight to member pricing. If the shopper dismissed the banner recently (and the
+ * merchant asked to remember it), stay quiet. Otherwise SCHEDULE the join banner per the merchant's
+ * trigger (immediately, after a delay, or once the shopper scrolls far enough).
  */
 export function init(config) {
   clubConfig = config || null;
@@ -59,7 +72,78 @@ export function init(config) {
     return;
   }
 
-  showBanner();
+  if (isDismissed()) return; // the shopper closed it recently — respect that, do not nag
+
+  scheduleBanner();
+}
+
+/**
+ * Show the banner per the merchant's configured trigger. `immediate` shows now; `delay` waits N
+ * seconds; `scroll` shows once the shopper has scrolled past the configured page depth. Every path
+ * is idempotent + fully torn down (no dangling timer/listener) via clearScheduled().
+ */
+function scheduleBanner() {
+  const trigger = clubConfig[CLUB_CONFIG.bannerTrigger];
+
+  if (trigger === CLUB_TRIGGER.delay) {
+    const seconds = clampedInt(clubConfig[CLUB_CONFIG.bannerDelaySeconds]);
+    showTimer = setTimeout(showBanner, seconds * MS_PER_SECOND);
+    return;
+  }
+
+  if (trigger === CLUB_TRIGGER.scroll) {
+    armScrollTrigger();
+    return;
+  }
+
+  showBanner(); // 'immediate' (and any unknown value) => show right away
+}
+
+/** Attach a passive scroll listener that shows the banner once past the configured depth. */
+function armScrollTrigger() {
+  const threshold = clampedInt(clubConfig[CLUB_CONFIG.bannerScrollPercent]);
+
+  scrollHandler = () => {
+    if (scrolledPast(threshold)) showBanner(); // showBanner() clears the listener
+  };
+
+  try {
+    window.addEventListener('scroll', scrollHandler, { passive: true });
+  } catch {
+    // addEventListener should never throw, but if it does, fall back to showing now.
+    scrollHandler = null;
+    showBanner();
+    return;
+  }
+
+  scrollHandler(); // the page may already be scrolled past the threshold on load
+}
+
+/** True once the page is scrolled at least `percent`% of its scrollable height. */
+function scrolledPast(percent) {
+  const doc = document.documentElement;
+  const scrollable = doc.scrollHeight - window.innerHeight;
+  if (scrollable <= 0) return false; // nothing to scroll -> never force the banner open
+  const scrolled = window.scrollY || doc.scrollTop || 0;
+  return (scrolled / scrollable) * 100 >= percent;
+}
+
+/** Remove any pending delay timer + scroll listener (on show, on teardown). */
+function clearScheduled() {
+  if (showTimer) {
+    clearTimeout(showTimer);
+    showTimer = null;
+  }
+  if (scrollHandler) {
+    window.removeEventListener('scroll', scrollHandler);
+    scrollHandler = null;
+  }
+}
+
+/** A non-negative integer from a config value (guards NaN/negative/float). */
+function clampedInt(value) {
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /** Verified member = the bootstrap said so OR we persisted the flag after a prior verify. */
@@ -75,6 +159,7 @@ export function isMember() {
 // new CSS — nothing here declares a color/spacing value.
 // ---------------------------------------------------------------------------
 function showBanner() {
+  clearScheduled(); // a delay/scroll trigger that fired -> stop any remaining timer/listener
   if (banner) return; // never duplicate
   const mount = getNotificationMount();
   if (!mount) return; // no shell yet -> nothing to attach to (fail-soft)
@@ -101,13 +186,15 @@ function showBanner() {
     class: 'ton-notification__close',
     attrs: { type: 'button', 'aria-label': t('club.close') },
     text: '×',
-    on: { click: hideBanner },
+    on: { click: dismissBanner },
   });
 
   banner = el(
     'div',
     {
-      class: 'ton-notification ton-notification--ready ton-club-banner',
+      // The position value doubles as the CSS modifier suffix (bottom-end / top-start / …); the
+      // modifier resolves to LOGICAL insets so the chosen corner mirrors correctly in RTL.
+      class: 'ton-notification ton-notification--ready ton-club-banner ton-club-banner--' + bannerPosition(),
       attrs: { role: 'region', 'aria-label': t('club.banner_title') },
     },
     [main, close],
@@ -115,9 +202,22 @@ function showBanner() {
   mount.appendChild(banner);
 }
 
+/** The merchant-chosen corner, validated against the known set (defaults to bottom-end). */
+function bannerPosition() {
+  const value = clubConfig[CLUB_CONFIG.bannerPosition];
+  return CLUB_POSITIONS.includes(value) ? value : CLUB_POSITION_DEFAULT;
+}
+
+/** Remove the banner from the DOM (no persistence — used by verify + teardown). */
 function hideBanner() {
   if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
   banner = null;
+}
+
+/** The shopper closed the banner: hide it AND remember the dismissal (per the merchant's window). */
+function dismissBanner() {
+  hideBanner();
+  persistDismissal();
 }
 
 // ---------------------------------------------------------------------------
@@ -381,6 +481,41 @@ function writeMemberFlag() {
   }
 }
 
+function dismissKey() {
+  return STORAGE_CLUB_DISMISS_PREFIX + siteKey;
+}
+
+/** A live (unexpired) dismissal keeps the banner hidden across reloads. Expired entries self-clean. */
+function isDismissed() {
+  try {
+    const raw = localStorage.getItem(dismissKey());
+    if (!raw) return false;
+    const until = Number(raw);
+    if (!Number.isFinite(until) || until <= 0) return false;
+    if (Date.now() >= until) {
+      localStorage.removeItem(dismissKey()); // window passed -> allow the banner again
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Remember the dismissal for the merchant's window (banner_dismiss_days). A 0-day window is
+ * session-only: nothing is persisted, so the banner reappears on the next page load.
+ */
+function persistDismissal() {
+  const days = clampedInt(clubConfig && clubConfig[CLUB_CONFIG.bannerDismissDays]);
+  if (days <= 0) return; // session-only
+  try {
+    localStorage.setItem(dismissKey(), String(Date.now() + days * MS_PER_DAY));
+  } catch {
+    /* private mode / storage disabled — dismissal holds for this session only */
+  }
+}
+
 /** A light email check (the server is the real validator). */
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -403,8 +538,10 @@ function hideError(box) {
   box.setAttribute('hidden', '');
 }
 
-/** Teardown (SPA navigation away): remove the banner + any open login modal, drop pricing. */
+/** Teardown (SPA navigation away): cancel any pending trigger, remove the banner + any open login
+ *  modal, and drop pricing. A pending delay/scroll trigger must NOT count as a dismissal. */
 export function teardown() {
+  clearScheduled();
   hideBanner();
   closeLogin();
   pricing.teardown();

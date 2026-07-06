@@ -55,6 +55,91 @@
                     @enderror
                 </div>
 
+                {{-- Banner behavior + timing: WHEN the join banner appears, WHERE it sits, and how
+                     long a shopper's dismissal is remembered. The delay/scroll input is revealed
+                     only for its trigger (wire:model.live drives the server-side re-render). --}}
+                <div class="to-field">
+                    <p class="to-field__label">{{ __('club.behavior.section') }}</p>
+                    <p class="to-field__help">{{ __('club.behavior.section_help') }}</p>
+
+                    {{-- When to show --}}
+                    <div class="to-field">
+                        <label class="to-field__label" for="bannerTrigger">{{ __('club.behavior.trigger') }}</label>
+                        <span class="to-select">
+                            <select id="bannerTrigger" class="to-field__control" wire:model.live="bannerTrigger">
+                                @foreach($this->triggerOptions() as $value => $label)
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                            <span class="to-select__caret" aria-hidden="true"></span>
+                        </span>
+                        <p class="to-field__help">{{ __('club.behavior.trigger_help') }}</p>
+                    </div>
+
+                    {{-- Delay (seconds) — only for the delay trigger --}}
+                    @if($bannerTrigger === \App\Domain\Sites\ClubConfig::TRIGGER_DELAY)
+                        <div class="to-field">
+                            <label class="to-field__label" for="bannerDelaySeconds">{{ __('club.behavior.delay_seconds') }}</label>
+                            <input
+                                id="bannerDelaySeconds"
+                                type="number"
+                                min="{{ \App\Domain\Sites\ClubConfig::DELAY_SECONDS_MIN }}"
+                                max="{{ \App\Domain\Sites\ClubConfig::DELAY_SECONDS_MAX }}"
+                                inputmode="numeric"
+                                class="to-field__control to-field__control--number"
+                                wire:model="bannerDelaySeconds"
+                            >
+                            <p class="to-field__help">{{ __('club.behavior.delay_seconds_help') }}</p>
+                        </div>
+                    @endif
+
+                    {{-- Scroll depth (%) — only for the scroll trigger --}}
+                    @if($bannerTrigger === \App\Domain\Sites\ClubConfig::TRIGGER_SCROLL)
+                        <div class="to-field">
+                            <label class="to-field__label" for="bannerScrollPercent">{{ __('club.behavior.scroll_percent') }}</label>
+                            <input
+                                id="bannerScrollPercent"
+                                type="number"
+                                min="{{ \App\Domain\Sites\ClubConfig::SCROLL_PERCENT_MIN }}"
+                                max="{{ \App\Domain\Sites\ClubConfig::SCROLL_PERCENT_MAX }}"
+                                inputmode="numeric"
+                                class="to-field__control to-field__control--number"
+                                wire:model="bannerScrollPercent"
+                            >
+                            <p class="to-field__help">{{ __('club.behavior.scroll_percent_help') }}</p>
+                        </div>
+                    @endif
+
+                    {{-- Position (corner) --}}
+                    <div class="to-field">
+                        <label class="to-field__label" for="bannerPosition">{{ __('club.behavior.position') }}</label>
+                        <span class="to-select">
+                            <select id="bannerPosition" class="to-field__control" wire:model="bannerPosition">
+                                @foreach($this->positionOptions() as $value => $label)
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                            <span class="to-select__caret" aria-hidden="true"></span>
+                        </span>
+                        <p class="to-field__help">{{ __('club.behavior.position_help') }}</p>
+                    </div>
+
+                    {{-- Remember dismissal (days) --}}
+                    <div class="to-field">
+                        <label class="to-field__label" for="bannerDismissDays">{{ __('club.behavior.dismiss_days') }}</label>
+                        <input
+                            id="bannerDismissDays"
+                            type="number"
+                            min="{{ \App\Domain\Sites\ClubConfig::DISMISS_DAYS_MIN }}"
+                            max="{{ \App\Domain\Sites\ClubConfig::DISMISS_DAYS_MAX }}"
+                            inputmode="numeric"
+                            class="to-field__control to-field__control--number"
+                            wire:model="bannerDismissDays"
+                        >
+                        <p class="to-field__help">{{ __('club.behavior.dismiss_days_help') }}</p>
+                    </div>
+                </div>
+
                 {{-- Per-surface price zones — visual pickers. --}}
                 <div class="to-field">
                     <p class="to-field__label">{{ __('club.zones.section') }}</p>

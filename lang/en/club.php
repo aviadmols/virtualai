@@ -46,8 +46,35 @@ return [
         ],
         'errors' => [
             'save_failed' => 'Could not save your club settings. Please try again.',
-            'invalid_club_config' => 'Some club values are out of range. Check the discount (0–100) and the picked price zones, then save again.',
+            'invalid_club_config' => 'Some club values are out of range. Check the discount (0–100), the banner timing, and the picked price zones, then save again.',
         ],
+    ],
+
+    // --- Banner behavior + timing (Phase 2c) ---
+    'behavior' => [
+        'section' => 'Banner behavior',
+        'section_help' => 'Choose when and where the join banner appears, and how long a dismissal is remembered.',
+        'trigger' => 'When to show the banner',
+        'trigger_help' => 'Show it right away, after a short delay, or once the shopper scrolls down the page.',
+        'trigger_option' => [
+            'immediate' => 'Right away',
+            'delay' => 'After a delay',
+            'scroll' => 'After scrolling',
+        ],
+        'delay_seconds' => 'Delay (seconds)',
+        'delay_seconds_help' => 'How long after the page loads before the banner appears (0–60 seconds).',
+        'scroll_percent' => 'Scroll depth (%)',
+        'scroll_percent_help' => 'Show the banner once the shopper has scrolled this far down the page (1–100%).',
+        'position' => 'Banner position',
+        'position_help' => 'Which corner of the screen the banner sits in.',
+        'position_option' => [
+            'bottom-end' => 'Bottom right',
+            'bottom-start' => 'Bottom left',
+            'top-end' => 'Top right',
+            'top-start' => 'Top left',
+        ],
+        'dismiss_days' => 'Remember dismissal (days)',
+        'dismiss_days_help' => "If a shopper closes the banner, don't show it again for this many days (0 = show again on their next visit).",
     ],
 
     // --- The per-surface price-zone picker (multi-pick) ---

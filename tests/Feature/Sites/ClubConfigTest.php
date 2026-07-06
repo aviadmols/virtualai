@@ -121,6 +121,90 @@ final class ClubConfigTest extends TestCase
         $this->assertArrayHasKey('cart', $resolved['price_zones']);
     }
 
+    // --- Banner behavior + timing ---
+
+    public function test_sanitize_accepts_valid_banner_behavior(): void
+    {
+        $clean = ClubConfig::sanitize([
+            'banner_trigger' => ClubConfig::TRIGGER_DELAY,
+            'banner_delay_seconds' => 5,
+            'banner_scroll_percent' => 40,
+            'banner_position' => ClubConfig::POSITION_TOP_START,
+            'banner_dismiss_days' => 14,
+        ]);
+
+        $this->assertSame(ClubConfig::TRIGGER_DELAY, $clean['banner_trigger']);
+        $this->assertSame(5, $clean['banner_delay_seconds']);
+        $this->assertSame(40, $clean['banner_scroll_percent']);
+        $this->assertSame(ClubConfig::POSITION_TOP_START, $clean['banner_position']);
+        $this->assertSame(14, $clean['banner_dismiss_days']);
+    }
+
+    public function test_defaults_include_the_banner_behavior_shape(): void
+    {
+        $clean = ClubConfig::sanitize([]);
+
+        $this->assertSame(ClubConfig::TRIGGER_IMMEDIATE, $clean['banner_trigger']);
+        $this->assertSame(ClubConfig::POSITION_BOTTOM_END, $clean['banner_position']);
+        $this->assertIsInt($clean['banner_delay_seconds']);
+        $this->assertIsInt($clean['banner_scroll_percent']);
+        $this->assertSame(7, $clean['banner_dismiss_days']);
+    }
+
+    public function test_sanitize_rejects_an_unknown_trigger(): void
+    {
+        $this->expectException(InvalidSiteSettingsException::class);
+        ClubConfig::sanitize(['banner_trigger' => 'sideways']);
+    }
+
+    public function test_sanitize_rejects_an_unknown_position(): void
+    {
+        $this->expectException(InvalidSiteSettingsException::class);
+        ClubConfig::sanitize(['banner_position' => 'middle']);
+    }
+
+    public function test_sanitize_rejects_a_delay_above_the_max(): void
+    {
+        $this->expectException(InvalidSiteSettingsException::class);
+        ClubConfig::sanitize(['banner_delay_seconds' => ClubConfig::DELAY_SECONDS_MAX + 1]);
+    }
+
+    public function test_sanitize_rejects_a_non_integer_delay(): void
+    {
+        $this->expectException(InvalidSiteSettingsException::class);
+        ClubConfig::sanitize(['banner_delay_seconds' => '5']);
+    }
+
+    public function test_sanitize_rejects_a_scroll_percent_below_the_min(): void
+    {
+        // SCROLL_PERCENT_MIN is 1 — 0 is out of range.
+        $this->expectException(InvalidSiteSettingsException::class);
+        ClubConfig::sanitize(['banner_scroll_percent' => 0]);
+    }
+
+    public function test_sanitize_rejects_dismiss_days_out_of_range(): void
+    {
+        $this->expectException(InvalidSiteSettingsException::class);
+        ClubConfig::sanitize(['banner_dismiss_days' => ClubConfig::DISMISS_DAYS_MAX + 1]);
+    }
+
+    public function test_resolve_completes_the_banner_behavior_and_ignores_a_corrupted_enum(): void
+    {
+        // A corrupted stored enum + out-of-range int must fall back to the locked defaults
+        // (resolve is lenient — a bad stored value can never reach the widget).
+        $resolved = ClubConfig::resolve([
+            'banner_trigger' => 'garbage',
+            'banner_position' => 'nowhere',
+            'banner_delay_seconds' => 9999,
+            'banner_scroll_percent' => 30,
+        ]);
+
+        $this->assertSame(ClubConfig::TRIGGER_IMMEDIATE, $resolved['banner_trigger']);
+        $this->assertSame(ClubConfig::POSITION_BOTTOM_END, $resolved['banner_position']);
+        $this->assertSame(ClubConfig::DEFAULTS['banner_delay_seconds'], $resolved['banner_delay_seconds']);
+        $this->assertSame(30, $resolved['banner_scroll_percent']); // a valid stored int is kept
+    }
+
     public function test_the_settings_service_persists_a_valid_club_config(): void
     {
         $account = Account::factory()->create();

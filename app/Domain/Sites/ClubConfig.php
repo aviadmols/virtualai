@@ -5,8 +5,9 @@ namespace App\Domain\Sites;
 /**
  * ClubConfig — the per-site Customer-Club schema (single source of truth), mirroring
  * WidgetAppearance. Defines the configurable fields (enabled, member discount percent,
- * per-surface price-zone selectors) with their allowed values + DEFAULTS. Three
- * consumers share it:
+ * per-surface price-zone selectors, and the join-banner behavior: when it appears —
+ * immediate / after a delay / on scroll — which corner it sits in, and how long a
+ * dismissal is remembered) with their allowed values + DEFAULTS. Three consumers share it:
  *  - SiteSettingsService::validate() → sanitize() (reject bad values before persisting),
  *  - BootstrapController → resolve() (merge stored over defaults so the widget always
  *    receives a complete, valid config even when the merchant never customized),
@@ -57,7 +58,62 @@ final class ClubConfig
     // declaration blocks can't appear). Identical allow-list to WidgetAppearance.
     private const SELECTOR_PATTERN = '/^[\w #.>~+*^$|:,()\[\]="\'-]+$/';
 
-    // The locked defaults — club OFF, no discount, no zones on any surface.
+    // --- Banner behavior + timing (WHEN and WHERE the join banner appears, and how long a
+    // dismissal is remembered). Pure display behavior — no money, no PII, no selectors. ---
+
+    // Top-level keys (stored on the club_config JSON object).
+    public const KEY_BANNER_TRIGGER = 'banner_trigger';
+
+    public const KEY_BANNER_DELAY_SECONDS = 'banner_delay_seconds';
+
+    public const KEY_BANNER_SCROLL_PERCENT = 'banner_scroll_percent';
+
+    public const KEY_BANNER_POSITION = 'banner_position';
+
+    public const KEY_BANNER_DISMISS_DAYS = 'banner_dismiss_days';
+
+    // When the banner appears.
+    public const TRIGGER_IMMEDIATE = 'immediate';
+
+    public const TRIGGER_DELAY = 'delay';
+
+    public const TRIGGER_SCROLL = 'scroll';
+
+    public const BANNER_TRIGGERS = [self::TRIGGER_IMMEDIATE, self::TRIGGER_DELAY, self::TRIGGER_SCROLL];
+
+    // Which corner the banner sits in. LOGICAL sides (end = trailing, start = leading) so the
+    // widget resolves them per the store's direction — the same corner mirrors correctly in RTL.
+    public const POSITION_BOTTOM_END = 'bottom-end';
+
+    public const POSITION_BOTTOM_START = 'bottom-start';
+
+    public const POSITION_TOP_END = 'top-end';
+
+    public const POSITION_TOP_START = 'top-start';
+
+    public const BANNER_POSITIONS = [
+        self::POSITION_BOTTOM_END,
+        self::POSITION_BOTTOM_START,
+        self::POSITION_TOP_END,
+        self::POSITION_TOP_START,
+    ];
+
+    // Bounded whole-number ranges (inclusive) for the timing/dismissal fields.
+    public const DELAY_SECONDS_MIN = 0;
+
+    public const DELAY_SECONDS_MAX = 60;
+
+    public const SCROLL_PERCENT_MIN = 1;
+
+    public const SCROLL_PERCENT_MAX = 100;
+
+    // 0 = session-only (the banner may reappear on the next page load); >0 persists a dismissal.
+    public const DISMISS_DAYS_MIN = 0;
+
+    public const DISMISS_DAYS_MAX = 365;
+
+    // The locked defaults — club OFF, no discount, no zones. The banner shows immediately at the
+    // bottom-end corner and a dismissal is remembered for a week.
     public const DEFAULTS = [
         self::KEY_ENABLED => false,
         self::KEY_DISCOUNT_PERCENT => 0,
@@ -66,6 +122,11 @@ final class ClubConfig
             self::SURFACE_CATALOG => [],
             self::SURFACE_CART => [],
         ],
+        self::KEY_BANNER_TRIGGER => self::TRIGGER_IMMEDIATE,
+        self::KEY_BANNER_DELAY_SECONDS => 3,
+        self::KEY_BANNER_SCROLL_PERCENT => 25,
+        self::KEY_BANNER_POSITION => self::POSITION_BOTTOM_END,
+        self::KEY_BANNER_DISMISS_DAYS => 7,
     ];
 
     /** The complete default club config. */
@@ -111,7 +172,44 @@ final class ClubConfig
             }
         }
 
+        // Banner behavior: keep a stored enum only if it is one of the known values (a corrupted
+        // value must never reach the widget as a bad CSS class / trigger); ranged ints clamp back
+        // to the default when out of range or the wrong type.
+        if (self::isKnownTrigger($stored[self::KEY_BANNER_TRIGGER] ?? null)) {
+            $resolved[self::KEY_BANNER_TRIGGER] = $stored[self::KEY_BANNER_TRIGGER];
+        }
+
+        if (self::isKnownPosition($stored[self::KEY_BANNER_POSITION] ?? null)) {
+            $resolved[self::KEY_BANNER_POSITION] = $stored[self::KEY_BANNER_POSITION];
+        }
+
+        $resolved[self::KEY_BANNER_DELAY_SECONDS] = self::resolvedInt($stored, self::KEY_BANNER_DELAY_SECONDS, self::DELAY_SECONDS_MIN, self::DELAY_SECONDS_MAX);
+        $resolved[self::KEY_BANNER_SCROLL_PERCENT] = self::resolvedInt($stored, self::KEY_BANNER_SCROLL_PERCENT, self::SCROLL_PERCENT_MIN, self::SCROLL_PERCENT_MAX);
+        $resolved[self::KEY_BANNER_DISMISS_DAYS] = self::resolvedInt($stored, self::KEY_BANNER_DISMISS_DAYS, self::DISMISS_DAYS_MIN, self::DISMISS_DAYS_MAX);
+
         return $resolved;
+    }
+
+    /** A stored value is a known trigger enum. */
+    private static function isKnownTrigger(mixed $value): bool
+    {
+        return is_string($value) && in_array($value, self::BANNER_TRIGGERS, true);
+    }
+
+    /** A stored value is a known position enum. */
+    private static function isKnownPosition(mixed $value): bool
+    {
+        return is_string($value) && in_array($value, self::BANNER_POSITIONS, true);
+    }
+
+    /** The stored int for $key if present + in range, else the locked default (lenient merge). */
+    private static function resolvedInt(array $stored, string $key, int $min, int $max): int
+    {
+        $value = $stored[$key] ?? null;
+
+        return (is_int($value) && $value >= $min && $value <= $max)
+            ? $value
+            : self::DEFAULTS[$key];
     }
 
     /**
@@ -138,7 +236,47 @@ final class ClubConfig
             $clean[self::KEY_PRICE_ZONES] = self::validPriceZones($input[self::KEY_PRICE_ZONES]);
         }
 
+        if (array_key_exists(self::KEY_BANNER_TRIGGER, $input)) {
+            $clean[self::KEY_BANNER_TRIGGER] = self::validEnum(self::KEY_BANNER_TRIGGER, $input[self::KEY_BANNER_TRIGGER], self::BANNER_TRIGGERS);
+        }
+
+        if (array_key_exists(self::KEY_BANNER_POSITION, $input)) {
+            $clean[self::KEY_BANNER_POSITION] = self::validEnum(self::KEY_BANNER_POSITION, $input[self::KEY_BANNER_POSITION], self::BANNER_POSITIONS);
+        }
+
+        if (array_key_exists(self::KEY_BANNER_DELAY_SECONDS, $input)) {
+            $clean[self::KEY_BANNER_DELAY_SECONDS] = self::validRangedInt(self::KEY_BANNER_DELAY_SECONDS, $input[self::KEY_BANNER_DELAY_SECONDS], self::DELAY_SECONDS_MIN, self::DELAY_SECONDS_MAX);
+        }
+
+        if (array_key_exists(self::KEY_BANNER_SCROLL_PERCENT, $input)) {
+            $clean[self::KEY_BANNER_SCROLL_PERCENT] = self::validRangedInt(self::KEY_BANNER_SCROLL_PERCENT, $input[self::KEY_BANNER_SCROLL_PERCENT], self::SCROLL_PERCENT_MIN, self::SCROLL_PERCENT_MAX);
+        }
+
+        if (array_key_exists(self::KEY_BANNER_DISMISS_DAYS, $input)) {
+            $clean[self::KEY_BANNER_DISMISS_DAYS] = self::validRangedInt(self::KEY_BANNER_DISMISS_DAYS, $input[self::KEY_BANNER_DISMISS_DAYS], self::DISMISS_DAYS_MIN, self::DISMISS_DAYS_MAX);
+        }
+
         return $clean;
+    }
+
+    /** A value restricted to a known enum set (strings only); anything else is rejected. */
+    private static function validEnum(string $field, mixed $value, array $allowed): string
+    {
+        if (! is_string($value) || ! in_array($value, $allowed, true)) {
+            throw InvalidSiteSettingsException::club($field, 'must be one of: '.implode(', ', $allowed));
+        }
+
+        return $value;
+    }
+
+    /** A whole number within [$min, $max] (inclusive). Non-ints / out-of-range are rejected. */
+    private static function validRangedInt(string $field, mixed $value, int $min, int $max): int
+    {
+        if (! is_int($value) || $value < $min || $value > $max) {
+            throw InvalidSiteSettingsException::club($field, 'must be a whole number between '.$min.' and '.$max);
+        }
+
+        return $value;
     }
 
     /** A whole percent 0..100. Non-ints / out-of-range are rejected. */

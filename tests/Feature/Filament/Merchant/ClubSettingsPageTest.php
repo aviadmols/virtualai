@@ -112,6 +112,46 @@ class ClubSettingsPageTest extends TestCase
         $this->assertSame([], $stored[ClubConfig::KEY_PRICE_ZONES][ClubConfig::SURFACE_CATALOG]);
     }
 
+    public function test_saving_persists_the_banner_behavior_config(): void
+    {
+        Tenant::run($this->account->id, function (): void {
+            Livewire::test(ClubSettings::class)
+                ->assertOk()
+                ->set('enabled', true)
+                ->set('discountPercent', 10)
+                ->set('bannerTrigger', ClubConfig::TRIGGER_DELAY)
+                ->set('bannerDelaySeconds', 8)
+                ->set('bannerScrollPercent', 40)
+                ->set('bannerPosition', ClubConfig::POSITION_TOP_START)
+                ->set('bannerDismissDays', 30)
+                ->call('save')
+                ->assertHasNoErrors();
+        });
+
+        $stored = Tenant::run($this->account->id, fn () => Site::query()->find($this->site->id)->club_config);
+
+        $this->assertSame(ClubConfig::TRIGGER_DELAY, $stored[ClubConfig::KEY_BANNER_TRIGGER]);
+        $this->assertSame(8, $stored[ClubConfig::KEY_BANNER_DELAY_SECONDS]);
+        $this->assertSame(40, $stored[ClubConfig::KEY_BANNER_SCROLL_PERCENT]);
+        $this->assertSame(ClubConfig::POSITION_TOP_START, $stored[ClubConfig::KEY_BANNER_POSITION]);
+        $this->assertSame(30, $stored[ClubConfig::KEY_BANNER_DISMISS_DAYS]);
+    }
+
+    public function test_an_invalid_banner_trigger_surfaces_a_soft_error_and_saves_nothing(): void
+    {
+        Tenant::run($this->account->id, function (): void {
+            Livewire::test(ClubSettings::class)
+                ->set('enabled', true)
+                ->set('bannerTrigger', 'sideways') // not a known trigger — the service rejects it
+                ->call('save')
+                // Mapped to the discount field (the single soft-error seam), reason invalid_club_config.
+                ->assertHasErrors(['discountPercent']);
+        });
+
+        $stored = Tenant::run($this->account->id, fn () => Site::query()->find($this->site->id)->club_config);
+        $this->assertNull($stored); // nothing persisted
+    }
+
     public function test_an_out_of_range_discount_surfaces_a_soft_error_and_saves_nothing(): void
     {
         Tenant::run($this->account->id, function (): void {

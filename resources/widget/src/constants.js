@@ -247,13 +247,31 @@ export const CLUB_CODE_LENGTH = 6;
 // Value: '1' once verified. Scoped per site_key so two Tray On sites on one origin never collide.
 export const STORAGE_CLUB_MEMBER_PREFIX = 'trayon.club.member.'; // + site_key
 
+// Site-scoped localStorage key for a persisted banner DISMISSAL. Value: the epoch-ms instant the
+// dismissal expires (now + banner_dismiss_days). While unexpired the join banner stays hidden even
+// across reloads; a 0-day config never writes this key (session-only, reappears next load).
+export const STORAGE_CLUB_DISMISS_PREFIX = 'trayon.club.dismissed.'; // + site_key
+
 // The bootstrap `club` block keys (BootstrapController club shape).
 export const CLUB_CONFIG = {
   enabled: 'enabled',
   discountPercent: 'discount_percent',
   priceZones: 'price_zones', // { pdp: string[], catalog: string[], cart: string[] }
+  bannerTrigger: 'banner_trigger', // 'immediate' | 'delay' | 'scroll'
+  bannerDelaySeconds: 'banner_delay_seconds', // when trigger==='delay'
+  bannerScrollPercent: 'banner_scroll_percent', // when trigger==='scroll'
+  bannerPosition: 'banner_position', // 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start'
+  bannerDismissDays: 'banner_dismiss_days', // how long a dismissal is remembered (0 = session-only)
   member: 'member', // { verified: bool }
 };
+
+// When the join banner appears (mirrors ClubConfig::BANNER_TRIGGERS).
+export const CLUB_TRIGGER = { immediate: 'immediate', delay: 'delay', scroll: 'scroll' };
+
+// The corner the banner sits in — LOGICAL sides so it mirrors in RTL (mirrors ClubConfig positions).
+// The value doubles as the CSS modifier suffix: `ton-club-banner--<position>`.
+export const CLUB_POSITION_DEFAULT = 'bottom-end';
+export const CLUB_POSITIONS = ['bottom-end', 'bottom-start', 'top-end', 'top-start'];
 
 // The price-zone surfaces (a union of all three is applied on whatever resolves on THIS page).
 export const CLUB_ZONES = ['pdp', 'catalog', 'cart'];

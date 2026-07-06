@@ -111,13 +111,24 @@ const CLUB_ZONE_SELECTORS = {
 };
 
 // A bootstrap body with the Customer Club turned on. `member` toggles verified vs. not; `discount`
-// is the percent off. Reuses the base body so the PDP/appearance/product shape is unchanged.
-function clubBootstrapBody(locale, { member = false, discount = 20, enabled = true } = {}) {
+// is the percent off. The banner-behavior fields mirror the real BootstrapController shape (resolved
+// defaults) and are overridable per gate. Reuses the base body so the PDP/appearance/product shape
+// is unchanged.
+function clubBootstrapBody(locale, {
+  member = false, discount = 20, enabled = true,
+  trigger = 'immediate', delaySeconds = 0, scrollPercent = 25,
+  position = 'bottom-end', dismissDays = 7,
+} = {}) {
   const body = bootstrapBody(locale);
   body.club = {
     enabled,
     discount_percent: discount,
     price_zones: CLUB_ZONE_SELECTORS,
+    banner_trigger: trigger,
+    banner_delay_seconds: delaySeconds,
+    banner_scroll_percent: scrollPercent,
+    banner_position: position,
+    banner_dismiss_days: dismissDays,
     member: { verified: member },
   };
   return body;
@@ -1060,6 +1071,109 @@ async function memberPricingGate(browser) {
   return failures;
 }
 
+/**
+ * Banner behavior gate: proves the four merchant-configurable behaviors — (1) a dismissal PERSISTS
+ * across a reload (the × writes a future-dated flag; the banner stays hidden on the next load);
+ * (2) the DELAY trigger does not show the banner immediately but after the delay; (3) the SCROLL
+ * trigger reveals it only once the shopper scrolls past the configured depth; (4) the merchant's
+ * POSITION choice is applied as the corner modifier class.
+ */
+async function clubBannerBehaviorGate(browser) {
+  console.log('\n=== club banner behavior (dismissal persistence / delay / scroll / position) ===');
+  let failures = 0;
+
+  const bannerCount = (page) => page.evaluate(() => {
+    const h = document.querySelector('#trayon-host');
+    return h && h.shadowRoot ? h.shadowRoot.querySelectorAll('.ton-club-banner').length : 0;
+  });
+  const waitBanner = (page) => page.waitForFunction(() => {
+    const h = document.querySelector('#trayon-host');
+    return h && h.shadowRoot && h.shadowRoot.querySelector('.ton-club-banner');
+  }, { timeout: 5000 });
+  const routeClub = (page, opts) => page.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(clubBootstrapBody('en', opts)) }));
+
+  // (1) Persistent dismissal: close the banner -> gone AND stays gone after a reload.
+  try {
+    const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await stubApi(page, 'en');
+    await routeClub(page, { member: false, dismissDays: 7 });
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    await waitBanner(page);
+
+    await page.evaluate(() =>
+      document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-club-banner .ton-notification__close').click());
+    await page.waitForFunction(() => {
+      const h = document.querySelector('#trayon-host');
+      return h && h.shadowRoot && h.shadowRoot.querySelectorAll('.ton-club-banner').length === 0;
+    }, { timeout: 4000 });
+    assert(true, 'clicking × dismisses the banner');
+
+    const persisted = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) => k.startsWith('trayon.club.dismissed.'));
+      return key ? Number(localStorage.getItem(key)) : null;
+    });
+    assert(persisted && persisted > Date.now(), 'dismissal persisted with a future-dated expiry');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    await page.waitForTimeout(700); // give club.init its idle tick to (not) show the banner
+    assert((await bannerCount(page)) === 0, 'after reload: the dismissed banner stays hidden');
+    await page.close();
+  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+
+  // (2) Delay trigger: NOT shown immediately, then appears after the delay.
+  try {
+    const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await stubApi(page, 'en');
+    await routeClub(page, { member: false, trigger: 'delay', delaySeconds: 1 });
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    assert((await bannerCount(page)) === 0, 'delay trigger: banner is NOT shown immediately at boot');
+    await waitBanner(page);
+    assert((await bannerCount(page)) === 1, 'delay trigger: banner appears after the delay');
+    await page.close();
+  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+
+  // (3) Scroll trigger: appears only after scrolling past the depth.
+  try {
+    const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await stubApi(page, 'en');
+    await routeClub(page, { member: false, trigger: 'scroll', scrollPercent: 50 });
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    await page.waitForTimeout(300); // let club.init arm the scroll listener
+    assert((await bannerCount(page)) === 0, 'scroll trigger: banner hidden before scrolling');
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '3000px';
+      document.body.appendChild(spacer);
+      window.scrollTo(0, document.body.scrollHeight);
+      window.dispatchEvent(new Event('scroll'));
+    });
+    await waitBanner(page);
+    assert((await bannerCount(page)) === 1, 'scroll trigger: banner appears once scrolled past the depth');
+    await page.close();
+  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+
+  // (4) Position: the chosen corner is applied as a modifier class.
+  try {
+    const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await stubApi(page, 'en');
+    await routeClub(page, { member: false, position: 'top-start' });
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    await waitBanner(page);
+    const hasClass = await page.evaluate(() =>
+      !!document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-club-banner.ton-club-banner--top-start'));
+    assert(hasClass, 'position config applies the ton-club-banner--top-start modifier class');
+    await page.close();
+  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+
+  return failures;
+}
+
 async function run() {
   // Static perf gates first (no browser needed): async snippet + gzip budget.
   let failures = staticPerfGates();
@@ -1237,6 +1351,7 @@ async function run() {
   failures += await clubLoginFlowGate(browser);
   failures += await clubFailureGate(browser);
   failures += await memberPricingGate(browser);
+  failures += await clubBannerBehaviorGate(browser);
 
   await browser.close();
   server.close();

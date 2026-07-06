@@ -54,17 +54,31 @@ final class WidgetClubBootstrapTest extends TestCase
                 'enabled' => true,
                 'discount_percent' => 12,
                 'price_zones' => ['pdp' => ['.price'], 'catalog' => ['.card .price']],
+                // Banner behavior/timing — the controller must carry every field to the widget.
+                'banner_trigger' => 'delay',
+                'banner_delay_seconds' => 8,
+                'banner_scroll_percent' => 40,
+                'banner_position' => 'top-start',
+                'banner_dismiss_days' => 30,
             ],
         ]);
 
         $response = $this->withHeaders($this->widgetHeaders($ctx['site'], $ctx['origin']))
             ->getJson(self::ENDPOINT.'?anon_token='.self::ANON);
 
+        // Assert the whole resolved club block — including the 5 banner_* keys — is emitted, so a
+        // regression that drops any field from clubPayload() fails here (the controller seam is
+        // otherwise untested: ClubConfig tests hit resolve() directly, the widget harness mocks it).
         $response->assertOk()->assertJson([
             'club' => [
                 'enabled' => true,
                 'discount_percent' => 12,
                 'price_zones' => ['pdp' => ['.price'], 'catalog' => ['.card .price'], 'cart' => []],
+                'banner_trigger' => 'delay',
+                'banner_delay_seconds' => 8,
+                'banner_scroll_percent' => 40,
+                'banner_position' => 'top-start',
+                'banner_dismiss_days' => 30,
                 'member' => ['verified' => false],
             ],
         ]);

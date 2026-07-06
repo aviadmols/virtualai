@@ -733,6 +733,29 @@
   color: var(--ton-surface);
 }
 
+/* ---- Customer-Club banner corner (merchant-chosen). LOGICAL insets (inset-block / inset-inline)
+   so a chosen "end" corner resolves to the trailing side and mirrors correctly in RTL. Each
+   modifier fully sets both axes to override the base .ton-notification bottom-end anchor. ---- */
+.ton-club-banner--bottom-end {
+  inset-block: auto 20px;
+  inset-inline: auto 20px;
+}
+
+.ton-club-banner--bottom-start {
+  inset-block: auto 20px;
+  inset-inline: 20px auto;
+}
+
+.ton-club-banner--top-end {
+  inset-block: 20px auto;
+  inset-inline: auto 20px;
+}
+
+.ton-club-banner--top-start {
+  inset-block: 20px auto;
+  inset-inline: 20px auto;
+}
+
 @keyframes ton-notify-in {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }

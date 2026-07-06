@@ -146,6 +146,13 @@ final class BootstrapController
             'enabled' => $config[ClubConfig::KEY_ENABLED],
             'discount_percent' => $config[ClubConfig::KEY_DISCOUNT_PERCENT],
             'price_zones' => $config[ClubConfig::KEY_PRICE_ZONES],
+            // Banner behavior/timing (display-only): when + where the join banner appears and
+            // how long a dismissal is remembered. The widget reads these off the same block.
+            'banner_trigger' => $config[ClubConfig::KEY_BANNER_TRIGGER],
+            'banner_delay_seconds' => $config[ClubConfig::KEY_BANNER_DELAY_SECONDS],
+            'banner_scroll_percent' => $config[ClubConfig::KEY_BANNER_SCROLL_PERCENT],
+            'banner_position' => $config[ClubConfig::KEY_BANNER_POSITION],
+            'banner_dismiss_days' => $config[ClubConfig::KEY_BANNER_DISMISS_DAYS],
             'member' => [
                 'verified' => $endUser?->isClubMember() ?? false,
             ],

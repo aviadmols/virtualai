@@ -64,6 +64,16 @@ class ClubSettings extends Page
     // a config the service will reject.
     private const ZONES_MAX = ClubConfig::ZONES_PER_SURFACE_MAX;
 
+    // Banner behavior option sets — mirror the backend enums (single source of truth).
+    private const TRIGGERS = ClubConfig::BANNER_TRIGGERS;
+
+    private const POSITIONS = ClubConfig::BANNER_POSITIONS;
+
+    // i18n key prefixes for the behavior select labels (never a literal in the page).
+    private const TRIGGER_OPTION_PREFIX = 'club.behavior.trigger_option.';
+
+    private const POSITION_OPTION_PREFIX = 'club.behavior.position_option.';
+
     // The picker runs in ZONE mode here: each click accumulates another price element.
     private const PICKER_MODE_ZONE = 'zone';
 
@@ -106,6 +116,22 @@ class ClubSettings extends Page
         ClubConfig::SURFACE_CATALOG => [],
         ClubConfig::SURFACE_CART => [],
     ];
+
+    // --- Banner behavior + timing (hydrated from the resolved config; validated server-side). ---
+    /** When the join banner appears: immediate | delay | scroll. */
+    public string $bannerTrigger = ClubConfig::TRIGGER_IMMEDIATE;
+
+    /** Seconds after load before the banner shows (when trigger = delay). */
+    public int $bannerDelaySeconds = 0;
+
+    /** Page scroll depth (%) that reveals the banner (when trigger = scroll). */
+    public int $bannerScrollPercent = 0;
+
+    /** Which corner the banner sits in (logical side, RTL-aware). */
+    public string $bannerPosition = ClubConfig::POSITION_BOTTOM_END;
+
+    /** How long a shopper's dismissal is remembered, in days (0 = session-only). */
+    public int $bannerDismissDays = 0;
 
     // --- Visual zone-picker state (small scalars only; the preview HTML is cached). ---
     public bool $pickerOpen = false;
@@ -175,6 +201,30 @@ class ClubSettings extends Page
     public function pickerMode(): string
     {
         return self::PICKER_MODE_ZONE;
+    }
+
+    /** Trigger options for the select: value => localized label. */
+    public function triggerOptions(): array
+    {
+        return $this->optionLabels(self::TRIGGERS, self::TRIGGER_OPTION_PREFIX);
+    }
+
+    /** Banner-position options for the select: value => localized label. */
+    public function positionOptions(): array
+    {
+        return $this->optionLabels(self::POSITIONS, self::POSITION_OPTION_PREFIX);
+    }
+
+    /** Map an enum value list to a value => __(prefix.value) label array. */
+    private function optionLabels(array $values, string $prefix): array
+    {
+        $out = [];
+
+        foreach ($values as $value) {
+            $out[$value] = __($prefix.$value);
+        }
+
+        return $out;
     }
 
     /** The verified zones stored for a surface (for the summary + the picker echo). */
@@ -391,6 +441,12 @@ class ClubSettings extends Page
         foreach (self::SURFACES as $surface) {
             $this->priceZones[$surface] = array_values($resolved[ClubConfig::KEY_PRICE_ZONES][$surface] ?? []);
         }
+
+        $this->bannerTrigger = (string) $resolved[ClubConfig::KEY_BANNER_TRIGGER];
+        $this->bannerDelaySeconds = (int) $resolved[ClubConfig::KEY_BANNER_DELAY_SECONDS];
+        $this->bannerScrollPercent = (int) $resolved[ClubConfig::KEY_BANNER_SCROLL_PERCENT];
+        $this->bannerPosition = (string) $resolved[ClubConfig::KEY_BANNER_POSITION];
+        $this->bannerDismissDays = (int) $resolved[ClubConfig::KEY_BANNER_DISMISS_DAYS];
     }
 
     /**
@@ -410,6 +466,13 @@ class ClubSettings extends Page
                 ClubConfig::SURFACE_CATALOG => $this->zonesFor(ClubConfig::SURFACE_CATALOG),
                 ClubConfig::SURFACE_CART => $this->zonesFor(ClubConfig::SURFACE_CART),
             ],
+            // Behavior/timing — the service (single validator) rejects a bad enum / out-of-range
+            // int; casting here never coerces a bad value silently into range.
+            ClubConfig::KEY_BANNER_TRIGGER => (string) $this->bannerTrigger,
+            ClubConfig::KEY_BANNER_DELAY_SECONDS => (int) $this->bannerDelaySeconds,
+            ClubConfig::KEY_BANNER_SCROLL_PERCENT => (int) $this->bannerScrollPercent,
+            ClubConfig::KEY_BANNER_POSITION => (string) $this->bannerPosition,
+            ClubConfig::KEY_BANNER_DISMISS_DAYS => (int) $this->bannerDismissDays,
         ];
     }
 
