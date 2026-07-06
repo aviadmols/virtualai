@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Widget\AddToCartEventController;
 use App\Http\Controllers\Widget\BootstrapController;
+use App\Http\Controllers\Widget\EventController;
 use App\Http\Controllers\Widget\GalleryController;
 use App\Http\Controllers\Widget\GenerationController;
 use App\Http\Controllers\Widget\LeadController;
@@ -16,6 +17,7 @@ defined('ROUTE_WIDGET_GEN_SHOW') || define('ROUTE_WIDGET_GEN_SHOW', 'widget.v1.g
 defined('ROUTE_WIDGET_LEADS') || define('ROUTE_WIDGET_LEADS', 'widget.v1.leads');
 defined('ROUTE_WIDGET_GALLERY') || define('ROUTE_WIDGET_GALLERY', 'widget.v1.gallery');
 defined('ROUTE_WIDGET_ADD_TO_CART') || define('ROUTE_WIDGET_ADD_TO_CART', 'widget.v1.events.add_to_cart');
+defined('ROUTE_WIDGET_EVENTS') || define('ROUTE_WIDGET_EVENTS', 'widget.v1.events');
 
 /*
  * The signed widget API (Phase 7a). Every route is behind the widget-auth middleware
@@ -42,3 +44,6 @@ Route::get('/gallery', GalleryController::class)->name(ROUTE_WIDGET_GALLERY);
 
 // Add-to-cart funnel event (the real cart add is the host platform's job).
 Route::post('/events/add-to-cart', AddToCartEventController::class)->name(ROUTE_WIDGET_ADD_TO_CART);
+
+// Behavioral events ingest (page views + interactions) — fire-and-forget, always { ok:true }.
+Route::post('/events', EventController::class)->name(ROUTE_WIDGET_EVENTS);

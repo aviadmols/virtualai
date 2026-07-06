@@ -19,6 +19,10 @@ return [
         'lead_registered' => 'Lead registered',
         'lead_added_to_cart' => 'Added to cart',
 
+        // Widget behavioral events.
+        'page_view' => 'Page viewed',
+        'interaction' => 'Interaction',
+
         // Account control-plane actions.
         'account_suspended' => 'Account suspended',
         'account_restored' => 'Account restored',

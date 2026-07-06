@@ -19,6 +19,10 @@ return [
         'lead_registered' => 'נרשם ליד',
         'lead_added_to_cart' => 'הוסיף לעגלה',
 
+        // אירועי התנהגות בווידג׳ט.
+        'page_view' => 'צפייה בעמוד',
+        'interaction' => 'אינטראקציה',
+
         // פעולות בקרה על חשבון.
         'account_suspended' => 'החשבון הושעה',
         'account_restored' => 'החשבון שוחזר',

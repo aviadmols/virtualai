@@ -40,10 +40,13 @@ final class EndUserActivityTimeline
     // Detail keys the recorder curates that make a short human-readable line, in
     // priority order (the first present, non-secret scalar wins). All are non-secret.
     private const DETAIL_KEYS = [
-        'to' => 'to',                         // a status transition target
-        'failure_code' => 'failure_code',     // why a generation ended
-        'reason' => 'reason',                 // a gate/cancel reason
-        'product_id' => 'product_id',         // the add-to-cart product
+        'to' => 'to',                                 // a status transition target
+        'failure_code' => 'failure_code',             // why a generation ended
+        'reason' => 'reason',                         // a gate/cancel reason
+        'interaction_label' => 'interaction_label',   // a widget interaction label
+        'interaction_type' => 'interaction_type',     // the widget interaction type
+        'path' => 'path',                             // the page a shopper viewed
+        'product_id' => 'product_id',                 // the add-to-cart product
     ];
 
     /**

@@ -51,6 +51,12 @@ class ActivityEvent extends Model
 
     public const KIND_LEAD_ADDED_TO_CART = 'lead_added_to_cart';   // widget add-to-cart funnel event
 
+    // Widget behavioral events (Phase 1d). Fire-and-forget page views + meaningful
+    // interactions the shopper made, tied to the EndUser. Curated non-secret details only.
+    public const KIND_PAGE_VIEW = 'page_view';
+
+    public const KIND_INTERACTION = 'interaction';
+
     // Platform control-plane account actions (super-admin).
     public const KIND_ACCOUNT_SUSPENDED = 'account_suspended';
 

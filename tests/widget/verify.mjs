@@ -26,10 +26,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..', '..');
 const WIDGET_JS = resolve(ROOT, 'public', 'widget', 'v1', 'widget.js');
 const MOCK_HTML = resolve(HERE, 'mock-pdp.html');
+const EMBED_BLADE = resolve(ROOT, 'resources', 'views', 'components', 'to', 'embed-code.blade.php');
+const SIZE_BUDGET = resolve(ROOT, 'resources', 'widget', 'size-budget.json');
 const OUT = resolve(HERE, 'screenshots');
 const PORT = 4599;
 const ORIGIN = `http://localhost:${PORT}`;
 const SENTINEL = 'data-trayon-mounted';
+
+// Perf gate: the total layout shift the widget may cause on the host page must stay well
+// under Google's "good" CLS threshold (0.1). The widget renders in a Shadow DOM + reserves
+// its boxes, so its own contribution should be ~0; we assert a strict ceiling.
+const CLS_BUDGET = 0.02;
 
 mkdirSync(OUT, { recursive: true });
 
@@ -116,6 +123,10 @@ async function stubApi(page, locale) {
   );
   await page.route('**/widget/v1/events/add-to-cart', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, recorded: true }) }),
+  );
+  // Behavioral tracking ingest (page_view + interactions) — fire-and-forget; the widget ignores it.
+  await page.route('**/widget/v1/events', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, recorded: 0 }) }),
   );
   // Default: no past try-ons (individual gates override this to supply a gallery).
   await page.route('**/widget/v1/gallery*', (route) =>
@@ -499,13 +510,202 @@ async function crossTabGate(browser) {
   return failures;
 }
 
+/**
+ * Static perf gates (no browser): the install snippet must be a classic `<script async>`
+ * (never render-blocking, never type=module), and the built entry bundle must stay under the
+ * gzip budget. These are cheap, deterministic guards that fail the whole run if regressed.
+ */
+function staticPerfGates() {
+  console.log('\n=== static perf gates (install snippet + gzip budget) ===');
+  let failures = 0;
+
+  try {
+    const blade = readFileSync(EMBED_BLADE, 'utf8');
+    // The snippet is built in a @php block: <script src="..." data-site-key="..." async>.
+    assert(/data-site-key=/.test(blade), 'embed snippet carries data-site-key');
+    assert(/\basync\b/.test(blade), 'embed snippet is a <script async> (non-blocking install)');
+    assert(!/type=("|\\')module/.test(blade), 'embed snippet is NOT type=module (classic, cacheable, no CORS module fetch)');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+  }
+
+  try {
+    const budget = JSON.parse(readFileSync(SIZE_BUDGET, 'utf8'));
+    const gz = gzipEntry();
+    assert(gz <= budget.maxGzipBytes, `entry bundle within gzip budget (${gz} <= ${budget.maxGzipBytes})`);
+    console.log(`  -> widget.js gzipped: ${gz} bytes (budget ${budget.maxGzipBytes})`);
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+  }
+
+  return failures;
+}
+
+/** Gzip the built entry bundle (zlib deflate + a gzip header/trailer) to size it like the CDN. */
+function gzipEntry() {
+  const raw = readFileSync(WIDGET_JS);
+  const body = deflateSync(raw, { level: 9 });
+  // gzip = 10-byte header + raw deflate + CRC32 + ISIZE (mtime/os zeroed — size is what matters).
+  const header = Buffer.from([0x1f, 0x8b, 0x08, 0, 0, 0, 0, 0, 0, 0xff]);
+  const trailer = Buffer.alloc(8);
+  trailer.writeUInt32LE(crc32(raw) >>> 0, 0);
+  trailer.writeUInt32LE(raw.length >>> 0, 4);
+  return header.length + body.length + trailer.length;
+}
+
+/**
+ * Perf + tracking gate: prove (1) the widget does NO synchronous work before window `load`
+ * (it boots only on the idle path); (2) the tracking module records ONE page_view + the
+ * meaningful interactions (product_view, variant_change, tryon_open, add_to_cart) and NOTHING
+ * arbitrary; (3) nothing the widget does causes a host-page layout shift (CLS budget); and
+ * (4) tracking flushes are fire-and-forget (never block the interaction that triggered them).
+ */
+async function perfTrackingGate(browser) {
+  console.log('\n=== perf + tracking (no sync work / CLS / meaningful events only) ===');
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  let failures = 0;
+  const sentEvents = []; // every /events body the widget posts
+
+  // Install a CLS observer + a "did the widget touch the DOM before load?" probe BEFORE any
+  // page script runs. layout-shift entries accumulate the host-page shift; we also snapshot
+  // whether the widget's shadow host existed at the moment `load` fired (it must NOT — boot is
+  // idle-scheduled AFTER load), which proves no synchronous pre-load work.
+  await page.addInitScript(() => {
+    window.__cls = 0;
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (!entry.hadRecentInput) window.__cls += entry.value;
+        }
+      }).observe({ type: 'layout-shift', buffered: true });
+    } catch { /* layout-shift unsupported -> the assertion below tolerates 0 */ }
+
+    window.__widgetAtLoad = null;
+    window.addEventListener('load', () => {
+      // At the `load` event the idle boot has NOT run yet: no shadow host, no button, and no
+      // resolved config (config is only stashed AFTER the idle bootstrap fetch returns). The
+      // one thing set synchronously is the cheap double-boot GUARD flag — that is not "work".
+      window.__widgetAtLoad = {
+        host: !!document.querySelector('#trayon-host'),
+        button: !!document.querySelector('[data-trayon-mounted]'),
+        configResolved: !!(window.__TrayOn && window.__TrayOn.state && window.__TrayOn.state.config),
+      };
+    }, { once: true });
+  });
+
+  await stubApi(page, 'en');
+  // Capture every tracking batch the widget sends (still fulfilling fire-and-forget).
+  await page.route('**/widget/v1/events', (route) => {
+    try {
+      const body = route.request().postDataJSON();
+      if (body) sentEvents.push(body);
+    } catch { /* a beacon Blob may not parse as JSON here — ignore */ }
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, recorded: 0 }) });
+  });
+
+  try {
+    await page.goto(ORIGIN, { waitUntil: 'load' });
+
+    // --- no synchronous pre-load work: at `load`, the widget had not booted or mounted ---
+    const atLoad = await page.evaluate(() => window.__widgetAtLoad);
+    assert(atLoad && atLoad.host === false, 'no widget shadow host at window `load` (boot is idle-scheduled)');
+    assert(atLoad && atLoad.button === false, 'no injected button at window `load` (no sync mount)');
+    assert(atLoad && atLoad.configResolved === false, 'no resolved config at `load` (bootstrap fetch + boot run only on idle, after load)');
+
+    await waitForBoot(page);
+
+    // --- a meaningful interaction: change the variant, then open the flow, then add-to-cart ---
+    await page.selectOption('#variant', 'TEE-S');
+    await page.waitForTimeout(400);
+
+    await page.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
+    await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
+
+    // Run a full try-on so the add-to-cart interaction fires (its own funnel + track signal).
+    await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
+    await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
+    await page.locator('.ton-input').first().fill('175');
+    await page.locator('.ton-consent__box').check();
+    await page.locator('.ton-cta').click({ timeout: 6000 });
+    await page.locator('.ton-result__img').waitFor({ timeout: 8000 });
+    await page.locator('.ton-action--primary').click(); // add to cart
+
+    // Force a flush (idle batches may still be pending) by hiding the page, then settle.
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await page.waitForFunction(() => window.__cls != null, { timeout: 2000 }).catch(() => {});
+    // Poll until the batches arrive (fire-and-forget, so give the network a beat).
+    for (let i = 0; i < 25; i++) {
+      await page.waitForTimeout(120);
+      const kinds = collectKinds(sentEvents);
+      if (kinds.pageView >= 1 && kinds.interactions.has('product_view') && kinds.interactions.has('variant_change')
+        && kinds.interactions.has('tryon_open') && kinds.interactions.has('add_to_cart')) break;
+    }
+
+    // --- meaningful-events gate: exactly the curated kinds, nothing arbitrary ---
+    const kinds = collectKinds(sentEvents);
+    assert(kinds.pageView === 1, `exactly ONE page_view recorded (${kinds.pageView})`);
+    assert(kinds.interactions.has('product_view'), 'product_view interaction recorded');
+    assert(kinds.interactions.has('variant_change'), 'variant_change interaction recorded');
+    assert(kinds.interactions.has('tryon_open'), 'tryon_open interaction recorded');
+    assert(kinds.interactions.has('add_to_cart'), 'add_to_cart interaction recorded');
+    assert(kinds.unknown.length === 0, `no arbitrary/unknown interaction types recorded (${kinds.unknown.join(',') || 'none'})`);
+
+    // --- payload-shape gate: matches the ingest CONTRACT exactly (no PII beyond path/host) ---
+    const shapeOk = sentEvents.every((batch) =>
+      typeof batch.anon_token === 'string' && Array.isArray(batch.events) &&
+      batch.events.every((e) =>
+        (e.kind === 'page_view' || e.kind === 'interaction') &&
+        typeof e.at === 'string' && typeof e.path === 'string' && !e.path.includes('?') &&
+        (e.referrer_host === undefined || typeof e.referrer_host === 'string') &&
+        (e.interaction === undefined || (typeof e.interaction.type === 'string'))),
+    );
+    assert(shapeOk, 'every event matches the ingest contract shape (anon_token + kind/at/path, no query string)');
+
+    // --- CLS gate: the widget caused (essentially) no host layout shift ---
+    const cls = await page.evaluate(() => window.__cls || 0);
+    assert(cls < CLS_BUDGET, `widget caused no host layout shift (CLS ${cls.toFixed(4)} < ${CLS_BUDGET})`);
+
+    console.log(`  -> events captured: ${sentEvents.length} batch(es); CLS=${cls.toFixed(4)}`);
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, 'widget-perf-FAIL.png') }).catch(() => {});
+  }
+
+  await page.close();
+  return failures;
+}
+
+/** Flatten the captured /events batches into counts of page_views + a set of interaction types. */
+function collectKinds(batches) {
+  const known = new Set(['product_view', 'variant_change', 'tryon_open', 'add_to_cart']);
+  let pageView = 0;
+  const interactions = new Set();
+  const unknown = [];
+  for (const batch of batches) {
+    for (const e of batch.events || []) {
+      if (e.kind === 'page_view') pageView++;
+      else if (e.kind === 'interaction' && e.interaction) {
+        const type = e.interaction.type;
+        interactions.add(type);
+        if (!known.has(type)) unknown.push(type);
+      }
+    }
+  }
+  return { pageView, interactions, unknown };
+}
+
 async function run() {
+  // Static perf gates first (no browser needed): async snippet + gzip budget.
+  let failures = staticPerfGates();
+
   const server = await startServer();
   // Prefer bundled Chromium; fall back to system Chrome (the existing visual harnesses do).
   const browser = await chromium
     .launch()
     .catch(() => chromium.launch({ channel: 'chrome' }));
-  let failures = 0;
 
   for (const locale of ['en', 'he']) {
     console.log(`\n=== locale: ${locale} ===`);
@@ -664,6 +864,9 @@ async function run() {
 
   // --- custom placement gate (visual picker anchor + runtime fallback) ---
   failures += await customPlacementGate(browser);
+
+  // --- perf + tracking gate (no sync work / CLS / meaningful-events-only) ---
+  failures += await perfTrackingGate(browser);
 
   await browser.close();
   server.close();

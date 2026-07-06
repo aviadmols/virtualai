@@ -9,6 +9,7 @@
 import { SELECTOR_ROLES } from './constants.js';
 import { selectorString } from './dom.js';
 import * as api from './api.js';
+import * as track from './track.js';
 
 /**
  * Add the EXACT captured variant to the host cart.
@@ -19,6 +20,9 @@ export async function add(variant, selectorConfig, anonToken, generationId) {
   api
     .recordAddToCart({ anonToken, generationId, variantId: variant?.id })
     .catch(() => {});
+
+  // The meaningful behavioral interaction (batched, fire-and-forget; separate from the funnel row).
+  track.trackAddToCart(variant);
 
   syncHostVariation(selectorConfig, variant);
 

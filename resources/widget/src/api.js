@@ -41,9 +41,11 @@ function headers(extra = {}) {
   return { [HEADER_SITE_KEY]: siteKey, ...extra };
 }
 
-/** A typed fetch wrapper: returns { ok, status, data } and never throws on an HTTP error. */
-async function request(method, path, { query, json, headers: extra } = {}) {
+/** A typed fetch wrapper: returns { ok, status, data } and never throws on an HTTP error.
+ *  `keepalive` lets a fire-and-forget flush survive a page unload (used by tracking). */
+async function request(method, path, { query, json, headers: extra, keepalive } = {}) {
   const init = { method, headers: headers(extra), credentials: 'omit', mode: 'cors' };
+  if (keepalive) init.keepalive = true;
 
   if (json !== undefined) {
     init.headers['Content-Type'] = 'application/json';
@@ -128,4 +130,33 @@ export function recordAddToCart(payload) {
       [CART_EVENT_FIELD.variantId]: payload.variantId || null,
     },
   });
+}
+
+/**
+ * POST /events — fire-and-forget batch of behavioral events { anon_token, events: [...] }.
+ * The response is IGNORED (tracking never gates anything). On a pagehide flush we prefer
+ * navigator.sendBeacon (survives unload without keeping the page alive); sendBeacon can't set
+ * a header, so the beacon path carries the public site_key on the query string (the widget
+ * middleware reads ?site_key= as well as the header) and the browser still sends Origin. When
+ * a beacon isn't available/possible we fall back to fetch keepalive (which CAN set the header).
+ */
+export function recordEvents(payload, useBeacon = false) {
+  const body = {
+    [QUERY_ANON_TOKEN]: payload.anonToken,
+    events: Array.isArray(payload.events) ? payload.events : [],
+  };
+
+  if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+    try {
+      const target = url(ENDPOINTS.events, { [QUERY_SITE_KEY]: siteKey });
+      const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
+      if (navigator.sendBeacon(target, blob)) return true;
+    } catch {
+      // fall through to fetch keepalive below
+    }
+  }
+
+  // fetch keepalive: survives the unload, sets the site-key header, response ignored.
+  request('POST', ENDPOINTS.events, { json: body, keepalive: true }).catch(() => {});
+  return true;
 }

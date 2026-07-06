@@ -22,6 +22,7 @@ import * as mount from './mount.js';
 import * as modal from './modal.js';
 import * as pending from './pending.js';
 import * as resume from './resume.js';
+import * as track from './track.js';
 
 (function boot() {
   // The namespaced global: a double-boot guard + a teardown hook for SPA navigation.
@@ -72,6 +73,9 @@ async function run() {
 
   const onPdp = isProductPage(data);
 
+  // Per-site tracking flag (privacy/consent). Absent => on, per the ingest contract.
+  const trackingEnabled = data.site?.tracking_enabled;
+
   if (onPdp) {
     // Stash the boot config.
     state.config = {
@@ -88,13 +92,21 @@ async function run() {
     shell.create(state.config.appearance);
     mount.start(openModal);
 
+    // Behavioral tracking (page_view + product_view + variant/open/cart interactions), on the
+    // same idle tick — never a sync hook. Needs the shell's overlay mount for the variant event.
+    track.init({ trackingEnabled, hasProduct: true });
+
     // Expose teardown so a host SPA (or our own future route watcher) can clean up.
     window[NAMESPACE].teardown = combinedTeardown;
   } else {
     // Non-PDP page: no button. But if the shopper has a try-on generating (started elsewhere),
     // keep the minimal appearance around so the resumer can theme the notification.
     if (data.site?.appearance) state.config = { appearance: data.site.appearance };
-    window[NAMESPACE].teardown = resume.teardown;
+
+    // A non-PDP page still records a single page_view (no product / interactions to bind).
+    track.init({ trackingEnabled, hasProduct: false });
+
+    window[NAMESPACE].teardown = nonPdpTeardown;
   }
 
   // Cross-page / cross-tab resume: runs on EVERY authorized page load (PDP or not). Reconnects
@@ -102,20 +114,33 @@ async function run() {
   await resume.resumeOnLoad(onPdp);
 }
 
-/** Teardown both the mount engine and the cross-tab channel (SPA navigation away from a PDP). */
+/** Teardown the mount engine, tracking, and the cross-tab channel (SPA nav away from a PDP). */
 function combinedTeardown() {
-  try {
-    resume.teardown();
-  } catch {
-    warn('failed to tear down the resume channel');
-  }
+  safeTeardown(track.teardown);
+  safeTeardown(resume.teardown);
   mount.teardown();
+}
+
+/** Non-PDP teardown: flush + drop tracking, then the resume channel. */
+function nonPdpTeardown() {
+  safeTeardown(track.teardown);
+  resume.teardown();
+}
+
+/** Run one teardown step without letting a failure abort the rest / leak into the host. */
+function safeTeardown(fn) {
+  try {
+    fn();
+  } catch {
+    warn('teardown step failed');
+  }
 }
 
 /** Open the modal on button click. (The modal is bundled in the single IIFE; the panel
  *  DOM + the result/loading screens are only constructed on demand, so first paint stays
  *  cheap and the host main thread is never touched until the shopper clicks.) */
 function openModal() {
+  track.trackOpen(); // meaningful interaction: the shopper opened the Tray On flow
   try {
     modal.open();
   } catch {

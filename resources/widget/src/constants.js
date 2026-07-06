@@ -22,6 +22,7 @@ export const ENDPOINTS = {
   leads: '/leads',
   gallery: '/gallery',
   addToCart: '/events/add-to-cart',
+  events: '/events',
 };
 
 // The auth header the ResolveWidgetSite middleware reads (config/widget.php). The GET
@@ -177,3 +178,31 @@ export const EVENTS = {
 
 // Modal step ids (the flow product-ux-architect specced: photo -> details -> consent).
 export const STEP = { photo: 'photo', details: 'details', consent: 'consent' };
+
+// --- Activity tracking (track.js) --------------------------------------------
+// Behavioral signal collection: ONE page_view per page load + MEANINGFUL interactions only
+// (product view, variant change, Tray-On open, add-to-cart) — never arbitrary DOM clicks.
+// Events are batched into a small in-memory queue and flushed fire-and-forget on idle /
+// pagehide (sendBeacon where available, else fetch keepalive) so nothing blocks interaction
+// and nothing is lost on navigation. The server response is ignored.
+
+// The two event kinds the ingest contract accepts (POST /events { events: [{ kind, ... }] }).
+export const TRACK_KIND = { pageView: 'page_view', interaction: 'interaction' };
+
+// The MEANINGFUL interaction types (interaction.type in the payload). Curated — not clicks.
+export const TRACK_INTERACTION = {
+  productView: 'product_view',
+  variantChange: 'variant_change',
+  tryonOpen: 'tryon_open',
+  addToCart: 'add_to_cart',
+};
+
+// Batching: cap the queue so a long session can't grow unbounded, and auto-flush once it
+// fills. Idle flush rides the same requestIdleCallback path the loader boots on.
+export const TRACK_MAX_QUEUE = 20;
+export const TRACK_FLUSH_IDLE_TIMEOUT_MS = 2000;
+
+// The bootstrap flag that can DISABLE tracking per-site (privacy/consent). Tracking defaults
+// to ON unless the bootstrap explicitly returns tracking_enabled === false (coordinated with
+// laravel-backend: absent flag => on). A variant-label is trimmed to this max before sending.
+export const TRACK_LABEL_MAX = 120;
