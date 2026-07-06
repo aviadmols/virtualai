@@ -15,6 +15,7 @@ import { submit, cancelPoll, OUTCOME } from './generation.js';
 import * as cart from './cart.js';
 import * as api from './api.js';
 import * as button from './button.js';
+import * as pending from './pending.js';
 
 let overlay = null;
 let objectUrl = null;
@@ -24,6 +25,7 @@ let objectUrl = null;
 let isOpen = false;
 let notice = null; // the on-page "your try-on is ready" element, when shown
 let pendingNotice = null; // 'success' | 'error' | null — an unviewed background completion
+let resumeGenerationId = null; // set when the notice comes from a cross-page/cross-tab resume
 
 // The working draft for the current intent (kept across step changes / retries).
 let draft = { photo: null, height: '', extra: {}, consent: false };
@@ -704,8 +706,24 @@ function notifyOutcome(out) {
   showNotification(success);
 }
 
+/**
+ * Show the on-page notification for a CROSS-PAGE / CROSS-TAB resume (resume.js). The result may
+ * have been produced on another page or tab; state.lastResult was seeded by the resumer, so a
+ * click reopens to it (re-fetching a fresh signed URL if the persisted one expired).
+ */
+export function notifyOutcomeFromResume(success, generationId) {
+  pendingNotice = success ? 'success' : 'error';
+  resumeGenerationId = generationId || null;
+  showNotification(success);
+}
+
+/** Clear the on-page notification because another tab viewed/dismissed it (no broadcast back). */
+export function clearNotificationFromResume() {
+  clearNotice();
+}
+
 function showNotification(success) {
-  dismissNotification();
+  clearNotice();
 
   const main = el(
     'button',
@@ -727,7 +745,7 @@ function showNotification(success) {
     class: 'ton-notification__close',
     attrs: { type: 'button', 'aria-label': t('modal.close') },
     text: '×',
-    on: { click: dismissNotification },
+    on: { click: onNoticeDismiss },
   });
 
   notice = el(
@@ -742,19 +760,44 @@ function showNotification(success) {
   getNotificationMount().appendChild(notice);
 }
 
-function dismissNotification() {
+/** Remove the on-page notice element WITHOUT touching the persisted entry / other tabs. */
+function clearNotice() {
   if (notice && notice.parentNode) notice.parentNode.removeChild(notice);
   notice = null;
   pendingNotice = null;
+  resumeGenerationId = null;
+}
+
+/** Legacy internal alias — a plain clear (used where no cross-tab broadcast is wanted). */
+function dismissNotification() {
+  clearNotice();
+}
+
+/** The shopper explicitly dismissed the popup (× button) — clear it AND tell other tabs. */
+function onNoticeDismiss() {
+  clearNotice();
+  pending.dismiss();
 }
 
 async function onNoticeClick(success) {
-  dismissNotification();
-  if (success && state.lastResult) {
-    await reopenToResult();
-  } else {
-    renderError('result.error');
+  // Viewing collapses the cross-page entry (marked viewed so a later page load won't re-notify)
+  // and tells other tabs to clear their popup — no duplicate/zombie notifications.
+  const gid = resumeGenerationId;
+  clearNotice();
+  pending.markViewed();
+
+  if (success) {
+    // A resume click may have no in-memory lastResult (e.g. cross-tab) — seed it from the handle
+    // so reopenToResult can re-fetch a fresh signed URL.
+    if ((!state.lastResult || !state.lastResult.generationId) && gid) {
+      state.lastResult = { generationId: gid, resultUrl: null, variant: null };
+    }
+    if (state.lastResult && state.lastResult.generationId) {
+      await reopenToResult();
+      return;
+    }
   }
+  renderError('result.error');
 }
 
 /**

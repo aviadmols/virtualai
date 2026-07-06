@@ -20,6 +20,8 @@ import { isProductPage } from './pdp.js';
 import * as shell from './shell.js';
 import * as mount from './mount.js';
 import * as modal from './modal.js';
+import * as pending from './pending.js';
+import * as resume from './resume.js';
 
 (function boot() {
   // The namespaced global: a double-boot guard + a teardown hook for SPA navigation.
@@ -37,6 +39,10 @@ import * as modal from './modal.js';
   // The API base = the origin that served widget.js (so the widget always talks home).
   const apiBase = scriptOrigin(script);
   api.configure(apiBase, siteKey);
+
+  // Scope the cross-page/cross-tab persistence to THIS site_key (two Tray On sites on one
+  // origin never collide). Cheap + synchronous — just sets the key/channel names.
+  pending.configure(siteKey);
 
   ns.booted = true;
   ns.state = state; // exposed for the verification harness (read-only inspection)
@@ -61,27 +67,49 @@ async function run() {
 
   const data = res.data;
 
-  // Not a scanned PDP -> exit cleanly (no button, no errors).
-  if (!isProductPage(data)) return;
-
-  // Stash the boot config.
+  // Locale is known even on a non-PDP page — the cross-page notification uses it.
   setLocale(data.site?.locale || 'en');
-  state.config = {
-    appearance: data.site.appearance,
-    selectors: data.site.selectors,
-    locale: data.site.locale,
-    privacy: data.site.privacy,
-    gallery: data.site.gallery,
-  };
-  state.product = data.product;
-  state.lead = data.lead || null;
 
-  // Build the Shadow shell, then start the self-healing mount engine.
-  shell.create(state.config.appearance);
-  mount.start(openModal);
+  const onPdp = isProductPage(data);
 
-  // Expose teardown so a host SPA (or our own future route watcher) can clean up.
-  window[NAMESPACE].teardown = mount.teardown;
+  if (onPdp) {
+    // Stash the boot config.
+    state.config = {
+      appearance: data.site.appearance,
+      selectors: data.site.selectors,
+      locale: data.site.locale,
+      privacy: data.site.privacy,
+      gallery: data.site.gallery,
+    };
+    state.product = data.product;
+    state.lead = data.lead || null;
+
+    // Build the Shadow shell, then start the self-healing mount engine.
+    shell.create(state.config.appearance);
+    mount.start(openModal);
+
+    // Expose teardown so a host SPA (or our own future route watcher) can clean up.
+    window[NAMESPACE].teardown = combinedTeardown;
+  } else {
+    // Non-PDP page: no button. But if the shopper has a try-on generating (started elsewhere),
+    // keep the minimal appearance around so the resumer can theme the notification.
+    if (data.site?.appearance) state.config = { appearance: data.site.appearance };
+    window[NAMESPACE].teardown = resume.teardown;
+  }
+
+  // Cross-page / cross-tab resume: runs on EVERY authorized page load (PDP or not). Reconnects
+  // the shopper to a try-on they started elsewhere and shows the "ready" popup here on finish.
+  await resume.resumeOnLoad(onPdp);
+}
+
+/** Teardown both the mount engine and the cross-tab channel (SPA navigation away from a PDP). */
+function combinedTeardown() {
+  try {
+    resume.teardown();
+  } catch {
+    warn('failed to tear down the resume channel');
+  }
+  mount.teardown();
 }
 
 /** Open the modal on button click. (The modal is bundled in the single IIFE; the panel

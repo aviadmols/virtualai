@@ -15,6 +15,7 @@ import {
 import { state } from './state.js';
 import { uuid } from './dom.js';
 import * as api from './api.js';
+import * as pending from './pending.js';
 
 const SLEEP = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -79,9 +80,21 @@ export async function submit(inputs) {
   const generationId = res.data.generation?.id;
   const freeRemaining = res.data.free_remaining;
 
+  // Persist the pending generation NOW (id known) so the shopper can close the popup, keep
+  // browsing (other pages / tabs), and still be notified when it finishes. Handles only — no
+  // photo/PII beyond what's already client-side (the result_url is added on completion).
+  pending.start({ generationId, anonToken: state.anonToken, productId: state.product?.id });
+
   // Poll the status machine to a terminal state.
   const polled = await poll(generationId);
   state.submitting = false;
+
+  // Reflect the terminal state into the persisted entry + broadcast to other tabs.
+  if (polled.outcome === OUTCOME.succeeded) {
+    pending.markDone(generationId, polled.resultUrl);
+  } else if (polled.outcome === OUTCOME.failed || polled.outcome === OUTCOME.timeout) {
+    pending.markFailed(generationId);
+  }
 
   return { ...polled, generationId, freeRemaining };
 }
@@ -116,6 +129,47 @@ async function poll(generationId) {
 /** Cancel an in-flight poll (modal closed / new intent). */
 export function cancelPoll() {
   activePoll.cancelled = true;
+}
+
+// ---------------------------------------------------------------------------
+// Cross-page resume poll — reuses the same signed status endpoint (site_key + Origin +
+// the persisted anonToken). Independent of the modal's activePoll so a page-load resume
+// and an open modal never fight. Returns a RAW terminal shape the resumer maps to a popup.
+// ---------------------------------------------------------------------------
+let resumePoll = { cancelled: false };
+
+/**
+ * Poll GET /generations/{id} to a terminal state for a RESUMED (cross-page/cross-tab) try-on.
+ * @returns {Promise<{status, resultUrl?}>}
+ */
+export async function pollOnce(generationId, anonToken) {
+  resumePoll = { cancelled: false };
+  const ticket = resumePoll;
+
+  for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+    if (ticket.cancelled) return { status: GEN_STATUS.cancelled };
+
+    const res = await api.getGeneration(generationId, anonToken);
+
+    if (res.ok && res.data?.ok && res.data.generation) {
+      const g = res.data.generation;
+      if (g.status === GEN_STATUS.succeeded && g.result_url) {
+        return { status: GEN_STATUS.succeeded, resultUrl: g.result_url };
+      }
+      if (g.status === GEN_STATUS.failed || g.status === GEN_STATUS.cancelled) {
+        return { status: GEN_STATUS.failed };
+      }
+    }
+
+    await SLEEP(POLL_INTERVAL_MS);
+  }
+
+  return { status: GEN_STATUS.failed }; // timeout → treat as "didn't finish"
+}
+
+/** Cancel an in-flight resume poll (another tab already resolved it). */
+export function cancelResumePoll() {
+  resumePoll.cancelled = true;
 }
 
 /** Map a typed gate denial to a render outcome. */

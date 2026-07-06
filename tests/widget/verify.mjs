@@ -339,6 +339,166 @@ async function customPlacementGate(browser) {
   return failures;
 }
 
+/**
+ * Cross-PAGE resume gate: start a try-on, close the popup mid-generation, then RELOAD the page
+ * (a fresh page load). The persisted pending entry in localStorage must resume polling in the
+ * background and surface the on-page "ready" notification on the reloaded page; clicking it opens
+ * the finished result. Proves the notification survives a full navigation, not just an in-memory poll.
+ */
+async function crossPageResumeGate(browser) {
+  console.log('\n=== cross-page resume (reload while generating -> notify on the fresh page) ===');
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  let failures = 0;
+  let polls = 0;
+
+  await page.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bootstrapBody('en')) }));
+  await page.route('**/widget/v1/generations', (route) =>
+    route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ ok: true, generation: { id: 9, status: 'pending' }, free_remaining: 2, reused: false }) }));
+  // Stay `processing` for a while so the same-page poll has NOT finished when we reload; the
+  // resume path (fresh load) then polls it to `succeeded`.
+  await page.route('**/widget/v1/generations/9*', (route) => {
+    polls++;
+    const status = polls >= 3 ? 'succeeded' : 'processing';
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, generation: { id: 9, status, failure_code: null, result_url: status === 'succeeded' ? RESULT_PNG : null, created_at: null } }) });
+  });
+  await page.route('**/widget/v1/gallery*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [] }) }));
+
+  try {
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+
+    // Start a try-on.
+    await page.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
+    await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
+    await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
+    await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
+    await page.locator('.ton-input').first().fill('175');
+    await page.locator('.ton-consent__box').check();
+    await page.locator('.ton-cta').click({ timeout: 6000 });
+    await page.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
+
+    // The pending generation is persisted, site-scoped by the site_key (written once the
+    // create-generation response returns the id — poll for it rather than racing the fetch).
+    const readPending = () => page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) => k.startsWith('trayon.pending.') && !k.endsWith('.signal'));
+      return key ? JSON.parse(localStorage.getItem(key)) : null;
+    });
+    let persisted = null;
+    for (let i = 0; i < 30 && !(persisted && persisted.generationId === 9); i++) {
+      persisted = await readPending();
+      if (!(persisted && persisted.generationId === 9)) await page.waitForTimeout(200);
+    }
+    assert(persisted && persisted.generationId === 9 && persisted.phase === 'active', 'pending generation persisted to a site-scoped localStorage key');
+
+    // RELOAD the page while it is still generating — the in-memory poll dies; the resume takes over.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+
+    // No modal is open, no button was clicked — the resumer polls in the background and shows
+    // the on-page "ready" notification on this fresh page load.
+    await page.locator('.ton-notification--ready').waitFor({ timeout: 12000 });
+    assert(true, 'after reload: the resumer surfaced the "ready" notification with no user action');
+
+    // Click it -> opens the finished result.
+    await page.locator('.ton-notification__main').click();
+    await page.locator('.ton-result__img').waitFor({ timeout: 8000 });
+    assert(true, 'clicking the resumed notification opens the finished result');
+
+    // The entry is now marked viewed -> a further reload does NOT re-notify.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    await page.waitForTimeout(1200);
+    const reNotified = await page.locator('.ton-notification').count();
+    assert(reNotified === 0, 'a reload after viewing does NOT re-show the notification');
+
+    await page.screenshot({ path: resolve(OUT, 'widget-resume.en.png'), fullPage: false });
+    console.log('  -> screenshot: widget-resume.en.png');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, 'widget-resume-FAIL.png') }).catch(() => {});
+  }
+
+  await page.close();
+  return failures;
+}
+
+/**
+ * Cross-TAB gate: two pages in ONE browser context (shared localStorage + BroadcastChannel).
+ * A try-on is started + completed in tab 1; tab 2 (a plain non-generating PDP) must receive the
+ * completion and show the "ready" notification too, without having clicked anything.
+ */
+async function crossTabGate(browser) {
+  console.log('\n=== cross-tab sync (completion in tab 1 notifies tab 2) ===');
+  const context = await browser.newContext({ viewport: { width: 900, height: 900 } });
+  let failures = 0;
+  let polls = 0;
+
+  // Route on the CONTEXT so both tabs share the same stubs.
+  await context.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bootstrapBody('en')) }));
+  await context.route('**/widget/v1/generations', (route) =>
+    route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ ok: true, generation: { id: 10, status: 'pending' }, free_remaining: 2, reused: false }) }));
+  // Stay `processing` for several polls so the generation is guaranteed still in-flight when
+  // tab 1 closes the popup (the form-fill in two contexts is slower — avoid a completion race).
+  await context.route('**/widget/v1/generations/10*', (route) => {
+    polls++;
+    const status = polls >= 4 ? 'succeeded' : 'processing';
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, generation: { id: 10, status, failure_code: null, result_url: status === 'succeeded' ? RESULT_PNG : null, created_at: null } }) });
+  });
+  await context.route('**/widget/v1/gallery*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [] }) }));
+
+  try {
+    // Tab 1 boots first so it owns the anon token; tab 2 shares it via localStorage.
+    const tab1 = await context.newPage();
+    await tab1.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(tab1);
+
+    // Tab 2: a second PDP in the SAME context (shares localStorage + BroadcastChannel).
+    const tab2 = await context.newPage();
+    await tab2.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(tab2);
+
+    // Start + finish a try-on in tab 1 (close the popup mid-generation so it completes in the bg).
+    await tab1.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
+    await tab1.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
+    await tab1.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
+    await tab1.locator('.ton-preview__img').waitFor({ timeout: 6000 });
+    await tab1.locator('.ton-input').first().fill('175');
+    await tab1.locator('.ton-consent__box').check();
+    await tab1.locator('.ton-cta').click({ timeout: 6000 });
+    await tab1.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
+    await tab1.locator('.ton-modal__close').click();
+    await tab1.locator('.ton-overlay').waitFor({ state: 'detached', timeout: 5000 });
+
+    // Tab 1 completes in the background and broadcasts `done` (its own on-page notice appears).
+    await tab1.locator('.ton-notification--ready').waitFor({ timeout: 12000 });
+    assert(true, 'tab 1 completed the try-on and showed its own notification');
+
+    // Tab 2 — which never generated — receives the broadcast and shows the notification too.
+    await tab2.locator('.ton-notification--ready').waitFor({ timeout: 8000 });
+    assert(true, 'tab 2 received the cross-tab completion and showed the "ready" notification');
+
+    // Viewing in tab 2 clears tab 1's popup (broadcast `viewed` -> no zombie notifications).
+    await tab2.locator('.ton-notification__main').click();
+    await tab2.locator('.ton-result__img').waitFor({ timeout: 8000 });
+    await tab1.locator('.ton-notification').first().waitFor({ state: 'detached', timeout: 6000 });
+    assert(true, 'viewing in tab 2 cleared the notification in tab 1 (no zombie popups)');
+
+    await tab2.screenshot({ path: resolve(OUT, 'widget-crosstab.en.png'), fullPage: false });
+    console.log('  -> screenshot: widget-crosstab.en.png');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+  }
+
+  await context.close();
+  return failures;
+}
+
 async function run() {
   const server = await startServer();
   // Prefer bundled Chromium; fall back to system Chrome (the existing visual harnesses do).
@@ -492,6 +652,12 @@ async function run() {
 
   // --- async notification gate (close popup mid-generation -> notify -> reopen) ---
   failures += await asyncNotificationGate(browser);
+
+  // --- cross-page resume gate (reload while generating -> notify on the fresh page) ---
+  failures += await crossPageResumeGate(browser);
+
+  // --- cross-tab gate (completion in tab 1 notifies tab 2, shared storage + BroadcastChannel) ---
+  failures += await crossTabGate(browser);
 
   // --- gallery gate (past try-ons strip -> tap to view) ---
   failures += await galleryGate(browser);

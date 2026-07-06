@@ -40,6 +40,22 @@ export const GALLERY_LIMIT = 12;
 // localStorage keys (namespaced so a host page can't collide).
 export const STORAGE_ANON_TOKEN = 'trayon.anon_token';
 
+// Cross-page / cross-tab "your try-on is ready" persistence. When a generation is created we
+// persist ONLY handles (generationId, anonToken, productId, startedAt) under a SITE-SCOPED key
+// so the shopper can keep browsing and still be notified on whatever page/tab they land on. A
+// BroadcastChannel (also site-scoped) syncs completion/viewed/dismissed across open tabs; the
+// `storage` event is the fallback when BroadcastChannel is unavailable. On completion we also
+// store the EXPIRING signed result_url — never any photo or PII beyond what's already client-side.
+export const STORAGE_PENDING_PREFIX = 'trayon.pending.'; // + site_key
+export const BROADCAST_PREFIX = 'trayon.'; // + site_key (BroadcastChannel name)
+export const PENDING_TTL_MS = 12 * 60 * 1000; // ~12 min: past the 90s poll + a browsing margin
+
+// Pending lifecycle phases stored in the persisted entry.
+export const PENDING_PHASE = { active: 'active', done: 'done', failed: 'failed', viewed: 'viewed' };
+
+// Cross-tab message types on the BroadcastChannel (and the mirrored storage-event fallback).
+export const PENDING_MSG = { done: 'done', failed: 'failed', viewed: 'viewed', dismissed: 'dismissed' };
+
 // The sentinel marking an already-mounted button — guards idempotent injection.
 export const MOUNT_SENTINEL_ATTR = 'data-trayon-mounted';
 
