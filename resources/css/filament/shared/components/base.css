@@ -131,12 +131,13 @@
     letter-spacing: var(--to-track-tight);
 }
 
-/* ---- Native form fields: near-sharp, hairline, calm focus ---------------- */
+/* ---- Native form fields: rounded, hairline default border, calm focus ----- */
 .fi-input,
 .fi-select-input,
 .fi-textarea,
 .fi-fo-field-wrp-input,
 .fi-input-wrp {
+    border: var(--to-bw-input) solid var(--toa-border);
     border-radius: var(--toa-radius-field);
 }
 

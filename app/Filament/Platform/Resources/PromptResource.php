@@ -7,6 +7,7 @@ use App\Filament\Platform\Resources\PromptResource\Pages\EditPrompt;
 use App\Filament\Platform\Resources\PromptResource\Pages\ListPrompts;
 use App\Models\AiOperation;
 use App\Models\Prompt;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -18,6 +19,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
+use Illuminate\Support\HtmlString;
 
 /**
  * P5 — Prompts editor (PLATFORM-ONLY). The prompts table mixes platform-global rows
@@ -38,6 +40,11 @@ class PromptResource extends Resource
 {
     // === CONSTANTS ===
     protected static ?string $model = Prompt::class;
+
+    // The {{placeholders}} a prompt template may use — filled from the scanned product at
+    // call time (strtr in OperationConfig; source of truth: PdpScanner::promptVars +
+    // GenerateTryOnJob VAR_* consts). Rendered read-only in the editor as a tag reference.
+    private const PROMPT_TAGS = ['product_name', 'source_url', 'product_type', 'variant', 'height'];
 
     protected static ?string $navigationIcon = 'heroicon-o-command-line';
 
@@ -108,7 +115,29 @@ class PromptResource extends Resource
                         ->required()
                         ->columnSpanFull(),
                 ]),
+
+            Section::make(__('platform.prompts.section.tags'))
+                ->description(__('platform.prompts.tags.intro'))
+                ->collapsible()
+                ->collapsed()
+                ->schema([
+                    Placeholder::make('available_tags')
+                        ->hiddenLabel()
+                        ->content(static fn (): HtmlString => self::tagReference()),
+                ]),
         ]);
+    }
+
+    /** The available prompt placeholders, rendered read-only as a reference list. */
+    private static function tagReference(): HtmlString
+    {
+        $rows = [];
+
+        foreach (self::PROMPT_TAGS as $tag) {
+            $rows[] = '<p><code>{{'.$tag.'}}</code> — '.e(__('platform.prompts.tags.'.$tag)).'</p>';
+        }
+
+        return new HtmlString(implode('', $rows));
     }
 
     public static function table(Table $table): Table

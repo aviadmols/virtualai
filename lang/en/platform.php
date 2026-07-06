@@ -321,6 +321,15 @@ return [
         'section' => [
             'scope' => 'Scope & operation',
             'template' => 'Template',
+            'tags' => 'Available tags',
+        ],
+        'tags' => [
+            'intro' => 'Use these {{placeholders}} in your prompt — each is filled from the scanned product page at generation time.',
+            'product_name' => 'The product name (from the page’s structured data / OG title).',
+            'source_url' => 'The product page URL (product scan only).',
+            'product_type' => 'The product category/type, e.g. apparel (drives the tailored prompt).',
+            'variant' => 'The shopper’s selected variant, e.g. Color / Size (try-on only).',
+            'height' => 'The shopper’s entered height (try-on only).',
         ],
         'field' => [
             'scope' => 'Scope',
