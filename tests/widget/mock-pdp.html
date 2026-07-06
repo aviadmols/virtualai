@@ -27,6 +27,8 @@
       .product__title { font-size: 28px; }
       .product__image { width: 100%; max-width: 360px; height: auto; background: #ddd; }
       .product__price { font-size: 20px; font-weight: bold; }
+      .catalog__price { font-size: 16px; }
+      .cart__price { font-size: 16px; }
       label { display: block; margin: 16px 0 6px; }
     </style>
   </head>
@@ -39,6 +41,12 @@
         alt="Aviad Linen Tee"
       />
       <p class="product__price">$89.00</p>
+
+      <!-- Extra price zones to exercise the member-price rewrite + the locale-aware money parser
+           (TS-PDPSCAN-001): a comma-grouped ILS price and a European dot-grouped / comma-decimal
+           price. Both must discount correctly and keep their native format. -->
+      <p class="catalog__price">₪1,299.00</p>
+      <p class="cart__price">1.299,00 €</p>
 
       <label for="variant">Size</label>
       <select id="variant" name="variant">

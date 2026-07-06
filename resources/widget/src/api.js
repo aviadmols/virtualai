@@ -18,6 +18,8 @@ import {
   GEN_FIELD,
   LEAD_FIELD,
   CART_EVENT_FIELD,
+  CLUB_ENDPOINTS,
+  CLUB_FIELD,
 } from './constants.js';
 
 let apiBase = '';
@@ -118,6 +120,21 @@ export function createLead(payload) {
       [LEAD_FIELD.anonToken]: payload.anonToken,
       [LEAD_FIELD.source]: 'widget',
     },
+  });
+}
+
+/** POST /club/request-code — issue + email a one-time login code for (anon_token, email). */
+export function clubRequestCode(anonToken, email) {
+  return request('POST', CLUB_ENDPOINTS.requestCode, {
+    json: { [CLUB_FIELD.anonToken]: anonToken, [CLUB_FIELD.email]: email },
+  });
+}
+
+/** POST /club/verify-code — validate the code; on success the server stamps the member state.
+ *  The SAME anon_token + email must be sent as in request-code (the OTP is keyed on both). */
+export function clubVerifyCode(anonToken, email, code) {
+  return request('POST', CLUB_ENDPOINTS.verifyCode, {
+    json: { [CLUB_FIELD.anonToken]: anonToken, [CLUB_FIELD.email]: email, [CLUB_FIELD.code]: code },
   });
 }
 

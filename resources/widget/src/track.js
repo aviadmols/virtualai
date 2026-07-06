@@ -73,6 +73,12 @@ export function trackAddToCart(variant) {
   interaction(TRACK_INTERACTION.addToCart, variant?.label || variant?.sku);
 }
 
+/** Public: record an arbitrary MEANINGFUL interaction by type (e.g. 'club_join' from club.js).
+ *  Reuses the same batched, fire-and-forget queue; a no-op when tracking is disabled/uninit. */
+export function trackInteraction(type, label) {
+  interaction(type, label);
+}
+
 /** Subscribe to the EXISTING variant-changed custom event (dispatched on the overlay mount). */
 function bindSignals() {
   const mount = shell.getOverlayMount();

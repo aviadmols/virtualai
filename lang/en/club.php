@@ -30,4 +30,64 @@ return [
     'request' => [
         'throttled' => 'Please wait a moment before requesting another code.',
     ],
+
+    // --- Merchant Club-settings page (Phase 2b-UI) ---
+    'settings' => [
+        'nav' => 'Customer Club',
+        'title' => 'Customer Club',
+        'heading' => 'Customer Club',
+        'sub' => 'Set up member pricing for :site.',
+        'saved' => 'Club settings saved.',
+        'field' => [
+            'enabled' => 'Enable the Customer Club',
+            'enabled_help' => 'Show a join banner and member pricing on your store. You can turn this off at any time.',
+            'discount_percent' => 'Member discount (%)',
+            'discount_percent_help' => 'A whole number from 0 to 100. Members see this much off the shown price. Display-only for now — checkout is unchanged.',
+        ],
+        'errors' => [
+            'save_failed' => 'Could not save your club settings. Please try again.',
+            'invalid_club_config' => 'Some club values are out of range. Check the discount (0–100) and the picked price zones, then save again.',
+        ],
+    ],
+
+    // --- The per-surface price-zone picker (multi-pick) ---
+    'zones' => [
+        'section' => 'Where the member price shows',
+        'section_help' => 'Pick the price element on each surface. You can pick more than one per surface.',
+        'surface' => [
+            'pdp' => 'Product page',
+            'catalog' => 'Catalog / collection',
+            'cart' => 'Cart',
+        ],
+        'count' => '{0}No zones picked|{1}:count zone|[2,*]:count zones',
+        'empty' => 'No price zones picked yet.',
+        'pick' => 'Pick visually',
+        'remove' => 'Remove this zone',
+        'eyebrow' => 'Customer Club',
+        'modal_title' => 'Pick the price on the :surface',
+        'from_scan' => 'Previewing your scanned product',
+        'previewing' => 'Previewing',
+        'close' => 'Close',
+        'done' => 'Done',
+        'url_placeholder' => 'Paste a page URL to preview (needed for catalog & cart)',
+        'load' => 'Load preview',
+        'loading' => 'Loading…',
+        'preview' => 'Store preview',
+        'load_hint' => 'Paste a URL from this surface and load a live preview, then click each price element.',
+        'hint' => 'Click every price element you want the member price shown on.',
+        'picked_label' => 'Picked price zones',
+        'none_yet' => 'Nothing picked yet — click a price in the preview.',
+        'verdict' => [
+            'added' => 'Added — this price element is now a member-price zone.',
+            'duplicate' => 'You already picked this element.',
+            'full' => 'That surface already has the maximum of :max zones.',
+            'multiple' => 'That selector matches :count elements. Pick a single, specific price.',
+            'none' => 'That selector matched nothing on the page. Try another element.',
+        ],
+        'errors' => [
+            'load_failed' => 'Could not load a preview of that page. Try another URL.',
+            'bad_url' => 'That does not look like a valid URL.',
+            'rate_limited' => 'Too many preview attempts. Please wait a minute and try again.',
+        ],
+    ],
 ];

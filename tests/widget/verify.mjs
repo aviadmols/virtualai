@@ -82,6 +82,9 @@ function bootstrapBody(locale) {
       },
     },
     lead: { registered: false, free_remaining: 3, signup_required: false },
+    // Customer Club: OFF by default so the existing gates stay a complete no-op; the club/pricing
+    // gates below override this block with an enabled/member config.
+    club: { enabled: false, discount_percent: 0, price_zones: { pdp: [], catalog: [], cart: [] }, member: { verified: false } },
     product: {
       id: 42,
       name: 'Aviad Linen Tee',
@@ -97,6 +100,51 @@ function bootstrapBody(locale) {
       ],
     },
   };
+}
+
+// --- Club bootstrap helpers -------------------------------------------------
+// The configured price-zone selectors for the mock PDP (pdp/catalog/cart resolve on this page).
+const CLUB_ZONE_SELECTORS = {
+  pdp: ['.product__price'],
+  catalog: ['.catalog__price'],
+  cart: ['.cart__price'],
+};
+
+// A bootstrap body with the Customer Club turned on. `member` toggles verified vs. not; `discount`
+// is the percent off. Reuses the base body so the PDP/appearance/product shape is unchanged.
+function clubBootstrapBody(locale, { member = false, discount = 20, enabled = true } = {}) {
+  const body = bootstrapBody(locale);
+  body.club = {
+    enabled,
+    discount_percent: discount,
+    price_zones: CLUB_ZONE_SELECTORS,
+    member: { verified: member },
+  };
+  return body;
+}
+
+// Stub the two club endpoints. `verifyResult` shapes the verify-code response so a gate can drive
+// the happy path or a typed failure (invalid/expired/locked). request-code succeeds by default.
+async function stubClub(target, { codeSent = true, requestReason = null, verifyResult = { verified: true } } = {}) {
+  await target.route('**/widget/v1/club/request-code', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(codeSent ? { ok: true, code_sent: true } : { ok: true, code_sent: false, reason: requestReason || 'throttled' }),
+    }),
+  );
+  await target.route('**/widget/v1/club/verify-code', (route) => {
+    const ok = verifyResult.verified === true;
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        ok
+          ? { ok: true, verified: true, member: { verified: true } }
+          : { ok: true, verified: false, reason: verifyResult.reason || 'invalid' },
+      ),
+    });
+  });
 }
 
 // A 1x1 transparent PNG data URL — the stubbed result image.
@@ -697,6 +745,321 @@ function collectKinds(batches) {
   return { pageView, interactions, unknown };
 }
 
+/**
+ * Club banner visibility gate: the floating join banner shows for a NON-member on a club-enabled
+ * site, and is ABSENT for a verified member AND for a club-disabled site. The banner reuses the
+ * `ton-notification` skin inside the shadow root (carries the `ton-club-banner` marker class).
+ */
+async function clubBannerGate(browser, locale) {
+  console.log(`\n=== club banner visibility (${locale}) ===`);
+  let failures = 0;
+  const bannerCount = async (page) =>
+    page.evaluate(() => {
+      const host = document.querySelector('#trayon-host');
+      if (!host || !host.shadowRoot) return 0;
+      return host.shadowRoot.querySelectorAll('.ton-club-banner').length;
+    });
+
+  try {
+    // (1) non-member, enabled -> banner shows (exactly one).
+    const p1 = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await stubApi(p1, locale);
+    await p1.route('**/widget/v1/bootstrap*', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(clubBootstrapBody(locale, { member: false })) }));
+    await p1.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    if (locale === 'he') await p1.evaluate(() => document.documentElement.setAttribute('dir', 'rtl'));
+    await waitForBoot(p1);
+    await p1.waitForFunction(() => {
+      const h = document.querySelector('#trayon-host');
+      return h && h.shadowRoot && h.shadowRoot.querySelector('.ton-club-banner');
+    }, { timeout: 6000 });
+    assert((await bannerCount(p1)) === 1, 'non-member on a club-enabled site: floating banner shows (exactly one)');
+    await p1.screenshot({ path: resolve(OUT, `widget-club-banner.${locale}.png`), fullPage: false });
+    console.log(`  -> screenshot: widget-club-banner.${locale}.png`);
+    await p1.close();
+
+    // (2) verified member -> NO banner.
+    const p2 = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await stubApi(p2, locale);
+    await p2.route('**/widget/v1/bootstrap*', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(clubBootstrapBody(locale, { member: true })) }));
+    await p2.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(p2);
+    await p2.waitForTimeout(600);
+    assert((await bannerCount(p2)) === 0, 'verified member: NO join banner shown');
+    await p2.close();
+
+    // (3) club disabled -> NO banner (the default bootstrap has club.enabled=false).
+    const p3 = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await stubApi(p3, locale);
+    await p3.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(p3);
+    await p3.waitForTimeout(600);
+    assert((await bannerCount(p3)) === 0, 'club disabled: NO join banner shown');
+    await p3.close();
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+  }
+  return failures;
+}
+
+/**
+ * Club login flow gate: a non-member clicks the banner, enters an email (request-code), enters the
+ * 6-digit code (verify-code), and on success the banner hides, the member flag persists, AND member
+ * prices are applied live (no reload). Uses the shadow-root form (reuses the modal/lead classes).
+ */
+async function clubLoginFlowGate(browser) {
+  console.log('\n=== club login flow (email -> code -> verified -> member pricing) ===');
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  let failures = 0;
+
+  await stubApi(page, 'en');
+  await stubClub(page, { codeSent: true, verifyResult: { verified: true } });
+  await page.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(clubBootstrapBody('en', { member: false, discount: 20 })) }));
+
+  const sr = (fn) => page.evaluate(fn);
+
+  try {
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+
+    // Open the banner -> the login modal (email step).
+    await page.waitForFunction(() => {
+      const h = document.querySelector('#trayon-host');
+      return h && h.shadowRoot && h.shadowRoot.querySelector('.ton-club-banner');
+    }, { timeout: 6000 });
+    await sr(() => document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-club-banner .ton-notification__main').click());
+    await page.waitForFunction(() => document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-overlay .ton-modal'), { timeout: 5000 });
+    assert(true, 'clicking the banner opened the email login step');
+
+    // Enter the email + request a code.
+    await sr(() => {
+      const sr2 = document.querySelector('#trayon-host').shadowRoot;
+      sr2.querySelector('.ton-overlay .ton-input').value = 'shopper@example.com';
+      sr2.querySelector('.ton-overlay .ton-cta').click();
+    });
+    // The code step renders (its hint mentions the email).
+    await page.waitForFunction(() => {
+      const el = document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-overlay .ton-upload__hint');
+      return el && el.textContent.includes('shopper@example.com');
+    }, { timeout: 5000 });
+    assert(true, 'after request-code, the 6-digit code step is shown (keyed on the same email)');
+
+    // Enter the code + verify.
+    await sr(() => {
+      const sr2 = document.querySelector('#trayon-host').shadowRoot;
+      sr2.querySelector('.ton-overlay .ton-input').value = '123456';
+      sr2.querySelector('.ton-overlay .ton-cta').click();
+    });
+
+    // On verify: the banner disappears and the member flag is persisted.
+    await page.waitForFunction(() => {
+      const h = document.querySelector('#trayon-host');
+      return h && h.shadowRoot && h.shadowRoot.querySelectorAll('.ton-club-banner').length === 0;
+    }, { timeout: 6000 });
+    assert(true, 'after verify: the join banner is hidden (flipped to member mode)');
+
+    const memberPersisted = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) => k.startsWith('trayon.club.member.'));
+      return key ? localStorage.getItem(key) : null;
+    });
+    assert(memberPersisted === '1', 'member state persisted to site-scoped localStorage');
+
+    // Member pricing applied live (no reload): $89.00 * (1 - 0.20) = $71.20, with the club badge.
+    await page.waitForFunction(() => {
+      const n = document.querySelector('.product__price');
+      return n && n.textContent.includes('71.20');
+    }, { timeout: 5000 });
+    const pdpText = await page.evaluate(() => document.querySelector('.product__price').textContent);
+    assert(pdpText.includes('71.20'), `PDP price rewritten to the member price after join (${pdpText.trim()})`);
+    assert(pdpText.includes('$'), 'the member price keeps the store currency symbol');
+    const hasBadge = await page.evaluate(() => !!document.querySelector('.product__price .trayon-club-badge'));
+    assert(hasBadge, 'the "club price" badge affordance is appended');
+
+    await page.screenshot({ path: resolve(OUT, 'widget-club-verified.en.png'), fullPage: false });
+    console.log('  -> screenshot: widget-club-verified.en.png');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, 'widget-club-FAIL.png') }).catch(() => {});
+  }
+
+  await page.close();
+  return failures;
+}
+
+/**
+ * Club typed-failure gate: an invalid code surfaces a friendly, specific error and does NOT flip to
+ * member; a throttled request-code still advances to the code step with a notice.
+ */
+async function clubFailureGate(browser) {
+  console.log('\n=== club typed failures (invalid code / throttled) ===');
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  let failures = 0;
+
+  await stubApi(page, 'en');
+  await stubClub(page, { codeSent: false, requestReason: 'throttled', verifyResult: { verified: false, reason: 'invalid' } });
+  await page.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(clubBootstrapBody('en', { member: false })) }));
+
+  const sr = (fn) => page.evaluate(fn);
+
+  try {
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+    await page.waitForFunction(() => {
+      const h = document.querySelector('#trayon-host');
+      return h && h.shadowRoot && h.shadowRoot.querySelector('.ton-club-banner');
+    }, { timeout: 6000 });
+    await sr(() => document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-club-banner .ton-notification__main').click());
+    await page.waitForFunction(() => document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-overlay .ton-modal'), { timeout: 5000 });
+
+    // Throttled request-code still advances to the code step (a prior code may be in the inbox).
+    await sr(() => {
+      const s = document.querySelector('#trayon-host').shadowRoot;
+      s.querySelector('.ton-overlay .ton-input').value = 'shopper@example.com';
+      s.querySelector('.ton-overlay .ton-cta').click();
+    });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-overlay .ton-error');
+      return el && !el.hasAttribute('hidden') && el.textContent.trim().length > 0;
+    }, { timeout: 5000 });
+    assert(true, 'throttled request-code advances to the code step WITH a typed notice');
+
+    // Invalid code -> a specific error, still NOT a member (banner would still be gone only on success).
+    await sr(() => {
+      const s = document.querySelector('#trayon-host').shadowRoot;
+      s.querySelector('.ton-overlay .ton-input').value = '000000';
+      s.querySelector('.ton-overlay .ton-cta').click();
+    });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-overlay .ton-error');
+      return el && !el.hasAttribute('hidden') && el.textContent.trim().length > 0;
+    }, { timeout: 5000 });
+    const stillNotMember = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) => k.startsWith('trayon.club.member.'));
+      return key ? localStorage.getItem(key) : null;
+    });
+    assert(stillNotMember !== '1', 'an invalid code did NOT flip the shopper to member');
+    // The PDP price is untouched (still the original) since verify failed.
+    const pdpText = await page.evaluate(() => document.querySelector('.product__price').textContent);
+    assert(pdpText.includes('89.00') && !pdpText.includes('71.20'), 'a failed verify leaves the PDP price untouched');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+  }
+
+  await page.close();
+  return failures;
+}
+
+/**
+ * Member-pricing gate: a VERIFIED member (bootstrap) sees every configured zone rewritten by the
+ * discount, in the store's NATIVE format (locale-aware money parse), with ZERO host layout shift
+ * (CLS < budget). A NON-member's prices are left completely untouched. Re-apply on a variant
+ * change never double-discounts.
+ */
+async function memberPricingGate(browser) {
+  console.log('\n=== member pricing (rewrite + locale-aware parse + no CLS + no double-discount) ===');
+  let failures = 0;
+
+  // (A) Verified member: prices rewritten in every zone, no CLS.
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  await page.addInitScript(() => {
+    window.__cls = 0;
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.__cls += entry.value;
+      }).observe({ type: 'layout-shift', buffered: true });
+    } catch { /* unsupported -> tolerates 0 */ }
+  });
+  await stubApi(page, 'en');
+  await page.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(clubBootstrapBody('en', { member: true, discount: 20 })) }));
+
+  try {
+    await page.goto(ORIGIN, { waitUntil: 'load' });
+    await waitForBoot(page);
+
+    // Wait for the idle-scheduled rewrite of all three zones.
+    await page.waitForFunction(() => {
+      const pdp = document.querySelector('.product__price');
+      const cat = document.querySelector('.catalog__price');
+      const cart = document.querySelector('.cart__price');
+      return pdp && cat && cart
+        && pdp.hasAttribute('data-trayon-club-price')
+        && cat.hasAttribute('data-trayon-club-price')
+        && cart.hasAttribute('data-trayon-club-price');
+    }, { timeout: 6000 });
+
+    const prices = await page.evaluate(() => ({
+      pdp: document.querySelector('.product__price').textContent,
+      catalog: document.querySelector('.catalog__price').textContent,
+      cart: document.querySelector('.cart__price').textContent,
+    }));
+
+    // $89.00 * 0.8 = $71.20 (US format kept).
+    assert(prices.pdp.includes('71.20') && prices.pdp.includes('$'), `PDP $89.00 -> member $71.20 (${prices.pdp.trim()})`);
+    // ₪1,299.00 * 0.8 = ₪1,039.20 (comma-grouped, dot-decimal kept — the ILS scar case).
+    assert(prices.catalog.includes('1,039.20') && prices.catalog.includes('₪'), `catalog ₪1,299.00 -> ₪1,039.20 (${prices.catalog.trim()})`);
+    // 1.299,00 € * 0.8 = 1.039,20 € (European dot-grouped, comma-decimal kept — the inverse scar case).
+    assert(prices.cart.includes('1.039,20') && prices.cart.includes('€'), `cart 1.299,00 € -> 1.039,20 € (${prices.cart.trim()})`);
+
+    // Every zone carries the club badge exactly once.
+    const badges = await page.evaluate(() =>
+      ['.product__price', '.catalog__price', '.cart__price'].map((s) => document.querySelector(s).querySelectorAll('.trayon-club-badge').length));
+    assert(badges.every((n) => n === 1), `each rewritten zone has exactly one club badge (${badges.join(',')})`);
+
+    // No double-discount on re-apply: change the variant, prices must stay at the member price.
+    await page.selectOption('#variant', 'TEE-S');
+    await page.waitForTimeout(700);
+    const afterVariant = await page.evaluate(() => document.querySelector('.product__price').textContent);
+    assert(afterVariant.includes('71.20') && !afterVariant.includes('57'), `variant change did NOT double-discount (${afterVariant.trim()})`);
+
+    // CLS gate: the in-place rewrite caused essentially no host layout shift.
+    const cls = await page.evaluate(() => window.__cls || 0);
+    assert(cls < CLS_BUDGET, `member-price rewrite caused no host layout shift (CLS ${cls.toFixed(4)} < ${CLS_BUDGET})`);
+    console.log(`  -> member-pricing CLS=${cls.toFixed(4)}`);
+
+    await page.screenshot({ path: resolve(OUT, 'widget-member-pricing.en.png'), fullPage: false });
+    console.log('  -> screenshot: widget-member-pricing.en.png');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, 'widget-member-pricing-FAIL.png') }).catch(() => {});
+  }
+  await page.close();
+
+  // (B) Non-member: prices are completely untouched (no rewrite, no badge, no marker attr).
+  const p2 = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  await stubApi(p2, 'en');
+  await p2.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(clubBootstrapBody('en', { member: false, discount: 20 })) }));
+  try {
+    await p2.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(p2);
+    await p2.waitForTimeout(800); // give the idle rewrite a chance to (not) run
+    const untouched = await p2.evaluate(() => {
+      const pdp = document.querySelector('.product__price');
+      return {
+        text: pdp.textContent,
+        marked: pdp.hasAttribute('data-trayon-club-price'),
+        badge: !!pdp.querySelector('.trayon-club-badge'),
+      };
+    });
+    assert(untouched.text.includes('89.00') && !untouched.text.includes('71.20'), 'non-member: PDP price is the ORIGINAL (not discounted)');
+    assert(!untouched.marked && !untouched.badge, 'non-member: no marker attr, no club badge (complete no-op)');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+  }
+  await p2.close();
+
+  return failures;
+}
+
 async function run() {
   // Static perf gates first (no browser needed): async snippet + gzip budget.
   let failures = staticPerfGates();
@@ -867,6 +1230,13 @@ async function run() {
 
   // --- perf + tracking gate (no sync work / CLS / meaningful-events-only) ---
   failures += await perfTrackingGate(browser);
+
+  // --- Customer Club: banner visibility (EN + HE), login flow, typed failures, member pricing ---
+  failures += await clubBannerGate(browser, 'en');
+  failures += await clubBannerGate(browser, 'he');
+  failures += await clubLoginFlowGate(browser);
+  failures += await clubFailureGate(browser);
+  failures += await memberPricingGate(browser);
 
   await browser.close();
   server.close();

@@ -23,6 +23,7 @@ import * as modal from './modal.js';
 import * as pending from './pending.js';
 import * as resume from './resume.js';
 import * as track from './track.js';
+import * as club from './club.js';
 
 (function boot() {
   // The namespaced global: a double-boot guard + a teardown hook for SPA navigation.
@@ -44,6 +45,7 @@ import * as track from './track.js';
   // Scope the cross-page/cross-tab persistence to THIS site_key (two Tray On sites on one
   // origin never collide). Cheap + synchronous — just sets the key/channel names.
   pending.configure(siteKey);
+  club.configure(siteKey); // site-scoped member flag (like the anon token / pending entry)
 
   ns.booted = true;
   ns.state = state; // exposed for the verification harness (read-only inspection)
@@ -75,6 +77,10 @@ async function run() {
 
   // Per-site tracking flag (privacy/consent). Absent => on, per the ingest contract.
   const trackingEnabled = data.site?.tracking_enabled;
+
+  // The Customer Club (floating banner + email OTP login + display-only member pricing) applies
+  // SITE-WIDE — PDP or not. Stash the club config so a teardown/re-init can reuse it.
+  state.club = data.club || null;
 
   if (onPdp) {
     // Stash the boot config.
@@ -112,18 +118,47 @@ async function run() {
   // Cross-page / cross-tab resume: runs on EVERY authorized page load (PDP or not). Reconnects
   // the shopper to a try-on they started elsewhere and shows the "ready" popup here on finish.
   await resume.resumeOnLoad(onPdp);
+
+  // The Customer Club (banner + member pricing) — site-wide, on the same idle tick. Needs the
+  // Shadow shell for its floating banner + login modal; ensure a minimal one exists on a non-PDP
+  // page (the resumer may already have built it; shell.create is idempotent).
+  initClub(onPdp);
 }
 
-/** Teardown the mount engine, tracking, and the cross-tab channel (SPA nav away from a PDP). */
+/** Wire the Customer Club on the idle path (a no-op unless the bootstrap says it's enabled). */
+function initClub(onPdp) {
+  if (!state.club || !state.club.enabled) return; // club off => never build a shell for it
+
+  // Ensure a shell exists so the banner + login modal + member-price re-apply have their mounts.
+  // On a PDP the loader already built it; on a non-PDP page build a minimal one (default look).
+  if (!onPdp) {
+    try {
+      shell.create(state.config?.appearance || {});
+    } catch {
+      warn('failed to build the minimal club shell');
+      return;
+    }
+  }
+
+  try {
+    club.init(state.club);
+  } catch {
+    warn('failed to initialise the customer club');
+  }
+}
+
+/** Teardown the mount engine, tracking, club, and the cross-tab channel (SPA nav away from a PDP). */
 function combinedTeardown() {
   safeTeardown(track.teardown);
+  safeTeardown(club.teardown);
   safeTeardown(resume.teardown);
   mount.teardown();
 }
 
-/** Non-PDP teardown: flush + drop tracking, then the resume channel. */
+/** Non-PDP teardown: flush + drop tracking + club, then the resume channel. */
 function nonPdpTeardown() {
   safeTeardown(track.teardown);
+  safeTeardown(club.teardown);
   resume.teardown();
 }
 

@@ -15,6 +15,9 @@ export const state = {
   // Lead state (free tries / signup), kept fresh after a signup.
   lead: null, // { registered, freeRemaining, signupRequired }
 
+  // Customer Club config from the bootstrap (site-wide; PDP or not).
+  club: null, // { enabled, discount_percent, price_zones{pdp,catalog,cart}, member{verified} }
+
   // Per-intent generation state.
   clientRequestId: null,
   submitting: false,

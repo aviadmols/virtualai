@@ -206,3 +206,62 @@ export const TRACK_FLUSH_IDLE_TIMEOUT_MS = 2000;
 // to ON unless the bootstrap explicitly returns tracking_enabled === false (coordinated with
 // laravel-backend: absent flag => on). A variant-label is trimmed to this max before sending.
 export const TRACK_LABEL_MAX = 120;
+
+// The tracking interaction type emitted when a shopper joins the club (verifies their code).
+export const TRACK_INTERACTION_CLUB_JOIN = 'club_join';
+
+// --- Customer Club (banner + email OTP login + display-only member pricing) ------
+// The BROWSER only ever holds the public anon_token + the shopper's own email; the OTP is
+// issued/validated server-side (keyed on anon_token + email). No secret, no member PII beyond
+// what the shopper types, and NO real cost/discount code ever flows here — the discount is
+// DISPLAY-ONLY (checkout is unchanged). The club config arrives in the bootstrap `club` block.
+
+// Club endpoints (behind the existing widget middleware group; typed JSON both ways).
+export const CLUB_ENDPOINTS = {
+  requestCode: '/club/request-code',
+  verifyCode: '/club/verify-code',
+};
+
+// Club request/verify field names (mirror the ClubController FormRequests).
+export const CLUB_FIELD = {
+  anonToken: 'anon_token',
+  email: 'email',
+  code: 'code',
+};
+
+// Typed reasons the verify/request endpoints can return (rendered as friendly i18n states).
+export const CLUB_REASON = {
+  throttled: 'throttled', // request-code: a code was sent too recently
+  invalid: 'invalid', // verify-code: wrong code
+  expired: 'expired', // verify-code: the code's TTL passed
+  locked: 'locked', // verify-code: too many wrong attempts
+};
+
+// The mini-form step ids (email -> code).
+export const CLUB_STEP = { email: 'email', code: 'code' };
+
+// The 6-digit OTP length (client-side input guard only; the server is the real validator).
+export const CLUB_CODE_LENGTH = 6;
+
+// Site-scoped localStorage key for the persisted verified-member flag (like the anon token).
+// Value: '1' once verified. Scoped per site_key so two Tray On sites on one origin never collide.
+export const STORAGE_CLUB_MEMBER_PREFIX = 'trayon.club.member.'; // + site_key
+
+// The bootstrap `club` block keys (BootstrapController club shape).
+export const CLUB_CONFIG = {
+  enabled: 'enabled',
+  discountPercent: 'discount_percent',
+  priceZones: 'price_zones', // { pdp: string[], catalog: string[], cart: string[] }
+  member: 'member', // { verified: bool }
+};
+
+// The price-zone surfaces (a union of all three is applied on whatever resolves on THIS page).
+export const CLUB_ZONES = ['pdp', 'catalog', 'cart'];
+
+// A processed price node is marked so a re-apply (variant change) never double-discounts it.
+// The ORIGINAL formatted text is stashed in a data-attr so a re-apply recomputes from source.
+export const PRICING_MARK_ATTR = 'data-trayon-club-price';
+export const PRICING_ORIGINAL_ATTR = 'data-trayon-orig-price';
+
+// Structural class for the injected "club price" affordance appended after the rewritten price.
+export const PRICING_BADGE_CLASS = 'trayon-club-badge';
