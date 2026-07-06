@@ -33,10 +33,16 @@ final class MediaStorage
     private const PATH_ACCOUNTS = 'accounts';
     private const PATH_SITES = 'sites';
     private const PATH_GENERATIONS = 'generations';
+    private const PATH_BANNERS = 'banners';
 
     // The two object kinds a generation stores.
     public const KIND_SOURCE = 'source';
     public const KIND_RESULT = 'result';
+
+    // Banner object kinds. The generated banner is PUBLIC marketing media (shown to every
+    // shopper by a stable URL); the optional reference upload stays PRIVATE.
+    public const KIND_BANNER = 'banner';
+    public const KIND_BANNER_SOURCE = 'banner-source';
 
     // mime -> extension (the disk key carries a sane extension for the CDN).
     private const EXTENSIONS = [
@@ -64,6 +70,38 @@ final class MediaStorage
     public function storeResult(int $accountId, int $siteId, int $generationId, string $bytes, string $mime): StoredMedia
     {
         return $this->put($accountId, $siteId, $generationId, self::KIND_RESULT, $bytes, $mime);
+    }
+
+    /**
+     * Store the optional PRIVATE reference upload for a banner generation attempt.
+     */
+    public function storeBannerSource(int $accountId, int $siteId, int $bannerAssetId, string $bytes, string $mime): StoredMedia
+    {
+        return $this->putBanner($accountId, $siteId, $bannerAssetId, self::KIND_BANNER_SOURCE, $bytes, $mime, 'private');
+    }
+
+    /**
+     * Store the generated banner RESULT as PUBLIC marketing media — the same creative is
+     * served to every shopper by a stable public URL (not a per-shopper signed URL, which
+     * would expire / vary per request). Called only after a successful model call and
+     * BEFORE the charge — no charge without a stored result.
+     */
+    public function storeBannerResult(int $accountId, int $siteId, int $bannerAssetId, string $bytes, string $mime): StoredMedia
+    {
+        return $this->putBanner($accountId, $siteId, $bannerAssetId, self::KIND_BANNER, $bytes, $mime, 'public');
+    }
+
+    /**
+     * A STABLE public URL for a public banner path (the widget embeds this directly). Uses
+     * the disk's public/CDN url — no signing, no expiry. Returns null for a null/empty path.
+     */
+    public function publicUrl(?string $path): ?string
+    {
+        if ($path === null || $path === '') {
+            return null;
+        }
+
+        return $this->disk()->url($path);
     }
 
     /**
@@ -118,6 +156,35 @@ final class MediaStorage
         $this->disk()->put($path, $bytes, ['visibility' => 'private']);
 
         return new StoredMedia($path, $mime, strlen($bytes));
+    }
+
+    /**
+     * Write a banner object at the given visibility ('public' for the served creative,
+     * 'private' for the reference upload) under the tenant/site/asset scoped banners path.
+     */
+    private function putBanner(int $accountId, int $siteId, int $bannerAssetId, string $kind, string $bytes, string $mime, string $visibility): StoredMedia
+    {
+        $path = $this->buildBannerPath($accountId, $siteId, $bannerAssetId, $kind, $mime);
+
+        $this->disk()->put($path, $bytes, ['visibility' => $visibility]);
+
+        return new StoredMedia($path, $mime, strlen($bytes));
+    }
+
+    /** Build the banner media path: accounts/{account}/sites/{site}/banners/{asset}/{kind}-{rand}.{ext}. */
+    private function buildBannerPath(int $accountId, int $siteId, int $bannerAssetId, string $kind, string $mime): string
+    {
+        $extension = self::EXTENSIONS[strtolower($mime)] ?? self::DEFAULT_EXTENSION;
+
+        return implode('/', [
+            self::PATH_ACCOUNTS,
+            $accountId,
+            self::PATH_SITES,
+            $siteId,
+            self::PATH_BANNERS,
+            $bannerAssetId,
+            $kind.'-'.Str::random(24).'.'.$extension,
+        ]);
     }
 
     /** Build the deterministic-prefix, random-leaf media path. */

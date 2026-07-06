@@ -20,6 +20,7 @@ final class IdempotencyKey
 {
     // === CONSTANTS ===
     private const PREFIX_GENERATION = 'generation';
+    private const PREFIX_BANNER = 'banner';
     private const PREFIX_REFUND = 'refund';
     private const PREFIX_GRANT = 'grant';
     private const PREFIX_ADJUSTMENT = 'adjustment';
@@ -48,6 +49,27 @@ final class IdempotencyKey
             $endUserId,
             $productId,
             self::hashVariant($variant),
+            $clientRequestId,
+        ]);
+    }
+
+    /**
+     * The charge key for a banner generation attempt. Collapses a double-clicked Generate
+     * (same client_request_id) AND a queue retry (the rest is fixed by the banner identity).
+     * A NEW Generate carries a new client_request_id, so it mints a fresh asset — the merchant
+     * iterating on candidates is not deduped, only an accidental repeat of one click is.
+     */
+    public static function forBanner(
+        int $accountId,
+        int $siteId,
+        int $bannerId,
+        string $clientRequestId,
+    ): string {
+        return implode(':', [
+            self::PREFIX_BANNER,
+            $accountId,
+            $siteId,
+            $bannerId,
             $clientRequestId,
         ]);
     }

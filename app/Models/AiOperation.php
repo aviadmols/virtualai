@@ -20,14 +20,16 @@ class AiOperation extends Model
     use HasFactory;
 
     // === CONSTANTS ===
-    // The two operation keys the platform runs. Callers reference these consts,
+    // The operation keys the platform runs. Callers reference these consts,
     // never a magic string.
     public const KEY_PRODUCT_SCAN = 'product_scan';
     public const KEY_TRY_ON_GENERATION = 'try_on_generation';
+    public const KEY_BANNER_GENERATION = 'banner_generation';
 
     public const KEYS = [
         self::KEY_PRODUCT_SCAN,
         self::KEY_TRY_ON_GENERATION,
+        self::KEY_BANNER_GENERATION,
     ];
 
     protected $fillable = [

@@ -33,6 +33,14 @@ class AiControlPlaneSeeder extends Seeder
     private const TRYON_DEFAULT_MODEL = 'google/gemini-3.1-flash-image';
     private const TRYON_FALLBACK_MODEL = 'google/gemini-2.5-flash-image';
 
+    // Banner generation reuses the strong Gemini image line (same catalog, image output).
+    private const BANNER_DEFAULT_MODEL = 'google/gemini-3.1-flash-image';
+    private const BANNER_FALLBACK_MODEL = 'google/gemini-2.5-flash-image';
+
+    // Banners are wide marketing creatives; quality high, a landscape aspect ratio.
+    private const BANNER_IMAGE_QUALITY = 'high';
+    private const BANNER_ASPECT_RATIO = '16:9';
+
     // BytePlus/Seedream try-on model, catalogued but INACTIVE — the admin activates it after
     // adding a BytePlus key + a verified per-image cost hint (money-safe by default).
     // `seedream-5-0-260128` is Seedream 5.0 LITE — the only Seedream 5.0 exposed on the
@@ -87,7 +95,53 @@ class AiControlPlaneSeeder extends Seeder
     {
         $this->seedScanOperation();
         $this->seedTryOnOperation();
+        $this->seedBannerOperation();
         $this->seedCategoryPrompts();
+    }
+
+    /**
+     * Seed the banner_generation operation: a strong image model + fallback, wide aspect,
+     * and a scope=global prompt. The merchant's freeform brief is substituted into the
+     * user prompt via {{brief}} (strtr, never Blade). No fixed seed — each regenerate
+     * should yield a fresh candidate for the merchant to choose from. Fully admin-editable.
+     */
+    private function seedBannerOperation(): void
+    {
+        AiOperation::updateOrCreate(
+            ['operation_key' => AiOperation::KEY_BANNER_GENERATION],
+            [
+                'label' => 'Banner Generation',
+                'default_model' => self::BANNER_DEFAULT_MODEL,
+                'fallback_model' => self::BANNER_FALLBACK_MODEL,
+                'image_quality' => self::BANNER_IMAGE_QUALITY,
+                'aspect_ratio' => self::BANNER_ASPECT_RATIO,
+                // No fixed seed: variety across regenerations is the point of the candidate flow.
+                'params' => ['temperature' => 0.7, 'top_p' => 0.95],
+                'input_schema' => null,
+                'retention_days' => null, // marketing artwork is not shopper PII; kept until archived
+                'estimated_cost_micro_usd' => 40_000,
+                'credit_multiplier' => null,
+            ],
+        );
+
+        $this->seedModel(AiOperation::KEY_BANNER_GENERATION, self::BANNER_DEFAULT_MODEL, 'Gemini 3.1 Flash Image', isDefault: true, costHint: 60_000, unit: AiModel::UNIT_PER_IMAGE);
+        $this->seedModel(AiOperation::KEY_BANNER_GENERATION, self::BANNER_FALLBACK_MODEL, 'Gemini 2.5 Flash Image', isFallback: true, costHint: 40_000, unit: AiModel::UNIT_PER_IMAGE);
+
+        Prompt::updateOrCreate(
+            [
+                'scope' => Prompt::SCOPE_GLOBAL,
+                'operation_key' => AiOperation::KEY_BANNER_GENERATION,
+                'product_type' => null,
+                'account_id' => null,
+                'site_id' => null,
+            ],
+            [
+                'system_prompt' => 'You are a senior e-commerce graphic designer. Generate a single, polished, high-conversion marketing BANNER image for an online store. Compose a clean, uncluttered layout with strong focal hierarchy and generous negative space, so a headline and a call-to-action button can be overlaid later. Do not render lorem-ipsum or placeholder text. When a reference image is supplied, keep its product/brand faithfully.',
+                'user_prompt' => 'Design a store banner based on this brief: {{brief}}. Make it visually striking, on-brand, and suitable as a wide promotional banner.',
+                'version' => 1,
+                'is_active' => true,
+            ],
+        );
     }
 
     /** Seed a product_type-scoped try-on prompt per store category (admin-editable). */

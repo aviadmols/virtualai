@@ -50,6 +50,7 @@ class CreditLedger extends Model
 
     // Reference subjects a row can point at.
     public const REFERENCE_GENERATION = 'generation';
+    public const REFERENCE_BANNER_ASSET = 'banner_asset';
     public const REFERENCE_PURCHASE = 'purchase';
 
     private const APPEND_ONLY_MESSAGE = 'credit_ledger is append-only: a %s row cannot be %s. Write a new compensating row instead.';

@@ -108,10 +108,11 @@ final class CreditLedgerService
         ?int $generationId = null,
         ?Reservation $reservation = null,
         array $meta = [],
+        string $referenceType = CreditLedger::REFERENCE_GENERATION,
     ): CreditLedger {
         $charge = abs($chargeMicroUsd);
 
-        $result = DB::transaction(function () use ($account, $charge, $actualCostMicroUsd, $idempotencyKey, $generationId, $meta) {
+        $result = DB::transaction(function () use ($account, $charge, $actualCostMicroUsd, $idempotencyKey, $generationId, $meta, $referenceType) {
             /** @var Account $locked */
             $locked = Account::query()->whereKey($account->getKey())->lockForUpdate()->firstOrFail();
 
@@ -133,7 +134,7 @@ final class CreditLedgerService
                     amountMicroUsd: -$charge,
                     balanceAfter: $balanceAfter,
                     idempotencyKey: $idempotencyKey,
-                    referenceType: CreditLedger::REFERENCE_GENERATION,
+                    referenceType: $referenceType,
                     referenceId: $generationId,
                     actualCostMicroUsd: $actualCostMicroUsd,
                     meta: $meta,
@@ -257,13 +258,17 @@ final class CreditLedgerService
             ->first();
     }
 
-    /** True if a non-refunded charge row exists for a generation (the §7 short-circuit). */
-    public function hasCharge(int $generationId): bool
+    /**
+     * True if a charge row exists for a reference (the money-path short-circuit). Defaults to
+     * a generation reference so every existing caller is unchanged; the banner money path
+     * passes REFERENCE_BANNER_ASSET so a banner asset's charge is looked up on its own row.
+     */
+    public function hasCharge(int $referenceId, string $referenceType = CreditLedger::REFERENCE_GENERATION): bool
     {
         return CreditLedger::query()
             ->where('type', CreditLedger::TYPE_CHARGE)
-            ->where('reference_type', CreditLedger::REFERENCE_GENERATION)
-            ->where('reference_id', $generationId)
+            ->where('reference_type', $referenceType)
+            ->where('reference_id', $referenceId)
             ->exists();
     }
 
