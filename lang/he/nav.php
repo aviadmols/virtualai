@@ -7,6 +7,7 @@ return [
     'sites' => 'אתרים',
     'products' => 'מוצרים',
     'leads' => 'לידים',
+    'marketing' => 'שיווק',
     'credits' => 'קרדיטים',
     'settings' => 'הגדרות',
     'platform' => 'פלטפורמה',

@@ -7,6 +7,7 @@ return [
     'sites' => 'Sites',
     'products' => 'Products',
     'leads' => 'Leads',
+    'marketing' => 'Marketing',
     'credits' => 'Credits',
     'settings' => 'Settings',
     'platform' => 'Platform',

@@ -59,6 +59,7 @@ class MerchantPanelProvider extends PanelProvider
     private const NAV_GROUPS = [
         'nav.sites',
         'nav.leads',
+        'nav.marketing',
         'nav.credits',
         'nav.settings',
     ];
