@@ -23,6 +23,8 @@ final class InvalidSiteSettingsException extends RuntimeException
 
     public const REASON_INVALID_APPEARANCE = 'invalid_widget_appearance';
 
+    public const REASON_INVALID_CLUB_CONFIG = 'invalid_club_config';
+
     public function __construct(
         public readonly string $field,
         public readonly string $reason,
@@ -64,6 +66,15 @@ final class InvalidSiteSettingsException extends RuntimeException
             $field,
             self::REASON_INVALID_APPEARANCE,
             'widget appearance "'.$field.'" is invalid: '.$detail,
+        );
+    }
+
+    public static function club(string $field, string $detail): self
+    {
+        return new self(
+            $field,
+            self::REASON_INVALID_CLUB_CONFIG,
+            'club config "'.$field.'" is invalid: '.$detail,
         );
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Widget;
 
+use App\Domain\Sites\ClubConfig;
 use App\Domain\Sites\WidgetAppearance;
 use App\Http\Widget\EndUserResolver;
 use App\Http\Widget\Resources\ProductPayload;
@@ -69,6 +70,10 @@ final class BootstrapController
                 'free_remaining' => $lead?->freeRemaining ?? $site->free_generations_before_signup,
                 'signup_required' => $lead?->signupRequired ?? false,
             ],
+            // Customer-Club: the resolved per-site config + THIS shopper's membership
+            // state (verified_at on the already-resolved end user, read-only — never a
+            // new lead just to read). A non-member / no-token shopper reports verified:false.
+            'club' => $this->clubPayload($site, $endUser),
             // A confirmed product for this PDP, or null (clean empty state, never a 404).
             'product' => $product !== null
                 ? ProductPayload::make($product, $product->variants)
@@ -123,5 +128,27 @@ final class BootstrapController
         }
 
         return $this->endUsers->resolve($site, $anonToken);
+    }
+
+    /**
+     * The club block the widget acts on: the resolved per-site config (enabled,
+     * discount_percent, price_zones) plus THIS shopper's membership state. Member
+     * state is read off the already-resolved end user (verified_at) — read-only, no
+     * extra query, never a new lead just to check membership.
+     *
+     * @return array<string,mixed>
+     */
+    private function clubPayload(Site $site, ?\App\Models\EndUser $endUser): array
+    {
+        $config = ClubConfig::resolve($site->club_config);
+
+        return [
+            'enabled' => $config[ClubConfig::KEY_ENABLED],
+            'discount_percent' => $config[ClubConfig::KEY_DISCOUNT_PERCENT],
+            'price_zones' => $config[ClubConfig::KEY_PRICE_ZONES],
+            'member' => [
+                'verified' => $endUser?->isClubMember() ?? false,
+            ],
+        ];
     }
 }

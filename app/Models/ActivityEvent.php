@@ -51,6 +51,9 @@ class ActivityEvent extends Model
 
     public const KIND_LEAD_ADDED_TO_CART = 'lead_added_to_cart';   // widget add-to-cart funnel event
 
+    // Customer-Club (Phase 2): the shopper verified their email and became a member.
+    public const KIND_CLUB_JOINED = 'club_joined';
+
     // Widget behavioral events (Phase 1d). Fire-and-forget page views + meaningful
     // interactions the shopper made, tied to the EndUser. Curated non-secret details only.
     public const KIND_PAGE_VIEW = 'page_view';

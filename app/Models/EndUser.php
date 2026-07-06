@@ -69,6 +69,7 @@ class EndUser extends Model
         'status',
         'generations_used',
         'registered_at',
+        'verified_at',
         'source',
         'utm',
         'last_seen_at',
@@ -90,6 +91,7 @@ class EndUser extends Model
             'marketing_consent' => 'boolean',
             'marketing_consent_at' => 'datetime',
             'registered_at' => 'datetime',
+            'verified_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'utm' => 'array',
         ];
@@ -109,6 +111,16 @@ class EndUser extends Model
     public function isRegistered(): bool
     {
         return $this->registered_at !== null;
+    }
+
+    /**
+     * True once the shopper verified email ownership via the one-time code — a
+     * Customer-Club member. Independent of isRegistered() (a lead-form signup)
+     * and of the credit/lead gates.
+     */
+    public function isClubMember(): bool
+    {
+        return $this->verified_at !== null;
     }
 
     /** True once the shopper gave the use-my-photo consent (the basis to generate). */
