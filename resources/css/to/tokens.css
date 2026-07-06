@@ -7,50 +7,77 @@
  * anywhere else, and no raw color/radius/shadow/space literal may appear outside
  * this file (the per-panel brand accent override is the only exception, and lives
  * in each panel theme.css). Three layers, one base — never duplicate a value:
- *   --to-*   shared Tabuzzco anchor (locked: ink/paper/rule, Heebo, radius,
- *            shadow, motion, status colors). Both families derive from it.
- *   --toa-*  admin family — EDITORIAL Tabuzzco: paper canvas, 7px cards on a
- *            hairline + subtle layered shadow, oversized Heebo-Black KPI numerals,
- *            sharp controls. Type carries the design, not color.
- *   --tow-*  widget family — premium, Tabuzzco-grounded, host-adaptive.
+ *   --to-*   shared anchor (ink/paper/rule neutrals, Inter+Assistant font stack,
+ *            radius, minimal shadow, snappy motion, status colors). Both families
+ *            derive from it.
+ *   --toa-*  admin family — the OpenRouter dashboard look: neutral near-white
+ *            canvas, white cards on a hairline with minimal shadow, indigo accent
+ *            used sparingly, rounded controls, normal-weight (700) hero numerals.
+ *   --tow-*  widget family — premium, host-adaptive, indigo-accented.
  * Family layers REFERENCE the base (var(--to-…)); they never restate a value.
+ *
+ * DESIGN DIRECTION: OpenRouter dashboard — indigo/violet accent, Inter font,
+ * light neutral-grey palette, gently-rounded hairline cards, minimal shadow.
  * ==========================================================================*/
 
 :root {
-    /* ---- 1.1 Shared color — monochrome anchor + status ----------------
-       SOFTENED (user override of the pure-black / stark lock): the ink is a cool
-       graphite slate — refined, modern, still ≥ AA on paper — not #000. The muted
-       + subtle inks are re-derived in the SAME cool-slate hue so headings, meta,
-       and labels read as one calm family instead of neutral greys. */
-    --to-ink: #1c2027;          /* cool graphite (was #000000) — soft near-black */
+    /* ---- 1.1 Shared color — OpenRouter neutral anchor + status ---------
+       RETUNED to the OpenRouter dashboard palette (user override): a light,
+       calm, NEUTRAL grey system. Near-black slate headings (#111827), a true
+       medium-grey body (#6b7280) and a lighter subtle grey (#9ca3af); hairline
+       rules in Tailwind/OpenRouter neutral-200 (#e5e7eb) and a faint neutral-100
+       divider (#f3f4f6). These are the standard OpenRouter/Tailwind neutrals —
+       not a cool-blue-tinted slate. Colour is carried by the indigo accent
+       (declared per family below); the chrome stays neutral. */
+    --to-ink: #111827;          /* neutral-900 — near-black headings */
     --to-paper: #ffffff;
-    --to-rule: #d3d9e0;         /* gentle hairline (was #bcbcbc) — cool, not hard */
-    --to-rule-soft: #eef1f5;    /* faint cool divider (was #efefef) */
-    --to-ink-muted: #5b6472;    /* cool slate muted (was #6b7280) — harmonized */
-    --to-ink-subtle: #97a1b0;   /* cool slate subtle (was #9ca3af) */
+    --to-rule: #e5e7eb;         /* neutral-200 — the OpenRouter hairline */
+    --to-rule-soft: #f3f4f6;    /* neutral-100 — faint divider / zebra */
+    --to-ink-muted: #6b7280;    /* neutral-500 — medium-grey body text */
+    --to-ink-subtle: #9ca3af;   /* neutral-400 — subtle labels / meta */
 
-    --to-success: #2d8a5a;
-    --to-success-bg: #e7f2ec;
-    --to-warn: #c77700;
-    --to-warn-bg: #fbf1e0;
-    --to-danger: #c4452d;
-    --to-danger-bg: #fbe9e9;
-    --to-info: #2d6a8a;
-    --to-info-bg: #e5eff4;
+    /* Status — indigo-family info to sit with the new accent; success/warn/danger
+       kept as their semantic tones (meaning must not change) but nudged to the
+       flatter, cleaner OpenRouter/Tailwind hues. */
+    --to-success: #16a34a;
+    --to-success-bg: #f0fdf4;
+    --to-warn: #d97706;
+    --to-warn-bg: #fffbeb;
+    --to-danger: #dc2626;
+    --to-danger-bg: #fef2f2;
+    --to-info: #4f46e5;         /* indigo-600 — info reads as the brand family */
+    --to-info-bg: #eef2ff;      /* indigo-50 */
 
     /* Modal/overlay backdrop scrim (shared by admin overlays; the widget has its own).
-       Lighter + cool-tinted so the dimmed page feels airy, not a heavy black wash. */
-    --to-scrim: rgb(28 32 39 / 48%);
+       Neutral slate wash, kept airy. */
+    --to-scrim: rgb(17 24 39 / 45%);
 
-    /* ---- 1.2 Typography — Heebo, the only typeface -------------------- */
-    --to-font: "Heebo", system-ui, sans-serif;
+    /* ---- 1.2 Typography — Inter (Latin) + Assistant (Hebrew) ----------
+       RETUNED (user override): the OpenRouter dashboard uses Inter. Inter does
+       NOT cover Hebrew, so the bilingual EN/HE app pairs it with Assistant — a
+       clean, modern Hebrew grotesk that harmonizes with Inter's geometry — via
+       the family fallback chain, so Hebrew renders crisply and never falls back
+       to a serif. Both are loaded from Bunny (Google Fonts mirror) by each
+       PanelProvider: ->font('Inter') + a HEAD render hook adding Assistant.
+       system-ui remains the final safety net. */
+    --to-font: "Inter", "Assistant", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* Weight SCALE. RETUNED for the OpenRouter look: emphasis "bold" resolves to
+       600 (semibold), NOT 700 — OpenRouter uses 600 for emphasis. Every
+       var(--to-fw-bold) usage (section-heading weight, active-nav label, the
+       buy-credits total, etc.) therefore renders at 600 from this one place —
+       no scattered literals. The true 700 stays available as --to-fw-heavy for
+       the few hero moments (the big display page title + the KPI numeral) that
+       want the top of the OpenRouter 400–700 range. The 800/900 slots remain
+       defined for the scale's completeness but are no longer used by the chrome
+       (the ultra-black Heebo hero-numeral move is dropped). */
     --to-fw-thin: 100;
     --to-fw-extralight: 200;
     --to-fw-light: 300;
     --to-fw-regular: 400;
     --to-fw-medium: 500;
     --to-fw-semibold: 600;
-    --to-fw-bold: 700;
+    --to-fw-bold: 600;         /* emphasis = 600 (was 700) — OpenRouter bold */
+    --to-fw-heavy: 700;        /* NEW — the heaviest weight the chrome uses (display + KPI) */
     --to-fw-extrabold: 800;
     --to-fw-black: 900;
 
@@ -83,33 +110,34 @@
     --to-space-32: 128px;
 
     /* ---- 1.4 Radius --------------------------------------------------
-       SOFTENED: gentle rounding is the single biggest "more delicate / modern"
-       lever, per the user. --to-r-none stays a true 0 (semantic zero, still used
-       where a hard edge is deliberate), but a new --to-r-control adds a small
-       radius that buttons + fields + chips now reference instead of 0, and the
-       card radius is raised for a softer, floatier frame. */
+       OpenRouter look: gently rounded — buttons/fields ~8px, cards ~10px. Not
+       sharp, not bubbly. --to-r-none stays a true 0 (semantic zero, still used
+       where a hard edge is deliberate). */
     --to-r-none: 0;
-    --to-r-control: 8px;   /* NEW — gentle rounding for buttons / fields / chips */
-    --to-r-card: 12px;     /* raised from 7px — softer card / modal / image frame */
+    --to-r-control: 8px;   /* buttons / fields / chips / badges */
+    --to-r-card: 10px;     /* card / modal / image frame (OpenRouter ~8–12px) */
     --to-r-pill: 999px;
 
-    /* ---- 1.5 Shadows (layered soft — SIGNATURE) ----------------------
-       LIGHTENED (user: cards feel too heavy). Same two-layer signature, but the
-       big layer's spread + opacity drop hard and the tint is cool graphite
-       (28 32 39) instead of pure black, so cards read light + floaty, not weighty.
-       (47px/16% -> ~28px/10%). */
-    --to-shadow-card: rgb(28 32 39 / 9%) 0 28px 34px -24px, rgb(28 32 39 / 5%) 0 2px 8px 0;
-    --to-shadow-hover: rgb(28 32 39 / 12%) 0 34px 40px -22px, rgb(28 32 39 / 8%) 0 3px 10px 0;
-    --to-shadow-soft: 0 4px 12px rgb(28 32 39 / 7%);
-    /* Subtler layered variant for DENSE admin cards — even lighter so a wall of
-       cards floats rather than stacks up as shadow. */
-    --to-shadow-card-dense: rgb(28 32 39 / 7%) 0 16px 22px -18px, rgb(28 32 39 / 4%) 0 1px 5px 0;
-    --to-shadow-card-hover: rgb(28 32 39 / 11%) 0 26px 30px -20px, rgb(28 32 39 / 6%) 0 2px 8px 0;
+    /* ---- 1.5 Shadows (MINIMAL — OpenRouter leans on hairlines) --------
+       RETUNED: OpenRouter defines cards with a HAIRLINE BORDER, not a shadow.
+       The resting shadow is now barely-there (a 1px ambient tint) so the border
+       carries the card; only raised/overlay surfaces (modals, popovers, hovered
+       cards) get a soft, single-layer neutral shadow. The old two-layer graphite
+       "signature" drop is gone — this is the calm, flat OpenRouter surface. */
+    --to-shadow-card: 0 1px 2px rgb(17 24 39 / 4%);
+    --to-shadow-hover: 0 4px 12px rgb(17 24 39 / 8%);
+    --to-shadow-soft: 0 1px 3px rgb(17 24 39 / 5%);
+    /* Dense admin cards: no drop at all — pure hairline (a whisper of ambient). */
+    --to-shadow-card-dense: 0 1px 2px rgb(17 24 39 / 3%);
+    --to-shadow-card-hover: 0 4px 10px rgb(17 24 39 / 7%);
 
-    /* ---- 1.6 Motion (slow / calm — SIGNATURE) ------------------------ */
-    --to-t-fast: 0.3s ease;
-    --to-t-base: 0.5s ease;
-    --to-t-slow: 0.7s ease;
+    /* ---- 1.6 Motion (snappy — OpenRouter SaaS feel) ------------------
+       RETUNED: the slow 0.5s Tabuzzco "calm" signature is replaced by crisp,
+       standard dashboard transitions so hovers/toggles feel responsive, not
+       languid. */
+    --to-t-fast: 0.12s ease;
+    --to-t-base: 0.18s ease;
+    --to-t-slow: 0.28s ease;
 
     /* ---- 1.7 Borders ------------------------------------------------- */
     --to-bw-input: 1px;
@@ -132,37 +160,36 @@
      * merchant Sky/Azure). Everything else here is locked and shared by both panels.
      * ======================================================================*/
 
-    /* 2.1 Admin color — default accent is the near-black anchor; panels override
-       --toa-accent/-hover with ONE restrained brand hue used sparingly (active
-       nav, the single primary CTA, focus). Editorial Tabuzzco chrome: a clean,
-       near-white PAPER canvas (faintly cool, harmonizes with the blue accent, NOT
-       a heavy SaaS gray) with pure-white cards that sit on a hairline rule + a
-       subtle version of the signature
-       layered shadow. Type — not color — carries the design. */
-    --toa-accent: var(--to-ink);         /* default accent = the soft graphite ink */
-    --toa-accent-hover: #0e1116;         /* one notch darker than ink for hover */
-    --toa-accent-soft: #eef1f6;          /* selected-row / active-nav tint; panels override */
-    --toa-accent-line: var(--to-ink);    /* active-nav indicator bar; panels override */
-    --toa-accent-on: var(--to-paper);    /* text/icon on the accent fill */
-    --toa-bg: #f5f7fb;                    /* SOFTENED — airy, faintly-cool near-white (was #f4f6f8, warmer/lighter, less grey) */
+    /* 2.1 Admin color — OpenRouter dashboard chrome. RETUNED (user override):
+       the default accent is INDIGO (#4f46e5), used sparingly (active nav, the
+       single primary CTA, focus, links); each panel theme.css overrides it with
+       its own indigo shade. The canvas is a light NEUTRAL near-white (#fafafa),
+       cards are pure white on a NEUTRAL hairline (#e5e7eb) with minimal shadow —
+       calm, flat, lots of whitespace, exactly the OpenRouter surface. */
+    --toa-accent: #4f46e5;               /* indigo-600 — default brand accent */
+    --toa-accent-hover: #4338ca;         /* indigo-700 — hover / active */
+    --toa-accent-soft: #eef2ff;          /* indigo-50 — selected-row / active-nav pill */
+    --toa-accent-line: #6366f1;          /* indigo-500 — active-nav indicator bar */
+    --toa-accent-on: var(--to-paper);    /* white text/icon on the accent fill */
+    --toa-bg: #fafafa;                    /* OpenRouter near-white neutral canvas */
     --toa-surface: var(--to-paper);      /* pure-white cards */
-    --toa-surface-alt: #f7f9fc;          /* zebra / inset wells — cool, barely-there */
-    --toa-border: #e6eaf1;               /* SOFTENED hairline (was #e3e7ec) — gentle, cool */
-    --toa-border-strong: #d7dde6;        /* SOFTENED firmer rule (was #d1d7de) */
-    --toa-focus: rgb(28 32 39 / 30%);    /* panels override the rgb to their brand */
+    --toa-surface-alt: #f9fafb;           /* zebra / inset wells — neutral-50 */
+    --toa-border: #e5e7eb;               /* neutral-200 — the OpenRouter hairline */
+    --toa-border-strong: #d1d5db;        /* neutral-300 — firmer rule */
+    --toa-focus: rgb(79 70 229 / 30%);   /* indigo focus ring; panels may override */
 
-    /* 2.2 Admin typography — editorial hierarchy. KPI numerals are the hero move:
-       oversized Heebo Black 900, display line-height, tabular. Titles get a big
-       tight size; a tracked uppercase EYEBROW sits above them. */
-    --toa-type-kpi-size: clamp(2.5rem, 2rem + 1.4vw, 2.85rem);  /* ~40–46px */
-    /* SOFTENED: dropped from Black 900 to ExtraBold 800 — the oversized numeral is
-       still the editorial hero, but reads refined against the gentler palette
-       instead of harsh. Rendered in the soft graphite ink, not pure black. */
-    --toa-type-kpi-weight: var(--to-fw-extrabold);
-    --toa-type-display-size: clamp(1.75rem, 1.4rem + 1.2vw, 2.25rem); /* page titles */
-    --toa-type-display-weight: var(--to-fw-extrabold);  /* softened from Black 900 */
+    /* 2.2 Admin typography — OpenRouter hierarchy. RETUNED: normal-weight bold,
+       NOT ultra-black. The KPI numeral + page title are the heaviest the chrome
+       goes — 700 (--to-fw-heavy), the top of the OpenRouter 400–700 range — a
+       touch smaller than the old editorial hero so numbers read clean, not loud.
+       Section headings + emphasis use --to-fw-bold, which is now 600 (semibold)
+       per the OpenRouter emphasis convention. A tracked eyebrow still sits above. */
+    --toa-type-kpi-size: clamp(2rem, 1.7rem + 1vw, 2.35rem);  /* ~32–38px — calmer */
+    --toa-type-kpi-weight: var(--to-fw-heavy);          /* 700 hero numeral (was 800) */
+    --toa-type-display-size: clamp(1.5rem, 1.3rem + 0.9vw, 1.875rem); /* page titles */
+    --toa-type-display-weight: var(--to-fw-heavy);      /* 700 (was 800) */
     --toa-type-h-size: 1.0625rem;        /* 17px section headings */
-    --toa-type-h-weight: var(--to-fw-bold);
+    --toa-type-h-weight: var(--to-fw-bold);             /* now 600 — OpenRouter emphasis */
     --toa-type-eyebrow-size: 0.6875rem;  /* 11px tracked uppercase caption */
     --toa-type-eyebrow-weight: var(--to-fw-semibold);
     --toa-type-body-size: 0.875rem;      /* 14px */
@@ -171,15 +198,14 @@
     --toa-type-caption-size: 0.75rem;    /* 12px */
     --toa-type-caption-weight: var(--to-fw-medium);
 
-    /* 2.3 Admin radius — SOFTENED: gentle rounding replaces the sharp Tabuzzco
-       edges (user override). Cards take the raised card radius; controls, fields,
-       and buttons take the gentle --to-r-control (8px) so the admin reads modern
-       and delicate, not bubbly and not stark. --toa-radius-button is NEW so
-       buttons.css references a token instead of the hardcoded --to-r-none. */
-    --toa-radius-card: var(--to-r-card);        /* raised card radius (12px) */
-    --toa-radius-control: 6px;                  /* gentle (was 2px) — sidebar items, badges, chips */
-    --toa-radius-field: var(--to-r-control);    /* gentle 8px (was 2px) — inputs, selects */
-    --toa-radius-button: var(--to-r-control);   /* NEW — gentle 8px buttons (was radius 0) */
+    /* 2.3 Admin radius — OpenRouter rounded. Cards take --to-r-card (10px);
+       the sidebar active-item PILL, badges, chips, fields, and buttons take
+       --to-r-control (8px) so every control reads gently rounded, matching the
+       OpenRouter dashboard's soft-cornered pills and inputs. */
+    --toa-radius-card: var(--to-r-card);        /* 10px card / section / modal */
+    --toa-radius-control: var(--to-r-control);  /* 8px — sidebar pill, badges, chips */
+    --toa-radius-field: var(--to-r-control);    /* 8px — inputs, selects */
+    --toa-radius-button: var(--to-r-control);   /* 8px — buttons */
 
     /* 2.4 Admin shadow / spacing aliases — the subtler layered signature. */
     --toa-shadow-card: var(--to-shadow-card-dense);
@@ -191,21 +217,22 @@
     --toa-thumb: 64px;
 
     /* ========================================================================
-     * 3. Widget family — --tow-* (premium, Tabuzzco-grounded, host-adaptive)
+     * 3. Widget family — --tow-* (premium, host-adaptive, OpenRouter-accented)
      * In the storefront these live scoped to the widget root, NOT :root of the
      * host page (the Shadow DOM contract with widget-embed). They are declared
      * here so the token language is single-sourced; widget.css (Phase 9) scopes
-     * them to the widget root. Only --tow-accent (+ derived --tow-accent-on) is
-     * adapt-able; everything else is locked Tabuzzco.
+     * the LIVE values onto --ton-* at the widget root. Only --tow-accent (+
+     * derived --tow-accent-on) is adapt-able (per-site config overrides it).
      * ======================================================================*/
 
-    /* 3.1 Widget color — SOFTENED to match the storefront modal retune (the live
-       values live on --ton-* in widget.css; this is the single-sourced mirror).
-       Overlay is lighter + cool-tinted; inks derive from the soft graphite. */
-    --tow-accent: var(--to-ink);
+    /* 3.1 Widget color — RETUNED to the OpenRouter look (the live values live on
+       --ton-* in widget.css; this is the single-sourced mirror). The DEFAULT
+       accent is indigo (a merchant's per-site config still overrides it); inks
+       are the neutral OpenRouter greys; overlay is a neutral slate wash. */
+    --tow-accent: #4f46e5;               /* indigo-600 default (config overrides) */
     --tow-accent-on: var(--to-paper);
     --tow-surface: var(--to-paper);
-    --tow-overlay: rgb(28 32 39 / 52%);
+    --tow-overlay: rgb(17 24 39 / 50%);
     --tow-hairline: var(--to-rule-soft);
 
     /* 3.2 Widget typography (the premium moments) */

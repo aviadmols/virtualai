@@ -159,7 +159,7 @@
 
 .to-cvr__markup-realized {
     font-size: var(--toa-type-h-size);
-    font-weight: var(--to-fw-black);
+    font-weight: var(--to-fw-bold);
     font-variant-numeric: tabular-nums;
 }
 

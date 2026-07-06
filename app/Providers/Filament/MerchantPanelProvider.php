@@ -15,11 +15,13 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\HtmlString;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /**
@@ -40,6 +42,14 @@ class MerchantPanelProvider extends PanelProvider
     private const RESOURCE_DIR = 'Filament/Merchant/Resources';
     private const PAGE_DIR = 'Filament/Merchant/Pages';
     private const WIDGET_DIR = 'Filament/Merchant/Widgets';
+
+    // OpenRouter look: Inter (Latin) is loaded via ->font(); Assistant covers
+    // Hebrew (Inter has no Hebrew glyphs) via a HEAD render hook. Both come from
+    // Bunny (a privacy-friendly Google Fonts mirror). The --to-font token stacks
+    // them so HE never falls back. Weights 400–700 match the OpenRouter range.
+    private const FONT_FAMILY = 'Inter';
+    private const HEBREW_FONT_HEAD = '<link rel="preconnect" href="https://fonts.bunny.net">'
+        .'<link href="https://fonts.bunny.net/css?family=assistant:400,500,600,700&display=swap" rel="stylesheet" />';
 
     /**
      * Nav group order for the merchant workspace (resources land in 8c–8g and
@@ -68,8 +78,13 @@ class MerchantPanelProvider extends PanelProvider
             ->tenantRegistration(RegisterSite::class)
             ->tenantProfile(EditSiteProfile::class)
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::Indigo,
             ])
+            ->font(self::FONT_FAMILY)
+            ->renderHook(
+                PanelsRenderHook::HEAD_START,
+                static fn (): HtmlString => new HtmlString(self::HEBREW_FONT_HEAD),
+            )
             ->viteTheme(self::THEME)
             ->sidebarCollapsibleOnDesktop()
             ->navigationGroups(self::navigationGroups())

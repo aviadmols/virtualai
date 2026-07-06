@@ -64,7 +64,7 @@
 
 .to-place-title {
     font-size: var(--toa-type-h-size);
-    font-weight: var(--to-fw-black);
+    font-weight: var(--to-fw-bold);
     color: var(--to-ink);
 }
 
