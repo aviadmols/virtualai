@@ -5,9 +5,8 @@ namespace App\Filament\Merchant\Widgets;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Reporting\DashboardMetrics;
 use App\Domain\Reporting\DashboardMetricsBuilder;
-use App\Models\Account;
+use App\Filament\Merchant\Concerns\ResolvesShopAccount;
 use Filament\Widgets\Widget;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * M7 / A1 — the credit-balance band above the ledger. Reads the typed
@@ -15,11 +14,13 @@ use Illuminate\Support\Facades\Auth;
  * PRE-FORMATTED value — this widget NEVER aggregates a number in Blade.
  *
  * Three cards: spendable (balance − reserved), balance, reserved. The account is
- * the authenticated owner's (auth()->user()->account), never another account; the
- * builder runs every query inside that bound tenant, so the figures are isolated.
+ * the CURRENT SHOP TENANT's (Filament::getTenant()->account), never the auth user;
+ * the builder runs every query inside that bound tenant, so the figures are isolated.
  */
 class BalanceWidget extends Widget
 {
+    use ResolvesShopAccount;
+
     // === CONSTANTS ===
     protected static string $view = 'filament.merchant.widgets.balance';
 
@@ -70,16 +71,10 @@ class BalanceWidget extends Widget
         ];
     }
 
-    /** The account-scoped snapshot for the signed-in merchant. */
+    /** The account-scoped snapshot for the current shop. */
     private function metrics(): DashboardMetrics
     {
-        return app(DashboardMetricsBuilder::class)->build($this->account());
-    }
-
-    /** The authenticated account-owner's account (never another account). */
-    private function account(): Account
-    {
-        return Auth::user()->account;
+        return app(DashboardMetricsBuilder::class)->build($this->shopAccount());
     }
 
     /** Integer micro-USD of selling value → a $X.XX display string. */

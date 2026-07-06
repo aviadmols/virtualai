@@ -4,11 +4,11 @@ namespace App\Filament\Merchant\Pages;
 
 use App\Domain\Credits\CreditMath;
 use App\Domain\Credits\Payments\PurchaseInitiator;
+use App\Filament\Merchant\Concerns\ResolvesShopAccount;
 use App\Models\Account;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * M7 / A11 — Buy credits. The merchant picks a preset amount; the page asks
@@ -21,11 +21,13 @@ use Illuminate\Support\Facades\Auth;
  * Money is integer micro-USD at FACE VALUE (the 2.5x markup is earned on a generation,
  * never on a top-up). The preset amounts are UI choices (the dollar buttons), not money
  * math — the chosen amount passes straight through to the initiator. Tenant-safety: the
- * account is the authenticated owner's (auth()->user()->account), bound by the panel;
+ * account is the CURRENT SHOP TENANT's (Filament::getTenant()->account), bound by the panel;
  * the initiator stamps the pending purchase under that account via Tenant::run.
  */
 class BuyCredits extends Page
 {
+    use ResolvesShopAccount;
+
     // === CONSTANTS ===
     protected static bool $shouldRegisterNavigation = true;
 
@@ -147,10 +149,10 @@ class BuyCredits extends Page
         return $this->redirect($intent->redirectUrl);
     }
 
-    /** The authenticated account-owner's account (never another account). */
+    /** The current shop tenant's account (drill-in-safe; see ResolvesShopAccount). */
     private function account(): Account
     {
-        return Auth::user()->account;
+        return $this->shopAccount();
     }
 
     /**

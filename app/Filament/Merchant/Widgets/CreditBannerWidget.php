@@ -5,10 +5,9 @@ namespace App\Filament\Merchant\Widgets;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Reporting\DashboardMetrics;
 use App\Domain\Reporting\DashboardMetricsBuilder;
+use App\Filament\Merchant\Concerns\ResolvesShopAccount;
 use App\Filament\Merchant\Pages\BuyCredits;
-use App\Models\Account;
 use Filament\Widgets\Widget;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * M1 / A10 — the low / out-of-credit banner. Derives the credit state from the
@@ -19,11 +18,13 @@ use Illuminate\Support\Facades\Auth;
  *   spendable <= low-thresh → WARN,   dismissible (a nudge).
  *   otherwise               → no banner (the widget renders nothing).
  *
- * The account is the authenticated owner's (auth()->user()->account); the figures
- * are isolated to it by the builder's bound tenant.
+ * The account is the CURRENT SHOP TENANT's (Filament::getTenant()->account); the
+ * figures are isolated to it by the builder's bound tenant.
  */
 class CreditBannerWidget extends Widget
 {
+    use ResolvesShopAccount;
+
     // === CONSTANTS ===
     protected static string $view = 'filament.merchant.widgets.credit-banner';
 
@@ -88,13 +89,7 @@ class CreditBannerWidget extends Widget
 
     private function metrics(): DashboardMetrics
     {
-        return app(DashboardMetricsBuilder::class)->build($this->account());
-    }
-
-    /** The authenticated account-owner's account (never another account). */
-    private function account(): Account
-    {
-        return Auth::user()->account;
+        return app(DashboardMetricsBuilder::class)->build($this->shopAccount());
     }
 
     /** Integer micro-USD of selling value → a $X.XX display string. */

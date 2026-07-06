@@ -15,7 +15,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * M5 / M6 — Leads ("Tray On users") list + lead card (A6 / A7).
@@ -124,7 +123,7 @@ class EndUserResource extends Resource
                 Action::make('export')
                     ->label(__(self::EXPORT_LABEL))
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->action(static fn () => app(LeadsExporter::class)->download(Auth::user()->account)),
+                    ->action(static fn () => app(LeadsExporter::class)->download(Filament::getTenant()->account)),
             ])
             ->recordUrl(static fn (EndUser $record): string => ViewEndUser::getUrl(['record' => $record]))
             ->emptyStateHeading(__('leads.empty'))

@@ -5,21 +5,22 @@ namespace App\Filament\Merchant\Widgets;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Reporting\DashboardMetrics;
 use App\Domain\Reporting\DashboardMetricsBuilder;
-use App\Models\Account;
+use App\Filament\Merchant\Concerns\ResolvesShopAccount;
 use Filament\Widgets\Widget;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * M1 / A1 — the merchant KPI band. Reads the typed DashboardMetrics snapshot
  * (built account-scoped by DashboardMetricsBuilder) and hands each card a
  * PRE-FORMATTED value — this widget NEVER aggregates a number in Blade.
  *
- * The account is resolved from the authenticated account-owner (auth()->user()
- * ->account), never another account; the builder runs every query inside that
+ * The account is resolved from the CURRENT SHOP TENANT (Filament::getTenant()
+ * ->account), never the auth user; the builder runs every query inside that
  * bound tenant (BelongsToAccount), so the figures are isolated by construction.
  */
 class MerchantKpiWidget extends Widget
 {
+    use ResolvesShopAccount;
+
     // === CONSTANTS ===
     protected static string $view = 'filament.merchant.widgets.merchant-kpi';
 
@@ -83,16 +84,10 @@ class MerchantKpiWidget extends Widget
         ];
     }
 
-    /** The account-scoped snapshot for the signed-in merchant. */
+    /** The account-scoped snapshot for the current shop. */
     private function metrics(): DashboardMetrics
     {
-        return app(DashboardMetricsBuilder::class)->build($this->account());
-    }
-
-    /** The authenticated account-owner's account (never another account). */
-    private function account(): Account
-    {
-        return Auth::user()->account;
+        return app(DashboardMetricsBuilder::class)->build($this->shopAccount());
     }
 
     /** Locale-aware integer formatting (display only — no aggregation here). */
