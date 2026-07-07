@@ -4,6 +4,7 @@ namespace App\Domain\Media;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -28,6 +29,13 @@ final class MediaStorage
     // === CONSTANTS ===
     private const DISK_CONFIG_KEY = 'trayon.media.disk';
     private const SIGNED_TTL_CONFIG_KEY = 'trayon.media.signed_ttl';
+
+    // When the media disk is a LOCAL disk (a Railway Volume), the mount is outside public/
+    // so URLs point at the app's media routes instead of the object-store CDN: public banners
+    // via a plain cacheable path, private objects via an expiring SIGNED route.
+    private const LOCAL_DRIVER = 'local';
+    private const ROUTE_SIGNED = 'media.signed';
+    private const PUBLIC_PATH_PREFIX = '/media/pub/';
 
     // Path segments — account leads so an object is never cross-tenant ambiguous.
     private const PATH_ACCOUNTS = 'accounts';
@@ -101,6 +109,11 @@ final class MediaStorage
             return null;
         }
 
+        // A Railway Volume (local disk) is served by the app, not a CDN — a plain cacheable route.
+        if ($this->isLocalDisk()) {
+            return url(self::PUBLIC_PATH_PREFIX.$path);
+        }
+
         return $this->disk()->url($path);
     }
 
@@ -112,6 +125,11 @@ final class MediaStorage
     {
         if ($path === null || $path === '') {
             return null;
+        }
+
+        // A local disk (Volume) can't mint object-store signed URLs — use an expiring signed route.
+        if ($this->isLocalDisk()) {
+            return URL::temporarySignedRoute(self::ROUTE_SIGNED, now()->addSeconds($this->ttlSeconds()), ['path' => $path]);
         }
 
         return $this->disk()->temporaryUrl($path, now()->addSeconds($this->ttlSeconds()));
@@ -220,7 +238,7 @@ final class MediaStorage
         ]);
     }
 
-    /** The configured media disk (s3/r2 in prod, faked in tests). */
+    /** The configured media disk (s3/r2 or a local Volume in prod, faked in tests). */
     private function disk(): Filesystem
     {
         $disk = (string) config(self::DISK_CONFIG_KEY);
@@ -230,5 +248,13 @@ final class MediaStorage
         }
 
         return Storage::disk($disk);
+    }
+
+    /** True when the media disk uses the local driver (a Railway Volume) — served by the app. */
+    private function isLocalDisk(): bool
+    {
+        $disk = (string) config(self::DISK_CONFIG_KEY);
+
+        return config('filesystems.disks.'.$disk.'.driver') === self::LOCAL_DRIVER;
     }
 }
