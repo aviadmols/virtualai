@@ -37,6 +37,14 @@ class AiControlPlaneSeeder extends Seeder
     private const BANNER_DEFAULT_MODEL = 'google/gemini-3.1-flash-image';
     private const BANNER_FALLBACK_MODEL = 'google/gemini-2.5-flash-image';
 
+    // Extra Gemini image models catalogued for banners so the Super-Admin can switch the
+    // default from the Models page (all verified live on OpenRouter). Lite = cheaper/faster,
+    // Pro = higher quality. Active + selectable; the admin picks which one generates banners.
+    private const BANNER_ALT_MODELS = [
+        'google/gemini-3.1-flash-lite-image' => ['label' => 'Gemini 3.1 Flash Lite Image', 'cost' => 30_000],
+        'google/gemini-3-pro-image' => ['label' => 'Gemini 3 Pro Image', 'cost' => 100_000],
+    ];
+
     // Banners are wide marketing creatives; quality high, a landscape aspect ratio.
     private const BANNER_IMAGE_QUALITY = 'high';
     private const BANNER_ASPECT_RATIO = '16:9';
@@ -126,6 +134,11 @@ class AiControlPlaneSeeder extends Seeder
 
         $this->seedModel(AiOperation::KEY_BANNER_GENERATION, self::BANNER_DEFAULT_MODEL, 'Gemini 3.1 Flash Image', isDefault: true, costHint: 60_000, unit: AiModel::UNIT_PER_IMAGE);
         $this->seedModel(AiOperation::KEY_BANNER_GENERATION, self::BANNER_FALLBACK_MODEL, 'Gemini 2.5 Flash Image', isFallback: true, costHint: 40_000, unit: AiModel::UNIT_PER_IMAGE);
+
+        // Extra Gemini image models the Super-Admin can switch to for banners (Models page).
+        foreach (self::BANNER_ALT_MODELS as $modelId => $meta) {
+            $this->seedModel(AiOperation::KEY_BANNER_GENERATION, $modelId, $meta['label'], costHint: $meta['cost'], unit: AiModel::UNIT_PER_IMAGE);
+        }
 
         Prompt::updateOrCreate(
             [
