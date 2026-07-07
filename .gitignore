@@ -34,3 +34,6 @@ yarn-error.log
 /tests/widget/screenshots/
 /public/css/filament
 /public/js/filament
+
+# Generated Playwright verification screenshots (dev artifacts, not source)
+/tests/screenshots/
