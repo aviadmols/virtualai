@@ -7,6 +7,7 @@ use App\Domain\Banners\BannerGenerationRequest;
 use App\Domain\Banners\StartBannerGeneration;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Credits\IdempotencyKey;
+use App\Domain\Credits\ReservationManager;
 use App\Domain\Generation\GenerateBannerJob;
 use App\Domain\Generation\GenerationFailureCode;
 use App\Models\Account;
@@ -201,6 +202,88 @@ class GenerateBannerJobTest extends TestCase
         $charges = Tenant::run($context['account'], fn () => CreditLedger::query()
             ->where('type', CreditLedger::TYPE_CHARGE)->count());
         $this->assertSame(0, $charges);
+    }
+
+    public function test_failed_handler_recovers_an_asset_stranded_before_processing(): void
+    {
+        // The real "banner_generation op not seeded" strand: the resolver throws BEFORE the
+        // PROCESSING transition, so process() cannot finalize and the asset would sit pending
+        // forever (error only in failed_jobs). The failed() safety net must recover it.
+        AiOperation::query()->where('operation_key', AiOperation::KEY_BANNER_GENERATION)->delete();
+        $context = $this->makeBannerContext();
+        $asset = $this->makePendingAsset($context);
+
+        $job = new GenerateBannerJob((int) $context['account']->id, (int) $context['site']->id, (int) $asset->id);
+
+        try {
+            $job->handle();
+            $this->fail('expected the missing operation to throw');
+        } catch (\Throwable $e) {
+            // The queue worker invokes failed() after the final attempt fails (tries=1).
+            $job->failed($e);
+        }
+
+        $asset->refresh();
+        // A pre-start failure ends 'cancelled' (like a gate/misconfig denial), carrying the cause.
+        $this->assertSame(BannerAsset::STATUS_CANCELLED, $asset->status);
+        $this->assertSame(GenerationFailureCode::INTERNAL_ERROR, $asset->failure_code);
+        $this->assertNotEmpty($asset->meta[BannerAsset::META_FAILURE_MESSAGE] ?? null);
+
+        // Money-safe: NO charge row, nothing left reserved.
+        $account = $context['account']->fresh();
+        $this->assertSame(self::FIVE_DOLLARS_MICRO, $account->balance_micro_usd);
+        $this->assertSame(0, $account->reserved_micro_usd);
+        $charges = Tenant::run($context['account'], fn () => CreditLedger::query()
+            ->where('type', CreditLedger::TYPE_CHARGE)->count());
+        $this->assertSame(0, $charges);
+    }
+
+    public function test_failed_handler_releases_a_held_reservation_and_marks_in_flight_failed(): void
+    {
+        $context = $this->makeBannerContext();
+        $asset = $this->makePendingAsset($context);
+
+        // Simulate the state after reserve() ran but a later step threw uncaught (e.g. inside
+        // finalizeSuccess): the asset is processing and a reservation is still held on its key.
+        Tenant::run($context['account'], function () use ($context, $asset): void {
+            app(ReservationManager::class)->reserve($context['account'], $asset->idempotency_key, 500_000);
+            $asset->transitionTo(BannerAsset::STATUS_PROCESSING, ['model' => 'x']);
+        });
+        $this->assertSame(500_000, $context['account']->fresh()->reserved_micro_usd);
+
+        $job = new GenerateBannerJob((int) $context['account']->id, (int) $context['site']->id, (int) $asset->id);
+        $job->failed(new \RuntimeException('worker died mid-generation'));
+
+        $asset->refresh();
+        // An in-flight strand ends 'failed'; the reservation is released (never leaked); no charge.
+        $this->assertSame(BannerAsset::STATUS_FAILED, $asset->status);
+        $this->assertSame(GenerationFailureCode::INTERNAL_ERROR, $asset->failure_code);
+        $this->assertSame(0, $context['account']->fresh()->reserved_micro_usd);
+        $charges = Tenant::run($context['account'], fn () => CreditLedger::query()
+            ->where('type', CreditLedger::TYPE_CHARGE)->count());
+        $this->assertSame(0, $charges);
+    }
+
+    public function test_failed_handler_is_a_noop_on_an_already_terminal_asset(): void
+    {
+        // A caught failure (or committed success) already finalized the asset. A late failed()
+        // call must not re-transition it or touch money.
+        $this->fakeOpenRouterSuccess(costUsd: 0.40);
+        $context = $this->makeBannerContext();
+        $asset = $this->makePendingAsset($context);
+        $this->runJob($context, $asset); // -> succeeded + charged once
+
+        $balanceAfter = $context['account']->fresh()->balance_micro_usd;
+
+        $job = new GenerateBannerJob((int) $context['account']->id, (int) $context['site']->id, (int) $asset->id);
+        $job->failed(new \RuntimeException('a stray late failure'));
+
+        $asset->refresh();
+        $this->assertSame(BannerAsset::STATUS_SUCCEEDED, $asset->status); // untouched
+        $this->assertSame($balanceAfter, $context['account']->fresh()->balance_micro_usd);
+        $charges = Tenant::run($context['account'], fn () => CreditLedger::query()
+            ->where('type', CreditLedger::TYPE_CHARGE)->count());
+        $this->assertSame(1, $charges); // still exactly one
     }
 
     public function test_start_creates_a_pending_asset_and_dispatches_the_job(): void

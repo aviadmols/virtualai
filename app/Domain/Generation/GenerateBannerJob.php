@@ -89,6 +89,45 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
         });
     }
 
+    /**
+     * Last-resort safety net. process() catches provider/storage failures and finalizes them
+     * cleanly, but an exception BEFORE the PROCESSING transition (e.g. the banner_generation op
+     * not seeded → the resolver throws, or reserve() throws) — or inside finalizeSuccess — would
+     * otherwise escape uncaught and strand the asset in pending/processing, with the real cause
+     * only in failed_jobs and the editor's candidate gallery spinning forever. Laravel calls this
+     * when handle() throws (tries=1). Bind the tenant, release any still-held reservation (never a
+     * leaked hold), and move the asset to a terminal failure carrying the message — so the money
+     * path stays honest (an escaped exception NEVER charged) and the merchant sees why.
+     *
+     * Idempotent: a no-op when the asset already reached a terminal state (a caught failure or a
+     * committed success). Respects the guarded machine — a pre-start failure ends 'cancelled'
+     * (like a gate/misconfig denial), an in-flight one 'failed'.
+     */
+    public function failed(Throwable $e): void
+    {
+        Tenant::run($this->accountId, function () use ($e): void {
+            $asset = BannerAsset::query()->find($this->bannerAssetId);
+
+            if ($asset === null || $asset->isTerminal()) {
+                return;
+            }
+
+            // We charge ONLY in finalizeSuccess (which, if it committed, left the asset terminal
+            // above). An escaped exception never charged — release any held reservation by key.
+            $this->reservations()->releaseByKey($this->accountId, (string) $asset->idempotency_key);
+
+            $message = $e->getMessage();
+
+            $asset->forceFill([
+                'failure_code' => GenerationFailureCode::INTERNAL_ERROR,
+                'meta' => array_merge($asset->meta ?? [], [BannerAsset::META_FAILURE_MESSAGE => $message]),
+            ])->save();
+
+            $terminal = $asset->isPending() ? BannerAsset::STATUS_CANCELLED : BannerAsset::STATUS_FAILED;
+            $asset->transitionTo($terminal, ['failure_code' => GenerationFailureCode::INTERNAL_ERROR, 'message' => $message]);
+        });
+    }
+
     /** Runs with $this->accountId bound by TenantAwareJob::handle(). */
     protected function process(): void
     {

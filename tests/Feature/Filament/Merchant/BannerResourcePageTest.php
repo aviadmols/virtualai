@@ -9,6 +9,7 @@ use App\Filament\Merchant\Resources\BannerResource;
 use App\Filament\Merchant\Resources\BannerResource\Pages\CreateBanner;
 use App\Filament\Merchant\Resources\BannerResource\Pages\EditBanner;
 use App\Filament\Merchant\Resources\BannerResource\Pages\ListBanners;
+use App\Filament\Merchant\Widgets\BannerCandidatesWidget;
 use App\Models\Account;
 use App\Models\Banner;
 use App\Models\BannerAsset;
@@ -104,26 +105,83 @@ class BannerResourcePageTest extends TestCase
         $this->assertSame('A bold red summer sale banner', $asset->brief);
     }
 
-    public function test_selecting_a_candidate_on_save_copies_its_artwork(): void
+    public function test_selecting_a_candidate_in_the_widget_copies_its_artwork(): void
     {
         $banner = $this->draft();
         $asset = $this->succeededAsset($banner);
 
+        // The live candidate gallery owns selection now (no reload / no save needed): clicking
+        // "Use this image" copies the artwork and tells the editor to refresh.
         Tenant::run($this->account, function () use ($banner, $asset): void {
-            Livewire::test(EditBanner::class, ['record' => $banner->getKey()])
-                ->fillForm([
-                    'name' => $banner->name,
-                    'composition' => Banner::COMPOSITION_IMAGE,
-                    'selected_asset_id' => $asset->id,
-                ])
-                ->call('save')
-                ->assertHasNoFormErrors();
+            Livewire::test(BannerCandidatesWidget::class, ['record' => $banner])
+                ->call('useAsset', $asset->id)
+                ->assertDispatched('banner-artwork-selected');
         });
 
         $fresh = Tenant::run($this->account, fn () => Banner::query()->find($banner->id));
         $this->assertSame($asset->id, $fresh->selected_asset_id);
         $this->assertSame($asset->image_path, $fresh->image_path);
         $this->assertTrue($fresh->hasArtwork());
+    }
+
+    public function test_widget_polls_only_while_a_candidate_is_generating(): void
+    {
+        $banner = $this->draft();
+        $asset = Tenant::run($this->account, fn () => BannerAsset::factory()->forBanner($banner)->create([
+            'status' => BannerAsset::STATUS_PENDING,
+        ]));
+
+        // A candidate is still in flight → the widget advertises a poll interval.
+        Tenant::run($this->account, function () use ($banner): void {
+            $working = Livewire::test(BannerCandidatesWidget::class, ['record' => $banner]);
+            $this->assertTrue($working->instance()->isWorking());
+            $this->assertNotNull($working->instance()->pollInterval());
+        });
+
+        // Once it reaches a terminal state, polling stops (no interval).
+        Tenant::run($this->account, fn () => $asset->forceFill([
+            'status' => BannerAsset::STATUS_SUCCEEDED, 'image_path' => 'accounts/1/sites/1/banners/9/x.png',
+        ])->save());
+
+        Tenant::run($this->account, function () use ($banner): void {
+            $idle = Livewire::test(BannerCandidatesWidget::class, ['record' => $banner]);
+            $this->assertFalse($idle->instance()->isWorking());
+            $this->assertNull($idle->instance()->pollInterval());
+        });
+    }
+
+    public function test_widget_surfaces_a_failed_candidates_reason(): void
+    {
+        $banner = $this->draft();
+        Tenant::run($this->account, fn () => BannerAsset::factory()->forBanner($banner)->create([
+            'status' => BannerAsset::STATUS_FAILED,
+            'failure_code' => 'ai_call_failed',
+            'meta' => [BannerAsset::META_FAILURE_MESSAGE => 'OpenRouter model is not in the live catalog'],
+        ]));
+
+        Tenant::run($this->account, function () use ($banner): void {
+            Livewire::test(BannerCandidatesWidget::class, ['record' => $banner])
+                ->assertSee('OpenRouter model is not in the live catalog');
+        });
+    }
+
+    public function test_widget_retry_dispatches_a_fresh_generation_from_the_stored_brief(): void
+    {
+        Bus::fake([GenerateBannerJob::class]);
+        $banner = $this->draft();
+        $failed = Tenant::run($this->account, fn () => BannerAsset::factory()->forBanner($banner)->create([
+            'status' => BannerAsset::STATUS_FAILED,
+            'brief' => 'A bold red summer sale banner',
+        ]));
+
+        Tenant::run($this->account, function () use ($banner, $failed): void {
+            Livewire::test(BannerCandidatesWidget::class, ['record' => $banner])
+                ->call('retry', $failed->id);
+        });
+
+        Bus::assertDispatched(GenerateBannerJob::class);
+        // A fresh pending candidate was created for the retry.
+        $this->assertSame(2, Tenant::run($this->account, fn () => BannerAsset::query()->where('banner_id', $banner->id)->count()));
     }
 
     public function test_activate_needs_artwork_then_succeeds_once_selected(): void

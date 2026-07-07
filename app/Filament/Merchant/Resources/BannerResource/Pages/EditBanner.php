@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Livewire\Attributes\On;
 
 /**
  * The banner editor. Generate a banner image from a brief (+ optional reference) via the
@@ -55,6 +56,16 @@ class EditBanner extends EditRecord
             $this->archiveAction(),
             DeleteAction::make(),
         ];
+    }
+
+    /**
+     * The candidates gallery (embedded inline in the form) selected a new artwork: reload the
+     * page's record so the header actions — Activate needs artwork — see it immediately.
+     */
+    #[On('banner-artwork-selected')]
+    public function refreshAfterArtwork(): void
+    {
+        $this->getRecord()->refresh();
     }
 
     /** Open the visual placement picker (a dedicated page) for this banner. */
@@ -93,16 +104,8 @@ class EditBanner extends EditRecord
 
             $service->updateRules($record, $this->rulesFrom($data));
 
-            $assetId = $data['selected_asset_id'] ?? null;
-
-            if (! empty($assetId) && (int) $assetId !== (int) $record->selected_asset_id) {
-                // Banner-scoped fetch (defense in depth on top of the account global scope +
-                // selectAsset's own banner_id guard): a candidate can only be this banner's.
-                $asset = $record->assets()->find((int) $assetId);
-                if ($asset !== null) {
-                    $service->selectAsset($record, $asset);
-                }
-            }
+            // Artwork selection is handled live by the BannerCandidatesWidget (below the form),
+            // not on save — the form no longer carries selected_asset_id.
 
             return $record->refresh();
         } catch (InvalidBannerException $e) {
@@ -180,6 +183,8 @@ class EditBanner extends EditRecord
             ));
 
             Notification::make()->success()->title(__('banners.generate.queued'))->send();
+            // Wake the candidates widget so the new pending candidate shows and polling starts.
+            $this->dispatch('banner-generation-started');
         } catch (\Throwable $e) {
             // Log the real cause server-side; the merchant sees a single friendly notice.
             Log::warning('banner generation failed to start', [

@@ -74,8 +74,11 @@ return [
     'candidates' => [
         'section' => 'Generated candidates',
         'section_help' => 'Each generation costs credits. Choose one as the banner image.',
-        'none' => 'No candidates yet — generate one above.',
+        'none' => 'No candidates yet — click "Generate image" above.',
         'select' => 'Use this image',
+        'in_use' => 'In use',
+        'retry' => 'Try again',
+        'selected' => 'Image selected.',
         'status' => [
             'pending' => 'Queued…',
             'processing' => 'Generating…',

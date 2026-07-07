@@ -87,6 +87,28 @@ final class ReservationManager
         }
     }
 
+    /**
+     * Release a reservation identified ONLY by its key — the failure-reaper path (a job's
+     * failed() handler), where the original Reservation object isn't in hand. Atomic +
+     * idempotent like release(): pull the key and decrement by the EXACT amount that was held
+     * (the cached value), so it never over- or under-decrements even without the estimate.
+     * A key already released (or never held) pulls null and no-ops.
+     */
+    public function releaseByKey(int $accountId, string $idempotencyKey): void
+    {
+        $held = $this->cache->pull($this->cacheKey($idempotencyKey));
+
+        if ($held === null) {
+            return;
+        }
+
+        $account = Account::query()->find($accountId);
+
+        if ($account !== null) {
+            $this->adjustReserved($account, -(int) $held);
+        }
+    }
+
     /** True while the in-flight reservation is still held (the cache key exists). */
     public function isHeld(string $idempotencyKey): bool
     {

@@ -7,12 +7,13 @@ use App\Domain\Media\MediaStorage;
 use App\Filament\Merchant\Resources\BannerResource\Pages\CreateBanner;
 use App\Filament\Merchant\Resources\BannerResource\Pages\EditBanner;
 use App\Filament\Merchant\Resources\BannerResource\Pages\ListBanners;
+use App\Filament\Merchant\Widgets\BannerCandidatesWidget;
 use App\Models\Banner;
-use App\Models\BannerAsset;
 use App\Models\BannerEvent;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Livewire;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -124,16 +125,11 @@ class BannerResource extends Resource
                         ->columnSpanFull(),
                 ]),
 
-            Section::make(__('banners.field.artwork'))
-                ->description(__('banners.field.artwork_help'))
-                ->visibleOn('edit')
-                ->schema([
-                    Select::make('selected_asset_id')
-                        ->label(__('banners.candidates.select'))
-                        ->options(static fn (?Banner $record): array => self::candidateOptions($record))
-                        ->placeholder(__('banners.candidates.none'))
-                        ->native(false),
-                ]),
+            // The live candidate gallery — generation progress + clickable thumbnails, right here
+            // in the form (NOT a dropdown). A self-polling Livewire component that owns selection
+            // (BannerService::selectAsset); there is no selected_asset_id form control.
+            Livewire::make(BannerCandidatesWidget::class, fn (?Banner $record): array => ['record' => $record])
+                ->visibleOn('edit'),
 
             Section::make(__('banners.overlay.section'))
                 ->description(__('banners.overlay.section_help'))
@@ -325,23 +321,6 @@ class BannerResource extends Resource
         }
 
         return $out;
-    }
-
-    /** The banner's SUCCEEDED candidates → a select (asset id => label). */
-    public static function candidateOptions(?Banner $record): array
-    {
-        if ($record === null) {
-            return [];
-        }
-
-        return $record->assets()
-            ->where('status', BannerAsset::STATUS_SUCCEEDED)
-            ->latest('id')
-            ->get()
-            ->mapWithKeys(static fn (BannerAsset $a): array => [
-                $a->getKey() => '#'.$a->getKey().' · '.($a->created_at?->diffForHumans() ?? ''),
-            ])
-            ->all();
     }
 
     /** Banner status → a Filament badge colour slot (the theme tokens supply the colours). */
