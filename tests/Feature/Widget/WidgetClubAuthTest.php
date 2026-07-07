@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Support\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
@@ -92,6 +93,29 @@ final class WidgetClubAuthTest extends TestCase
             ->assertOk()->assertExactJson(['ok' => true, 'code_sent' => false, 'reason' => 'throttled']);
 
         Mail::assertSent(ClubVerificationCodeMail::class, 1);
+    }
+
+    public function test_request_code_survives_a_mail_transport_failure_without_a_500(): void
+    {
+        // The exact production symptom: the SMTP transport throws on send (slow/misconfigured
+        // server) even though a code email may have gone out. The endpoint must NOT surface a
+        // 500 to the widget (the "Something went wrong" popup) — it returns a TYPED reason and
+        // logs the real cause for the admin. The throttle is released so the shopper can retry.
+        Log::spy();
+        Mail::shouldReceive('to')->once()->andReturnSelf();
+        Mail::shouldReceive('send')->once()->andThrow(new \RuntimeException('SMTP connect timeout'));
+
+        $ctx = $this->makeSiteContext();
+
+        $this->withHeaders($this->widgetHeaders($ctx['site'], $ctx['origin']))
+            ->postJson(self::REQUEST_ENDPOINT, ['anon_token' => self::ANON, 'email' => self::EMAIL])
+            ->assertOk()
+            ->assertExactJson(['ok' => true, 'code_sent' => false, 'reason' => 'send_failed']);
+
+        // The failure was logged (never surfaced to the browser) so a Super-Admin can diagnose.
+        Log::shouldHaveReceived('warning')
+            ->withArgs(fn (string $message, array $context = []) => $message === 'club.otp_send_failed')
+            ->once();
     }
 
     public function test_verify_code_happy_path_stamps_verified_at_and_returns_member(): void

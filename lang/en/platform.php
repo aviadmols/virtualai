@@ -546,7 +546,7 @@ return [
         ],
         'smtp' => [
             'title' => 'Email (SMTP)',
-            'sub' => 'Outbound email — the Customer-Club one-time code and other notifications. Set this to send real email without touching the deploy env. Leave a field blank to fall back to the server env.',
+            'sub' => 'Outbound email — the Customer-Club one-time code and other notifications. Set this to send real email without touching the deploy env. Leave a field blank to fall back to the server env. Use “Send test email” at the top of this page to verify the transport — it shows the exact error if the send fails.',
             'host' => 'SMTP host',
             'host_placeholder' => 'smtp.example.com',
             'port' => 'Port',

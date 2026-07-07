@@ -17,6 +17,7 @@ use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -121,11 +122,16 @@ class Settings extends Page implements HasForms
         ];
     }
 
+    // How much of the raw transport error to show INLINE in the failure toast (the full text
+    // stays in the "Read all" panel under the form).
+    private const TEST_ERROR_PREVIEW_CHARS = 300;
+
     /**
-     * "Send test email" — applies the stored SMTP config and sends a plain test message so
-     * the admin can verify the transport without waiting for a real club signup. On failure
-     * the raw transport error is surfaced (persistent danger + "Read all"), mirroring the
-     * provider connection tests. The recipient defaults to the configured From address.
+     * "Send test email" — applies the stored SMTP config and sends a plain test message so the
+     * admin can verify the transport without waiting for a real club signup. On failure the RAW
+     * transport error is shown directly in the toast (truncated) AND kept in full behind "Read
+     * all" — so the admin sees EXACTLY what SMTP rejected. The SMTP section points to this button.
+     * Recipient defaults to the configured From address.
      */
     private function sendTestEmailAction(): Action
     {
@@ -138,7 +144,7 @@ class Settings extends Page implements HasForms
                     ->label(__('platform.settings.smtp.test_recipient'))
                     ->email()
                     ->required()
-                    ->default(app(PlatformSettings::class)->resolve(PlatformSettings::MAIL_FROM_ADDRESS)),
+                    ->default(fn () => app(PlatformSettings::class)->resolve(PlatformSettings::MAIL_FROM_ADDRESS)),
             ])
             ->action(function (array $data): void {
                 $recipient = (string) ($data['recipient'] ?? '');
@@ -148,13 +154,14 @@ class Settings extends Page implements HasForms
                     app(PlatformMailConfig::class)->apply();
                     Mail::to($recipient)->send(new PlatformTestMail);
                 } catch (Throwable $e) {
-                    // Keep the FULL transport error for the "Read all" panel; never log it.
-                    $this->lastTestError = trim($e->getMessage());
+                    // Surface the ACTUAL error: inline in the toast (truncated) + full in "Read all".
+                    $error = trim($e->getMessage());
+                    $this->lastTestError = $error;
 
                     Notification::make()
                         ->danger()
                         ->title(__('platform.settings.smtp.test_fail'))
-                        ->body(__('platform.settings.smtp.test_fail_body'))
+                        ->body(Str::limit($error, self::TEST_ERROR_PREVIEW_CHARS))
                         ->persistent()
                         ->send();
 

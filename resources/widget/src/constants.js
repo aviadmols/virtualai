@@ -232,6 +232,7 @@ export const CLUB_FIELD = {
 // Typed reasons the verify/request endpoints can return (rendered as friendly i18n states).
 export const CLUB_REASON = {
   throttled: 'throttled', // request-code: a code was sent too recently
+  sendFailed: 'send_failed', // request-code: the mail transport failed (SMTP) — retry
   invalid: 'invalid', // verify-code: wrong code
   expired: 'expired', // verify-code: the code's TTL passed
   locked: 'locked', // verify-code: too many wrong attempts

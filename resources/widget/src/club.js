@@ -328,6 +328,13 @@ async function onRequestCode(input, cta, errorBox) {
     return;
   }
 
+  // The mail transport failed (misconfigured/unreachable SMTP). The server logged it + released
+  // the throttle; stay on the email step and tell the shopper to try again — never a dead-end.
+  if (res.data.code_sent === false && res.data.reason === CLUB_REASON.sendFailed) {
+    showError(errorBox, t('club.errors.send_failed'));
+    return;
+  }
+
   // Throttled: the server declined to re-send so soon. Still advance to the code step (a code from
   // an earlier request may already be in the shopper's inbox) but surface the throttle notice.
   if (res.data.code_sent === false && res.data.reason === CLUB_REASON.throttled) {

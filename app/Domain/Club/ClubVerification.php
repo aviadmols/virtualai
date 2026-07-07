@@ -5,7 +5,9 @@ namespace App\Domain\Club;
 use App\Domain\Platform\PlatformMailConfig;
 use App\Mail\ClubVerificationCodeMail;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 /**
  * ClubVerification — issue + verify the Customer-Club email one-time code.
@@ -46,6 +48,10 @@ final class ClubVerification
 
     private const THROTTLE_KEY_PREFIX = 'club_otp_throttle';
 
+    // Logged when the OTP mail transport throws — so a Super-Admin can diagnose the SMTP
+    // config from the logs (the send-test button surfaces the same class of error live).
+    private const LOG_SEND_FAILED = 'club.otp_send_failed';
+
     // The pending-code record shape (cache value).
     private const FIELD_CODE = 'code';
 
@@ -63,13 +69,19 @@ final class ClubVerification
     }
 
     /**
-     * Issue a fresh code for (siteId, anonToken, email) and email it — unless the
-     * requester is inside the per-email throttle window, in which case NO new code is
-     * issued and NO email is sent. Returns true when a code was sent, false when
-     * throttled. Idempotent-ish: a fresh request outside the window overwrites any
-     * prior pending code (resets attempts).
+     * Issue a fresh code for (siteId, anonToken, email) and email it. Returns a TYPED
+     * outcome, never throwing into the caller:
+     *  - Throttled : inside the per-email anti-spam window — no new code, no email;
+     *  - Sent      : a fresh code was issued and handed to the mail transport cleanly;
+     *  - SendFailed: the code was issued but the transport threw (misconfigured/unreachable
+     *                SMTP) — the error is LOGGED, the throttle is released so the shopper can
+     *                retry, and the endpoint tells the shopper to try again (never a 500).
+     *
+     * A fresh request outside the throttle window overwrites any prior pending code (resets
+     * attempts). The mail send is wrapped so an SMTP hiccup can never surface as a 500 in the
+     * shopper's popup — the exact bug where a code email still arrived but the widget errored.
      */
-    public function issue(int $siteId, string $anonToken, string $email): bool
+    public function issue(int $siteId, string $anonToken, string $email): ClubIssueResult
     {
         $email = $this->normalizeEmail($email);
         $throttleKey = $this->throttleKey($siteId, $anonToken, $email);
@@ -77,7 +89,7 @@ final class ClubVerification
         // add() is atomic put-if-absent: the first request in the window wins and
         // sets the throttle marker; a racing/repeat request returns false (throttled).
         if (! $this->cache->add($throttleKey, true, self::REQUEST_THROTTLE_SECONDS)) {
-            return false;
+            return ClubIssueResult::Throttled;
         }
 
         $code = $this->generateCode();
@@ -88,13 +100,23 @@ final class ClubVerification
             self::CODE_TTL_SECONDS,
         );
 
-        // Fold the Super-Admin-managed SMTP config into the live mailer on-demand —
-        // only this send path reads it, so the widget hot path stays DB-query-free.
-        $this->mailConfig->apply();
+        try {
+            // Fold the Super-Admin-managed SMTP config into the live mailer on-demand —
+            // only this send path reads it, so the widget hot path stays DB-query-free.
+            $this->mailConfig->apply();
 
-        Mail::to($email)->send(new ClubVerificationCodeMail($code, self::CODE_TTL_SECONDS));
+            Mail::to($email)->send(new ClubVerificationCodeMail($code, self::CODE_TTL_SECONDS));
+        } catch (Throwable $e) {
+            // The transport failed. Log the real cause (never to the browser) so the admin
+            // can fix the SMTP config, release the throttle so the shopper can retry now,
+            // and return a typed outcome — the endpoint answers 200 JSON, never a 500.
+            Log::warning(self::LOG_SEND_FAILED, ['site_id' => $siteId, 'error' => $e->getMessage()]);
+            $this->cache->forget($throttleKey);
 
-        return true;
+            return ClubIssueResult::SendFailed;
+        }
+
+        return ClubIssueResult::Sent;
     }
 
     /**

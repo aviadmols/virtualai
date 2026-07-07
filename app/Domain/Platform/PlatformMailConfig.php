@@ -30,6 +30,8 @@ final class PlatformMailConfig
 
     private const CONFIG_SCHEME = 'mail.mailers.smtp.scheme';
 
+    private const CONFIG_TIMEOUT = 'mail.mailers.smtp.timeout';
+
     private const CONFIG_USERNAME = 'mail.mailers.smtp.username';
 
     private const CONFIG_PASSWORD = 'mail.mailers.smtp.password';
@@ -43,6 +45,10 @@ final class PlatformMailConfig
 
     // "none" in the UI means no TLS/SSL scheme — send it as null to the transport.
     private const ENCRYPTION_NONE = 'none';
+
+    // Bound the SMTP connect/handshake so a slow/unreachable server fails FAST instead of
+    // hanging the request (the club OTP send is on the shopper's request path). Seconds.
+    private const SEND_TIMEOUT_SECONDS = 15;
 
     public function __construct(
         private readonly PlatformSettings $settings,
@@ -63,6 +69,9 @@ final class PlatformMailConfig
         config([
             self::CONFIG_DEFAULT => self::MAILER_SMTP,
             self::CONFIG_HOST => $host,
+            // A hard timeout so a slow/unreachable SMTP server fails fast (see const) rather
+            // than hanging the shopper's request; the club send path catches + reports it.
+            self::CONFIG_TIMEOUT => self::SEND_TIMEOUT_SECONDS,
         ]);
 
         $this->applyIfResolved(PlatformSettings::SMTP_PORT, self::CONFIG_PORT, static fn (string $v): int => (int) $v);
