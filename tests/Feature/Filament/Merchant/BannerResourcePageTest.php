@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Filament\Merchant;
 
+use App\Domain\Banners\BannerRules;
 use App\Domain\Banners\BannerService;
 use App\Domain\Generation\GenerateBannerJob;
 use App\Filament\Merchant\Resources\BannerResource;
@@ -145,6 +146,33 @@ class BannerResourcePageTest extends TestCase
                 ->callAction('activate');
         });
         $this->assertSame(Banner::STATUS_ACTIVE, Tenant::run($this->account, fn () => Banner::query()->find($banner->id))->status);
+    }
+
+    public function test_saving_persists_targeting_rules(): void
+    {
+        $banner = $this->draft();
+
+        Tenant::run($this->account, function () use ($banner): void {
+            Livewire::test(EditBanner::class, ['record' => $banner->getKey()])
+                ->fillForm([
+                    'name' => $banner->name,
+                    'composition' => Banner::COMPOSITION_IMAGE,
+                    'rules' => [
+                        'audience' => BannerRules::AUDIENCE_CLUB_MEMBERS,
+                        'pages' => ['context' => BannerRules::PAGE_PDP, 'url_contains' => '/x'],
+                        'frequency' => ['max_per_session' => 2],
+                        'locales' => ['he'],
+                    ],
+                ])
+                ->call('save')
+                ->assertHasNoFormErrors();
+        });
+
+        $fresh = Tenant::run($this->account, fn () => Banner::query()->find($banner->id));
+        $this->assertSame(BannerRules::AUDIENCE_CLUB_MEMBERS, $fresh->rules['audience']);
+        $this->assertSame(BannerRules::PAGE_PDP, $fresh->rules['pages']['context']);
+        $this->assertSame(2, $fresh->rules['frequency']['max_per_session']);
+        $this->assertSame(['he'], $fresh->rules['locales']);
     }
 
     public function test_a_foreign_shops_banners_are_invisible(): void

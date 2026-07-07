@@ -30,6 +30,8 @@ final class InvalidBannerException extends RuntimeException
 
     public const REASON_INVALID_PLACEMENTS = 'invalid_placements';
 
+    public const REASON_INVALID_RULES = 'invalid_rules';
+
     public function __construct(
         public readonly string $field,
         public readonly string $reason,

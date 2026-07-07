@@ -66,6 +66,20 @@ final class BannerService
     }
 
     /**
+     * Replace the banner's display rules (audience / pages / schedule / frequency / locales) with
+     * a validated set. A bad value throws a typed rejection. Schedule is enforced server-side (the
+     * bootstrap ships only active + in-window banners); the rest the widget evaluates client-side.
+     *
+     * @param  array<string,mixed>  $rules
+     */
+    public function updateRules(Banner $banner, array $rules): Banner
+    {
+        $banner->forceFill(['rules' => BannerRules::sanitize($rules)])->save();
+
+        return $banner;
+    }
+
+    /**
      * Select a generated candidate as the banner's artwork: copy its PUBLIC image (path + mime
      * + dims) onto the banner and point selected_asset_id at it. The asset must belong to this
      * banner and be a succeeded generation with a stored image — else a typed rejection.

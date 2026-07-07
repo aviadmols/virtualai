@@ -3,11 +3,14 @@
 namespace App\Models;
 
 use App\Domain\Activity\ActivityRecorder;
+use App\Domain\Banners\BannerRules;
 use App\Models\Concerns\BelongsToAccount;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use RuntimeException;
 
 /**
@@ -145,6 +148,37 @@ class Banner extends Model
     public function hasArtwork(): bool
     {
         return $this->image_path !== null && $this->image_path !== '';
+    }
+
+    /** Query scope: only ACTIVE banners (the bootstrap's first filter). */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_ACTIVE);
+    }
+
+    /**
+     * True when NOW is inside the banner's schedule window (rules.schedule). A null start/end is
+     * open-ended. Evaluated in PHP (a site has a handful of banners) so ISO strings + timezones
+     * compare correctly via Carbon, not lexical JSON comparison. The bootstrap ships only banners
+     * that are active() AND withinSchedule().
+     */
+    public function withinSchedule(?Carbon $now = null): bool
+    {
+        $now ??= Carbon::now();
+        $schedule = BannerRules::resolve($this->rules)[BannerRules::KEY_SCHEDULE];
+
+        $starts = $schedule[BannerRules::KEY_SCHEDULE_STARTS_AT] ?? null;
+        $ends = $schedule[BannerRules::KEY_SCHEDULE_ENDS_AT] ?? null;
+
+        if ($starts !== null && $now->lessThan(Carbon::parse($starts))) {
+            return false;
+        }
+
+        if ($ends !== null && $now->greaterThan(Carbon::parse($ends))) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

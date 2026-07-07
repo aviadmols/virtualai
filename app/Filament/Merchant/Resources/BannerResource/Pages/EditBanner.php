@@ -4,6 +4,7 @@ namespace App\Filament\Merchant\Resources\BannerResource\Pages;
 
 use App\Domain\Banners\BannerContent;
 use App\Domain\Banners\BannerGenerationRequest;
+use App\Domain\Banners\BannerRules;
 use App\Domain\Banners\BannerService;
 use App\Domain\Banners\InvalidBannerException;
 use App\Domain\Banners\StartBannerGeneration;
@@ -68,6 +69,14 @@ class EditBanner extends EditRecord
 
     // --- Content save: route through the single validated writer ---
 
+    /** Hydrate the rules fields from the resolved config so a fresh banner shows sane defaults. */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $data['rules'] = BannerRules::resolve($this->getRecord()->rules);
+
+        return $data;
+    }
+
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
         /** @var Banner $record */
@@ -81,6 +90,8 @@ class EditBanner extends EditRecord
                 BannerContent::KEY_ALT_TEXT => $data['alt_text'] ?? null,
                 BannerContent::KEY_OVERLAY => $data['overlay'] ?? [],
             ]);
+
+            $service->updateRules($record, $this->rulesFrom($data));
 
             $assetId = $data['selected_asset_id'] ?? null;
 
@@ -98,6 +109,35 @@ class EditBanner extends EditRecord
             Notification::make()->danger()->title(__('banners.errors.'.$e->reason))->send();
             $this->halt();
         }
+    }
+
+    /**
+     * Assemble the display-rules patch from the nested form data, casting the numeric field the
+     * validator expects as an int (a Filament numeric input yields a string). The single validator
+     * (BannerRules::sanitize) still rejects any out-of-range/unknown value.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    private function rulesFrom(array $data): array
+    {
+        $r = is_array($data['rules'] ?? null) ? $data['rules'] : [];
+
+        return [
+            BannerRules::KEY_AUDIENCE => $r[BannerRules::KEY_AUDIENCE] ?? BannerRules::AUDIENCE_ANY,
+            BannerRules::KEY_PAGES => [
+                BannerRules::KEY_PAGE_CONTEXT => $r['pages'][BannerRules::KEY_PAGE_CONTEXT] ?? BannerRules::PAGE_ANY,
+                BannerRules::KEY_PAGE_URL_CONTAINS => $r['pages'][BannerRules::KEY_PAGE_URL_CONTAINS] ?? null,
+            ],
+            BannerRules::KEY_SCHEDULE => [
+                BannerRules::KEY_SCHEDULE_STARTS_AT => $r['schedule'][BannerRules::KEY_SCHEDULE_STARTS_AT] ?? null,
+                BannerRules::KEY_SCHEDULE_ENDS_AT => $r['schedule'][BannerRules::KEY_SCHEDULE_ENDS_AT] ?? null,
+            ],
+            BannerRules::KEY_FREQUENCY => [
+                BannerRules::KEY_FREQUENCY_MAX => (int) ($r['frequency'][BannerRules::KEY_FREQUENCY_MAX] ?? 0),
+            ],
+            BannerRules::KEY_LOCALES => array_values((array) ($r[BannerRules::KEY_LOCALES] ?? [])),
+        ];
     }
 
     // --- Generate a candidate (the AI money-path entry) ---

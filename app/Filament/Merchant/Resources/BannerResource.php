@@ -2,6 +2,7 @@
 
 namespace App\Filament\Merchant\Resources;
 
+use App\Domain\Banners\BannerRules;
 use App\Domain\Media\MediaStorage;
 use App\Filament\Merchant\Resources\BannerResource\Pages\CreateBanner;
 use App\Filament\Merchant\Resources\BannerResource\Pages\EditBanner;
@@ -9,6 +10,8 @@ use App\Filament\Merchant\Resources\BannerResource\Pages\ListBanners;
 use App\Models\Banner;
 use App\Models\BannerAsset;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -148,7 +151,81 @@ class BannerResource extends Resource
                         ->maxLength(\App\Domain\Banners\BannerContent::SUBTEXT_MAX)
                         ->columnSpanFull(),
                 ]),
+
+            Section::make(__('banners.rules.section'))
+                ->description(__('banners.rules.section_help'))
+                ->visibleOn('edit')
+                ->columns(2)
+                ->schema([
+                    Select::make('rules.audience')
+                        ->label(__('banners.rules.audience'))
+                        ->helperText(__('banners.rules.audience_help'))
+                        ->options(self::audienceOptions())
+                        ->default(BannerRules::AUDIENCE_ANY)
+                        ->native(false),
+                    Select::make('rules.pages.context')
+                        ->label(__('banners.rules.pages_context'))
+                        ->options(self::pageContextOptions())
+                        ->default(BannerRules::PAGE_ANY)
+                        ->native(false),
+                    TextInput::make('rules.pages.url_contains')
+                        ->label(__('banners.rules.url_contains'))
+                        ->helperText(__('banners.rules.url_contains_help'))
+                        ->maxLength(BannerRules::URL_CONTAINS_MAX)
+                        ->columnSpanFull(),
+                    DateTimePicker::make('rules.schedule.starts_at')
+                        ->label(__('banners.rules.starts_at'))
+                        ->seconds(false),
+                    DateTimePicker::make('rules.schedule.ends_at')
+                        ->label(__('banners.rules.ends_at'))
+                        ->seconds(false),
+                    TextInput::make('rules.frequency.max_per_session')
+                        ->label(__('banners.rules.max_per_session'))
+                        ->helperText(__('banners.rules.max_per_session_help'))
+                        ->numeric()
+                        ->minValue(BannerRules::FREQUENCY_MAX_MIN)
+                        ->maxValue(BannerRules::FREQUENCY_MAX_MAX)
+                        ->default(0),
+                    CheckboxList::make('rules.locales')
+                        ->label(__('banners.rules.locales'))
+                        ->helperText(__('banners.rules.locales_help'))
+                        ->options(self::localeOptions())
+                        ->columns(2),
+                ]),
         ]);
+    }
+
+    /** audience value => localized label. */
+    public static function audienceOptions(): array
+    {
+        $out = [];
+        foreach (BannerRules::AUDIENCES as $a) {
+            $out[$a] = __('banners.rules.audience_option.'.$a);
+        }
+
+        return $out;
+    }
+
+    /** page-context value => localized label. */
+    public static function pageContextOptions(): array
+    {
+        $out = [];
+        foreach (BannerRules::PAGE_CONTEXTS as $c) {
+            $out[$c] = __('banners.rules.page_option.'.$c);
+        }
+
+        return $out;
+    }
+
+    /** locale value => localized label. */
+    public static function localeOptions(): array
+    {
+        $out = [];
+        foreach (BannerRules::LOCALES as $l) {
+            $out[$l] = __('banners.rules.locale.'.$l);
+        }
+
+        return $out;
     }
 
     public static function table(Table $table): Table

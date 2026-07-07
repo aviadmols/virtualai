@@ -147,4 +147,39 @@ return [
             'rate_limited' => 'Too many preview attempts. Please wait a minute and try again.',
         ],
     ],
+
+    // --- Display rules / targeting (Phase 4) ---
+    'rules' => [
+        'section' => 'Who & when it shows',
+        'section_help' => 'Target this banner — to whom, on which pages, during which dates, and how often.',
+        'audience' => 'Audience',
+        'audience_help' => 'Show the banner only to this group of shoppers.',
+        'audience_option' => [
+            'any' => 'Everyone',
+            'club_members' => 'Club members',
+            'non_members' => 'Non-members',
+            'registered' => 'Registered leads',
+            'new_visitors' => 'New visitors',
+            'returning_visitors' => 'Returning visitors',
+        ],
+        'pages_context' => 'Pages',
+        'page_option' => [
+            'any' => 'Any page',
+            'pdp' => 'Product pages',
+            'catalog' => 'Catalog / collection',
+            'cart' => 'Cart',
+        ],
+        'url_contains' => 'URL contains',
+        'url_contains_help' => 'Only show on pages whose address contains this text (optional).',
+        'starts_at' => 'Start (optional)',
+        'ends_at' => 'End (optional)',
+        'max_per_session' => 'Max views per visit',
+        'max_per_session_help' => '0 = unlimited. Otherwise, show the banner at most this many times per shopper session.',
+        'locales' => 'Languages',
+        'locales_help' => 'Show only for these store languages. Leave empty for all.',
+        'locale' => [
+            'en' => 'English',
+            'he' => 'Hebrew',
+        ],
+    ],
 ];
