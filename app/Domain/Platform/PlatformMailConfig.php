@@ -61,6 +61,16 @@ final class PlatformMailConfig
     // hanging the request (the club OTP send is on the shopper's request path). Seconds.
     private const SEND_TIMEOUT_SECONDS = 15;
 
+    // A blank / placeholder From (the shipped hello@example.com) makes STRICT external mailboxes
+    // (Gmail/Outlook) drop or spam the message — no SPF/DKIM for example.com — which is exactly why
+    // a club OTP to a real shopper vanishes while a test-to-self lands. When the From is unusable we
+    // fall back to the SMTP username, which IS an address the relay is authenticated to send AS.
+    private const PLACEHOLDER_FROM_DOMAIN = 'example.com';
+
+    // A host of localhost = "no real SMTP configured" (the config default, config/mail.php). Don't
+    // flip the mailer to smtp and silently connect to localhost — leave the env-chosen mailer.
+    private const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '::1'];
+
     public function __construct(
         private readonly PlatformSettings $settings,
     ) {}
@@ -73,7 +83,10 @@ final class PlatformMailConfig
     {
         $host = $this->settings->resolve(PlatformSettings::SMTP_HOST);
 
-        if (! filled($host)) {
+        // Blank OR localhost = no real SMTP configured (resolve() falls back to the 127.0.0.1
+        // config default when no DB row exists). Leave the env-chosen mailer rather than flipping
+        // to smtp and silently connecting to localhost (which would throw on every send).
+        if (! filled($host) || $this->isLocalHost((string) $host)) {
             return;
         }
 
@@ -91,6 +104,42 @@ final class PlatformMailConfig
         $this->applyIfResolved(PlatformSettings::SMTP_PASSWORD, self::CONFIG_PASSWORD);
         $this->applyIfResolved(PlatformSettings::MAIL_FROM_ADDRESS, self::CONFIG_FROM_ADDRESS);
         $this->applyIfResolved(PlatformSettings::MAIL_FROM_NAME, self::CONFIG_FROM_NAME);
+
+        // Guarantee a deliverable sender identity (see PLACEHOLDER_FROM_DOMAIN) — the fix for club
+        // OTPs vanishing to external inboxes while a self-addressed test lands.
+        $this->ensureSenderIdentity();
+    }
+
+    /** Localhost host = the config default → treat as "no SMTP configured". */
+    private function isLocalHost(string $host): bool
+    {
+        return in_array(strtolower(trim($host)), self::LOCAL_HOSTS, true);
+    }
+
+    /**
+     * A blank or placeholder (example.com) From is rejected/spam-filtered by strict external
+     * mailboxes. Fall back to the SMTP username (the relay's authenticated sender) so the mail is
+     * actually deliverable — otherwise a club OTP to a real shopper is silently dropped.
+     */
+    private function ensureSenderIdentity(): void
+    {
+        $from = trim((string) config(self::CONFIG_FROM_ADDRESS));
+
+        if ($from !== '' && ! $this->isPlaceholderFrom($from)) {
+            return;
+        }
+
+        $username = trim((string) config(self::CONFIG_USERNAME));
+
+        if (filter_var($username, FILTER_VALIDATE_EMAIL) !== false) {
+            config([self::CONFIG_FROM_ADDRESS => $username]);
+        }
+    }
+
+    /** True when the From is the shipped placeholder (…@example.com) — never deliverable externally. */
+    private function isPlaceholderFrom(string $from): bool
+    {
+        return str_ends_with(strtolower($from), '@'.self::PLACEHOLDER_FROM_DOMAIN);
     }
 
     /** Set a config key from a resolved setting when present; leave the env value otherwise. */

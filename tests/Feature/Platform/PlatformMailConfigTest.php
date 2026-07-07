@@ -92,6 +92,47 @@ class PlatformMailConfigTest extends TestCase
         $this->assertSame('smtps', config('mail.mailers.smtp.scheme'));
     }
 
+    public function test_from_falls_back_to_the_smtp_username_when_placeholder(): void
+    {
+        // The admin configured SMTP but left the From blank → it resolves to the shipped
+        // hello@example.com placeholder, which external mailboxes drop (no SPF/DKIM). The binder
+        // must swap it for the authenticated SMTP username so club OTPs are actually deliverable.
+        $this->asSuperAdmin();
+        $this->settings()->put(PlatformSettings::SMTP_HOST, 'smtp.mailhost.test', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_USERNAME, 'sender@gmail.com', secret: false);
+        config()->set('mail.from.address', 'hello@example.com'); // the unset/placeholder fallback
+
+        $this->binder()->apply();
+
+        $this->assertSame('sender@gmail.com', config('mail.from.address'));
+    }
+
+    public function test_a_real_from_address_is_left_untouched(): void
+    {
+        $this->asSuperAdmin();
+        $this->settings()->put(PlatformSettings::SMTP_HOST, 'smtp.mailhost.test', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_USERNAME, 'sender@gmail.com', secret: false);
+        $this->settings()->put(PlatformSettings::MAIL_FROM_ADDRESS, 'club@myshop.co', secret: false);
+
+        $this->binder()->apply();
+
+        // A real, non-placeholder From is respected (not overwritten by the username).
+        $this->assertSame('club@myshop.co', config('mail.from.address'));
+    }
+
+    public function test_a_localhost_host_is_treated_as_not_configured(): void
+    {
+        // resolve(SMTP_HOST) falls back to the 127.0.0.1 config default when no DB row exists.
+        // The binder must NOT flip the mailer to smtp and silently connect to localhost.
+        $this->asSuperAdmin();
+        $this->settings()->put(PlatformSettings::SMTP_HOST, '127.0.0.1', secret: false);
+        config()->set('mail.default', 'log');
+
+        $this->binder()->apply();
+
+        $this->assertSame('log', config('mail.default'));
+    }
+
     /**
      * The regression guard for the reported "The 'tls' scheme is not supported" error: whatever
      * the admin picks (tls/ssl/none), the resulting config must build a real Symfony transport
