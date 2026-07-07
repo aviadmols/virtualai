@@ -5,6 +5,7 @@ namespace App\Filament\Merchant\Pages;
 use App\Domain\Sites\InvalidSiteSettingsException;
 use App\Domain\Sites\SiteSettingsService;
 use App\Models\Site;
+use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
@@ -91,14 +92,18 @@ class PrivacySettings extends Page
         return __(self::TITLE);
     }
 
-    /** Resolve the site (deep-link or first) and hydrate the form from its columns. */
+    /** Resolve the CURRENT store (the Filament tenant) and hydrate the form from its columns —
+        so privacy + the free-try-before-signup setting apply to the store you are in, not the
+        account's first site. Falls back to a ?site deep-link / first site only with no tenant. */
     public function mount(): void
     {
-        $site = request()->query('site');
+        $tenant = Filament::getTenant();
 
-        $resolved = $site !== null
-            ? Site::query()->find($site)
-            : Site::query()->orderBy('id')->first();
+        $resolved = $tenant instanceof Site
+            ? $tenant
+            : (($site = request()->query('site')) !== null
+                ? Site::query()->find($site)
+                : Site::query()->orderBy('id')->first());
 
         if ($resolved === null) {
             return;

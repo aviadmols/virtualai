@@ -12,6 +12,7 @@ use App\Domain\Sites\SiteSettingsService;
 use App\Domain\Sites\WidgetAppearance;
 use App\Models\Product;
 use App\Models\Site;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Section;
@@ -110,14 +111,18 @@ class WidgetAppearanceSettings extends Page implements HasForms
         return __(self::TITLE);
     }
 
-    /** Resolve the site (deep-link or first) and hydrate the form from its appearance. */
+    /** Resolve the CURRENT store (the Filament tenant) and hydrate its appearance — so appearance
+        edits apply to the store you are in, not the account's first site. Falls back to a ?site
+        deep-link / the first site only when no tenant is bound. */
     public function mount(): void
     {
-        $site = request()->query('site');
+        $tenant = Filament::getTenant();
 
-        $resolved = $site !== null
-            ? Site::query()->find($site)
-            : Site::query()->orderBy('id')->first();
+        $resolved = $tenant instanceof Site
+            ? $tenant
+            : (($site = request()->query('site')) !== null
+                ? Site::query()->find($site)
+                : Site::query()->orderBy('id')->first());
 
         if ($resolved === null) {
             $this->form->fill(WidgetAppearance::defaults());

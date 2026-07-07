@@ -5,6 +5,7 @@ namespace App\Filament\Merchant\Pages;
 use App\Domain\Gallery\GalleryItem;
 use App\Domain\Gallery\MerchantGalleryQuery;
 use App\Models\Site;
+use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
@@ -60,16 +61,20 @@ class Gallery extends Page
     }
 
     /**
-     * Resolve the site to show: the ?site={id} deep-link if present + owned, else the
-     * account's first site. Both reads go through the account-scoped global scope.
+     * Show the CURRENT store's gallery. The merchant panel is Site-tenant-based, so the active
+     * shop is Filament's tenant — the gallery must reflect it, not the account's first site (which
+     * would show another store's try-ons on a multi-store account). Falls back to a ?site={id}
+     * deep-link / the first owned site only when no tenant is bound.
      */
     public function mount(): void
     {
-        $site = request()->query('site');
+        $tenant = Filament::getTenant();
 
-        $resolved = $site !== null
-            ? Site::query()->find($site)
-            : Site::query()->orderBy('id')->first();
+        $resolved = $tenant instanceof Site
+            ? $tenant
+            : (($site = request()->query('site')) !== null
+                ? Site::query()->find($site)
+                : Site::query()->orderBy('id')->first());
 
         if ($resolved !== null) {
             $this->siteId = (int) $resolved->getKey();

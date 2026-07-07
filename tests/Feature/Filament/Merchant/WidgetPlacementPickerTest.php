@@ -163,10 +163,10 @@ class WidgetPlacementPickerTest extends TestCase
             $component = Livewire::withQueryParams(['site' => $otherSite->id])
                 ->test(WidgetAppearanceSettings::class);
 
-            // The foreign id is scoped out by BelongsToAccount, so the page never binds it: it
-            // shows the empty state (hasSite=false) and can never load a preview for, or read the
-            // cache of, another account's site.
-            $this->assertFalse($component->get('hasSite'));
+            // The page binds the CURRENT store (the Filament tenant), so a foreign ?site deep-link
+            // is ignored entirely — it can never bind, preview, or read another account's site.
+            $this->assertTrue($component->get('hasSite'));
+            $this->assertSame($this->site->id, $component->get('siteId'));
             $this->assertNotSame($otherSite->id, $component->get('siteId'));
         });
     }
