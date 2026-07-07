@@ -66,9 +66,7 @@ class PlatformPanelProvider extends PanelProvider
             ->id(self::PANEL_ID)
             ->path(self::PANEL_PATH)
             ->login()
-            ->colors([
-                'primary' => Color::Indigo,
-            ])
+            ->colors(self::colors())
             ->font(self::FONT_FAMILY)
             ->renderHook(
                 PanelsRenderHook::HEAD_START,
@@ -106,6 +104,41 @@ class PlatformPanelProvider extends PanelProvider
         return array_map(
             static fn (string $key): string => __($key),
             self::NAV_GROUPS,
+        );
+    }
+
+    /**
+     * The full semantic palette. Register EVERY color that a Filament action/badge uses
+     * (primary + danger/success/warning/info), not just primary — an unregistered color
+     * has no `--{color}-*` channel var, so its `bg-custom-600` / `bg-{color}-*` background
+     * resolves to empty and the control renders transparent (the Activate/Delete buttons).
+     * primary is remapped onto indigo in theme.css; the rest use Filament's palettes.
+     */
+    private static function colors(): array
+    {
+        return [
+            'primary' => Color::Indigo,
+            'danger' => self::spacedChannels(Color::Rose),
+            'success' => self::spacedChannels(Color::Emerald),
+            'warning' => self::spacedChannels(Color::Amber),
+            'info' => self::spacedChannels(Color::Sky),
+        ];
+    }
+
+    /**
+     * Filament emits color channels comma-separated (`--danger-600: 225, 29, 72`), but this
+     * panel's Tailwind color utilities are slash-form (`rgb(var(--danger-600) / <alpha>)`),
+     * which is valid ONLY with SPACE-separated channels. Convert the palette to space form so
+     * the emitted vars resolve. (See resources/css/filament/platform/tailwind.config.js.)
+     *
+     * @param  array<int|string, string>  $palette
+     * @return array<int|string, string>
+     */
+    private static function spacedChannels(array $palette): array
+    {
+        return array_map(
+            static fn (string $channels): string => (string) preg_replace('/\s*,\s*/', ' ', $channels),
+            $palette,
         );
     }
 }
