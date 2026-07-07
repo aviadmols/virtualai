@@ -54,6 +54,7 @@ return [
         'scan' => 'Scan',
         'rescan' => 'Re-scan',
         'confirm' => 'Confirm product',
+        'confirm_anyway' => 'Confirm anyway',
     ],
     'blocked' => [
         'reason' => 'Review the flagged fields before confirming',

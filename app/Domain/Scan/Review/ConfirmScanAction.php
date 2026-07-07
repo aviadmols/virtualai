@@ -60,6 +60,12 @@ final readonly class ConfirmScanAction
      */
     private function assertGateOpen(Product $product, ConfirmScanInput $input): void
     {
+        // "Confirm anyway" is an explicit merchant override — still an explicit confirm, never an
+        // auto-approve, so the no-auto-approve contract holds. It only waives the review nudge.
+        if ($input->force) {
+            return;
+        }
+
         $review = ScanReview::fromProduct($product);
         $gate = ConfirmGate::evaluate($review->rows(), $input->reviewedKeys);
 

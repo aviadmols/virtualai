@@ -309,16 +309,29 @@
                 @endif
             </div>
 
-            <button
-                type="button"
-                class="to-btn to-btn--primary"
-                wire:click="confirm"
-                wire:loading.attr="disabled"
-                wire:target="confirm"
-                @disabled(! $gate->canConfirm)
-            >
-                {{ __('scan.action.confirm') }}
-            </button>
+            @if($gate->canConfirm)
+                <button
+                    type="button"
+                    class="to-btn to-btn--primary"
+                    wire:click="confirm"
+                    wire:loading.attr="disabled"
+                    wire:target="confirm"
+                >
+                    {{ __('scan.action.confirm') }}
+                </button>
+            @else
+                {{-- Not everything is reviewed — offer an explicit override (still an explicit
+                     confirm, never auto-approve). The warning above still lists what's unreviewed. --}}
+                <button
+                    type="button"
+                    class="to-btn to-btn--secondary"
+                    wire:click="confirm(true)"
+                    wire:loading.attr="disabled"
+                    wire:target="confirm"
+                >
+                    {{ __('scan.action.confirm_anyway') }}
+                </button>
+            @endif
         </div>
 
         {{-- Confirmed → hand off to the visual button-placement picker for this page. --}}

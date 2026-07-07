@@ -90,7 +90,8 @@ class ScanReviewAndEmbedTest extends TestCase
                 ->assertOk()
                 ->assertSee(__('scan.fields_heading'))
                 ->assertSee(__('scan.selectors_heading'))
-                ->assertSee(__('scan.action.confirm'));
+                // A fresh draft's gate is closed (unreviewed rows) → the override button shows.
+                ->assertSee(__('scan.action.confirm_anyway'));
         });
     }
 
@@ -107,6 +108,22 @@ class ScanReviewAndEmbedTest extends TestCase
             // Confirming while blocked is a graceful no-op — product stays draft.
             $page->call('confirm');
             $this->assertSame(Product::STATUS_DRAFT, $product->fresh()->status);
+        });
+    }
+
+    public function test_confirm_anyway_bypasses_the_gate_without_reviewing_every_row(): void
+    {
+        $this->asMerchant(function (): void {
+            $product = $this->draftProduct();
+
+            $page = Livewire::test(ReviewProduct::class, ['site' => $this->site->id, 'product' => $product->id]);
+
+            // The gate is closed (blocking rows unreviewed), yet an EXPLICIT "confirm anyway"
+            // (force) confirms the product — still an explicit confirm, never auto-approve.
+            $this->assertFalse($page->instance()->gate()->canConfirm);
+
+            $page->call('confirm', true);
+            $this->assertSame(Product::STATUS_CONFIRMED, $product->fresh()->status);
         });
     }
 

@@ -31,6 +31,9 @@ final readonly class ConfirmScanInput
         public array $variants,
         public array $reviewedKeys,
         public array $dimensionPicks = [],
+        // The merchant explicitly chose "confirm anyway" — waive the review-nudge gate. Still an
+        // explicit confirm (never auto-approve); it only skips reviewing every low/undetected row.
+        public bool $force = false,
     ) {}
 
     /**
@@ -47,6 +50,7 @@ final readonly class ConfirmScanInput
                 'is_string',
             )),
             dimensionPicks: self::onlyKnownDimensionPicks((array) ($payload['dimension_picks'] ?? [])),
+            force: (bool) ($payload['force'] ?? false),
         );
     }
 

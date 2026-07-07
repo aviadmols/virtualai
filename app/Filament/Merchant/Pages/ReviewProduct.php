@@ -493,7 +493,7 @@ class ReviewProduct extends Page
      * ConfirmScanAction::confirm() — which re-runs the gate SERVER-SIDE. A still-
      * blocked confirm surfaces scan.blocked.reason gracefully (no exception leak).
      */
-    public function confirm(): void
+    public function confirm(bool $force = false): void
     {
         $input = ConfirmScanInput::fromArray([
             'fields' => $this->fieldValues,
@@ -501,6 +501,8 @@ class ReviewProduct extends Page
             'variants' => [],
             'reviewed_keys' => $this->reviewedKeys,
             'dimension_picks' => $this->dimensionPicks,
+            // "Confirm anyway": the merchant explicitly proceeds despite unreviewed rows.
+            'force' => $force,
         ]);
 
         try {
