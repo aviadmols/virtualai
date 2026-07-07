@@ -43,8 +43,19 @@ final class PlatformMailConfig
     // The mailer to switch to once an SMTP host is present.
     private const MAILER_SMTP = 'smtp';
 
-    // "none" in the UI means no TLS/SSL scheme — send it as null to the transport.
+    // UI encryption choices. These are TLS *modes*, not transport schemes — they must be
+    // translated (see applyEncryption). "none" means plain (null scheme).
     private const ENCRYPTION_NONE = 'none';
+
+    private const ENCRYPTION_TLS = 'tls';
+
+    private const ENCRYPTION_SSL = 'ssl';
+
+    // The only two schemes Symfony's smtp transport accepts. STARTTLS is negotiated over the
+    // plain `smtp` scheme (typically port 587); `smtps` opens implicit TLS from the start (465).
+    private const SCHEME_STARTTLS = 'smtp';
+
+    private const SCHEME_IMPLICIT_TLS = 'smtps';
 
     // Bound the SMTP connect/handshake so a slow/unreachable server fails FAST instead of
     // hanging the request (the club OTP send is on the shopper's request path). Seconds.
@@ -94,7 +105,13 @@ final class PlatformMailConfig
         config([$configKey => $transform !== null ? $transform($value) : $value]);
     }
 
-    /** Map the UI encryption choice (tls/ssl/none) onto the smtp `scheme` (null = plain). */
+    /**
+     * Map the UI encryption choice onto the smtp transport `scheme`. Symfony's smtp transport
+     * accepts ONLY 'smtp'/'smtps' — passing the raw UI value 'tls'/'ssl' throws
+     * "The 'tls' scheme is not supported…". So translate: tls => STARTTLS (smtp),
+     * ssl => implicit TLS (smtps), none => plain (null). A value that is already a valid scheme
+     * passes through; anything unknown falls back to the safe STARTTLS scheme.
+     */
     private function applyEncryption(): void
     {
         $encryption = $this->settings->resolve(PlatformSettings::SMTP_ENCRYPTION);
@@ -103,6 +120,13 @@ final class PlatformMailConfig
             return;
         }
 
-        config([self::CONFIG_SCHEME => $encryption === self::ENCRYPTION_NONE ? null : $encryption]);
+        $scheme = match (strtolower((string) $encryption)) {
+            self::ENCRYPTION_NONE => null,
+            self::ENCRYPTION_SSL, self::SCHEME_IMPLICIT_TLS => self::SCHEME_IMPLICIT_TLS,
+            self::ENCRYPTION_TLS, self::SCHEME_STARTTLS => self::SCHEME_STARTTLS,
+            default => self::SCHEME_STARTTLS,
+        };
+
+        config([self::CONFIG_SCHEME => $scheme]);
     }
 }

@@ -57,7 +57,10 @@ class PlatformMailConfigTest extends TestCase
         $this->assertSame('smtp', config('mail.default'));
         $this->assertSame('smtp.mailhost.test', config('mail.mailers.smtp.host'));
         $this->assertSame(2525, config('mail.mailers.smtp.port'));
-        $this->assertSame('tls', config('mail.mailers.smtp.scheme'));
+        // UI "tls" is a TLS MODE, not a transport scheme — it maps to the smtp (STARTTLS)
+        // scheme. Asserting 'tls' here would encode the very bug that made Symfony throw
+        // "The 'tls' scheme is not supported".
+        $this->assertSame('smtp', config('mail.mailers.smtp.scheme'));
         $this->assertSame('postmaster', config('mail.mailers.smtp.username'));
         $this->assertSame('smtp-secret-pw', config('mail.mailers.smtp.password'));
         $this->assertSame('noreply@shop.test', config('mail.from.address'));
@@ -74,6 +77,44 @@ class PlatformMailConfigTest extends TestCase
 
         $this->assertSame('smtp', config('mail.default'));
         $this->assertNull(config('mail.mailers.smtp.scheme'));
+    }
+
+    public function test_ssl_encryption_maps_to_the_smtps_scheme(): void
+    {
+        $this->asSuperAdmin();
+        $this->settings()->put(PlatformSettings::SMTP_HOST, 'smtp.secure.test', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_PORT, '465', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_ENCRYPTION, 'ssl', secret: false);
+
+        $this->binder()->apply();
+
+        // "ssl" is implicit TLS from the first byte → the smtps scheme.
+        $this->assertSame('smtps', config('mail.mailers.smtp.scheme'));
+    }
+
+    /**
+     * The regression guard for the reported "The 'tls' scheme is not supported" error: whatever
+     * the admin picks (tls/ssl/none), the resulting config must build a real Symfony transport
+     * without throwing. Passing the raw 'tls'/'ssl' as a scheme (the old bug) would throw here.
+     */
+    public function test_every_ui_encryption_choice_builds_a_valid_transport(): void
+    {
+        $this->asSuperAdmin();
+        $this->settings()->put(PlatformSettings::SMTP_HOST, 'smtp.build.test', secret: false);
+        $this->settings()->put(PlatformSettings::SMTP_PORT, '587', secret: false);
+
+        foreach (['tls', 'ssl', 'none'] as $encryption) {
+            $this->settings()->put(PlatformSettings::SMTP_ENCRYPTION, $encryption, secret: false);
+
+            $this->binder()->apply();
+            app()->forgetInstance('mail.manager');
+
+            // Resolving the mailer constructs the EsmtpTransport, which validates the scheme.
+            app('mail.manager')->mailer('smtp');
+        }
+
+        // Reaching here means all three built without a "scheme not supported" exception.
+        $this->addToAssertionCount(1);
     }
 
     public function test_apply_is_a_noop_when_no_host_is_configured(): void
