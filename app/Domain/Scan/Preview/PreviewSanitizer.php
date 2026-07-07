@@ -26,6 +26,17 @@ final class PreviewSanitizer
     private const CHARSET_META = '<meta charset="utf-8">';
     private const REFERRER_META = '<meta name="referrer" content="no-referrer">';
 
+    // The store's JS is stripped for safety, so any "hide until JS loads" pattern would leave the
+    // preview BLANK (white): a fixed preloader overlay, or body{opacity:0}/visibility:hidden that a
+    // load handler normally clears. This reveal sheet neutralizes the common cases — force the page
+    // visible + hide well-known preloader/progress widgets. Injected LAST so it wins the cascade.
+    private const REVEAL_STYLE =
+        '<style>html,body{opacity:1!important;visibility:visible!important;overflow:auto!important;height:auto!important}'
+        .'[class*="preload" i],[id*="preload" i],[class*="page-loading" i],[id*="page-loading" i],'
+        .'[class*="loading-screen" i],[id*="loading-screen" i],[class*="site-loader" i],[id*="site-loader" i],'
+        .'[class*="loader-wrapper" i],[id*="loader-wrapper" i],.pace,.pace-running,#nprogress{display:none!important}'
+        .'</style>';
+
     public function sanitize(string $html, string $baseHref, string $pickerScript): string
     {
         // Normalize to valid UTF-8 FIRST: many storefronts (esp. Hebrew IL shops)
@@ -39,6 +50,7 @@ final class PreviewSanitizer
         $html = $this->stripExistingBase($html);
         $html = $this->stripCharsetMeta($html);
         $html = $this->injectHead($html, $baseHref);
+        $html = $this->injectRevealStyle($html);
         $html = $this->injectPicker($html, $pickerScript);
 
         return $html;
@@ -153,6 +165,22 @@ final class PreviewSanitizer
         }
 
         return $inject.$html;
+    }
+
+    /**
+     * Inject the reveal stylesheet as LATE as possible (before </body>, else appended) so it wins
+     * the cascade over the store's own "hide until loaded" rules — otherwise a preloader/opacity
+     * overlay would show the merchant a blank white preview (the JS that clears it is stripped).
+     */
+    private function injectRevealStyle(string $html): string
+    {
+        $at = stripos($html, '</body>');
+
+        if ($at !== false) {
+            return substr_replace($html, self::REVEAL_STYLE, $at, 0);
+        }
+
+        return $html.self::REVEAL_STYLE;
     }
 
     /** Inject the picker as the ONLY script, before </body> (or appended when there is none). */

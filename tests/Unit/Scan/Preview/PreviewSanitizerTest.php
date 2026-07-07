@@ -29,6 +29,19 @@ class PreviewSanitizerTest extends TestCase
         $this->assertStringContainsString('<link rel="stylesheet" href="/a.css">', $out);
     }
 
+    public function test_it_injects_a_reveal_sheet_so_a_preloader_page_is_not_blank(): void
+    {
+        // The store hides its content behind a preloader + body{opacity:0} that JS normally clears
+        // — but we strip JS, so the reveal sheet must force the page visible + hide the preloader.
+        $out = $this->sanitize('<html><head><style>body{opacity:0}</style></head><body><div class="preloader">…</div><main>content</main></body></html>');
+
+        $this->assertStringContainsString('opacity:1!important', $out);
+        $this->assertStringContainsString('visibility:visible!important', $out);
+        $this->assertStringContainsString('[class*="preload" i]', $out);
+        // Injected AFTER the store's own styles so the !important reveal wins the cascade.
+        $this->assertGreaterThan(strpos($out, 'body{opacity:0}'), strpos($out, 'opacity:1!important'));
+    }
+
     public function test_it_normalises_non_utf8_bytes_to_valid_utf8(): void
     {
         // Windows-1255/latin high bytes (invalid as UTF-8) — real IL storefronts serve these.
