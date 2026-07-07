@@ -24,12 +24,18 @@ trait ResolvesShopAccount
     /** The current shop tenant's account — account-scoped + drill-in-safe. */
     protected function shopAccount(): Account
     {
+        return $this->shopSite()->account;
+    }
+
+    /** The current shop tenant (Site) — the specific store the merchant is viewing. */
+    protected function shopSite(): Site
+    {
         $tenant = Filament::getTenant();
 
         if (! $tenant instanceof Site) {
             throw new RuntimeException('No shop tenant is bound for this merchant request.');
         }
 
-        return $tenant->account;
+        return $tenant;
     }
 }

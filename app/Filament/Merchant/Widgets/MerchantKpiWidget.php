@@ -84,10 +84,13 @@ class MerchantKpiWidget extends Widget
         ];
     }
 
-    /** The account-scoped snapshot for the current shop. */
+    /**
+     * The snapshot for the current shop: products / try-ons / leads scoped to THIS store, credits
+     * account-wide (shared). So the Overview reflects the store you are in, not all your stores.
+     */
     private function metrics(): DashboardMetrics
     {
-        return app(DashboardMetricsBuilder::class)->build($this->shopAccount());
+        return app(DashboardMetricsBuilder::class)->build($this->shopAccount(), site: $this->shopSite());
     }
 
     /** Locale-aware integer formatting (display only — no aggregation here). */

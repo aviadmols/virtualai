@@ -38,30 +38,37 @@ final class DashboardMetricsBuilder
      * Build the merchant-home snapshot for $account over $window. Time-bounded
      * figures (generations, leads in window) use $window; lifetime figures (sites,
      * products, total leads, balance) ignore it.
+     *
+     * When $site is given, the STORE-specific figures (products, try-ons, leads) are
+     * scoped to that one store, so the Overview reflects the shop the merchant is in.
+     * Account-level figures (site count, balance/reserved — credits are shared across a
+     * store's sibling sites) always stay account-wide.
      */
-    public function build(Account $account, ?MetricWindow $window = null): DashboardMetrics
+    public function build(Account $account, ?MetricWindow $window = null, ?Site $site = null): DashboardMetrics
     {
         $window ??= MetricWindow::lastDays();
+        $siteId = $site !== null ? (int) $site->getKey() : null;
 
-        return Tenant::run($account, function () use ($account, $window): DashboardMetrics {
+        return Tenant::run($account, function () use ($account, $window, $siteId): DashboardMetrics {
             // Fresh account so the balance/reserved reflect the latest ledger writes
             // (an observer may have moved the column on the passed instance; see TS-CREDITS-001).
             $fresh = $account->fresh() ?? $account;
 
             $sitesCount = Site::query()->count();
 
-            $productsTotal = Product::query()->count();
-            $productsConfirmed = Product::query()
-                ->where('status', Product::STATUS_CONFIRMED)
-                ->count();
+            $productsTotal = $this->scopeSite(Product::query(), $siteId)->count();
+            $productsConfirmed = $this->scopeSite(
+                Product::query()->where('status', Product::STATUS_CONFIRMED),
+                $siteId,
+            )->count();
 
-            $generationsInWindow = $this->countGenerations($window);
-            $succeeded = $this->countGenerations($window, Generation::STATUS_SUCCEEDED);
-            $failed = $this->countGenerations($window, Generation::STATUS_FAILED);
+            $generationsInWindow = $this->countGenerations($window, null, $siteId);
+            $succeeded = $this->countGenerations($window, Generation::STATUS_SUCCEEDED, $siteId);
+            $failed = $this->countGenerations($window, Generation::STATUS_FAILED, $siteId);
 
-            $leadsTotal = EndUser::query()->count();
-            $leadsRegistered = EndUser::query()->whereNotNull('registered_at')->count();
-            $leadsInWindow = $window->constrain(EndUser::query(), 'created_at')->count();
+            $leadsTotal = $this->scopeSite(EndUser::query(), $siteId)->count();
+            $leadsRegistered = $this->scopeSite(EndUser::query()->whereNotNull('registered_at'), $siteId)->count();
+            $leadsInWindow = $this->scopeSite($window->constrain(EndUser::query(), 'created_at'), $siteId)->count();
 
             $balance = (int) $fresh->balance_micro_usd;
             $reserved = (int) $fresh->reserved_micro_usd;
@@ -87,8 +94,8 @@ final class DashboardMetricsBuilder
         });
     }
 
-    /** Count generations in the window, optionally filtered to one status. */
-    private function countGenerations(MetricWindow $window, ?string $status = null): int
+    /** Count generations in the window, optionally filtered to one status + one store. */
+    private function countGenerations(MetricWindow $window, ?string $status = null, ?int $siteId = null): int
     {
         $query = Generation::query();
 
@@ -96,7 +103,22 @@ final class DashboardMetricsBuilder
             $query->where('status', $status);
         }
 
-        return (int) $window->constrain($query, 'created_at')->count();
+        return (int) $window->constrain($this->scopeSite($query, $siteId), 'created_at')->count();
+    }
+
+    /**
+     * Narrow a tenant-scoped query to ONE store when a site id is given (else leave it
+     * account-wide). Every model here carries BelongsToAccount, so this only ever tightens
+     * an already account-isolated query — never widens it.
+     *
+     * @template TBuilder of \Illuminate\Database\Eloquent\Builder
+     *
+     * @param  TBuilder  $query
+     * @return TBuilder
+     */
+    private function scopeSite($query, ?int $siteId)
+    {
+        return $siteId !== null ? $query->where('site_id', $siteId) : $query;
     }
 
     /** Succeeded / (succeeded + failed) in [0,1]; 0.0 when no terminal attempts. */

@@ -86,6 +86,47 @@ class DashboardMetricsTest extends TestCase
         $this->assertFalse($metrics->isOutOfCredits());
     }
 
+    public function test_metrics_scope_to_one_store_when_a_site_is_given(): void
+    {
+        // The Overview must reflect the CURRENT store: products / try-ons / leads for THAT store,
+        // never the account's other stores. Account-level figures (sites, credits) stay account-wide.
+        $account = Account::factory()->create();
+        $siteA = Site::factory()->forAccount($account)->create();
+        $siteB = Site::factory()->forAccount($account)->create();
+
+        Tenant::run($account, function () use ($siteA, $siteB): void {
+            // Store A: 1 lead, 1 confirmed product, 2 try-ons.
+            $euA = EndUser::factory()->forSite($siteA)->create();
+            $pA = Product::factory()->forSite($siteA)->confirmed()->create();
+            $vA = ProductVariant::factory()->forProduct($pA)->create();
+            $this->makeGenerations($euA, $pA, $vA, Generation::STATUS_SUCCEEDED, 2);
+
+            // Store B: 3 leads, 1 confirmed product, 5 try-ons.
+            $euB = EndUser::factory()->forSite($siteB)->create();
+            EndUser::factory()->forSite($siteB)->count(2)->create();
+            $pB = Product::factory()->forSite($siteB)->confirmed()->create();
+            $vB = ProductVariant::factory()->forProduct($pB)->create();
+            $this->makeGenerations($euB, $pB, $vB, Generation::STATUS_SUCCEEDED, 5);
+        });
+
+        $onlyA = $this->builder()->build($account, MetricWindow::lastDays(), $siteA);
+        $this->assertSame(2, $onlyA->generationsInWindow, "store A's try-ons only");
+        $this->assertSame(1, $onlyA->productsConfirmed);
+        $this->assertSame(1, $onlyA->leadsTotal);
+        // Account-level figures are unaffected by the store scope.
+        $this->assertSame(2, $onlyA->sitesCount);
+        $this->assertSame(5_000_000, $onlyA->balanceMicroUsd);
+
+        $onlyB = $this->builder()->build($account, MetricWindow::lastDays(), $siteB);
+        $this->assertSame(5, $onlyB->generationsInWindow, "store B's try-ons only");
+        $this->assertSame(3, $onlyB->leadsTotal);
+
+        // No site => account-wide (backward compatible, used by the credit widgets).
+        $accountWide = $this->builder()->build($account);
+        $this->assertSame(7, $accountWide->generationsInWindow);
+        $this->assertSame(4, $accountWide->leadsTotal);
+    }
+
     public function test_success_rate_is_zero_with_no_terminal_attempts(): void
     {
         $account = Account::factory()->create();
