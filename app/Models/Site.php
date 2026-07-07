@@ -129,6 +129,14 @@ class Site extends Model
                 }
             }
         });
+
+        // Deleting a site cascades its DB rows (FK cascadeOnDelete); purge its bucket media
+        // too so nothing is orphaned. Fires on `deleted` (the row is gone) with the explicit
+        // account_id + site_id — never inferred on the worker. Queued on the media queue so a
+        // large bucket delete never blocks the delete request.
+        static::deleted(function (Site $site): void {
+            \App\Domain\Media\PurgeSiteMediaJob::dispatch((int) $site->account_id, (int) $site->getKey());
+        });
     }
 
     public function account(): BelongsTo

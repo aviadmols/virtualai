@@ -127,6 +127,23 @@ final class MediaStorage
         $this->disk()->delete($path);
     }
 
+    /**
+     * Purge EVERY object belonging to a site — the whole accounts/{account}/sites/{site}/ prefix
+     * (try-on sources + results, banner sources + results, preview snapshots). Called when a site
+     * is deleted so no orphaned media is left on the bucket. The prefix leads with account_id then
+     * site_id, so this can only ever remove the ONE site's objects — never another tenant's.
+     */
+    public function purgeSite(int $accountId, int $siteId): void
+    {
+        $this->disk()->deleteDirectory($this->sitePrefix($accountId, $siteId));
+    }
+
+    /** The per-site object prefix (account leads so it is never cross-tenant ambiguous). */
+    public function sitePrefix(int $accountId, int $siteId): string
+    {
+        return implode('/', [self::PATH_ACCOUNTS, $accountId, self::PATH_SITES, $siteId]);
+    }
+
     /** True if the object exists on the disk. */
     public function exists(?string $path): bool
     {
