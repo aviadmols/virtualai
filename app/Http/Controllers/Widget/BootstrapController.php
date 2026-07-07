@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Widget;
 
+use App\Domain\Banners\BannerRules;
+use App\Domain\Media\MediaStorage;
 use App\Domain\Sites\ClubConfig;
 use App\Domain\Sites\WidgetAppearance;
 use App\Http\Widget\EndUserResolver;
@@ -9,6 +11,7 @@ use App\Http\Widget\Resources\ProductPayload;
 use App\Http\Widget\WidgetContext;
 use App\Http\Widget\WidgetGateService;
 use App\Http\Widget\WidgetResponse;
+use App\Models\Banner;
 use App\Models\Product;
 use App\Models\Site;
 use Illuminate\Http\JsonResponse;
@@ -34,6 +37,10 @@ final class BootstrapController
 
     // Throttle the "widget last seen" heartbeat so a busy PDP doesn't write per view.
     private const SEEN_THROTTLE_MINUTES = 5;
+
+    // Cap how many active banners a bootstrap ships (a store needs a few, not many) — protects
+    // the widget payload + main thread; the widget still evaluates each banner's rules client-side.
+    private const MAX_BANNERS = 10;
 
     public function __construct(
         private readonly EndUserResolver $endUsers,
@@ -74,6 +81,9 @@ final class BootstrapController
             // state (verified_at on the already-resolved end user, read-only — never a
             // new lead just to read). A non-member / no-token shopper reports verified:false.
             'club' => $this->clubPayload($site, $endUser),
+            // Merchant banners: the site's ACTIVE, in-schedule, artwork-ready banners. Schedule is
+            // enforced here (server); audience/pages/frequency/locale are evaluated by the widget.
+            'banners' => $this->bannersPayload($site),
             // A confirmed product for this PDP, or null (clean empty state, never a 404).
             'product' => $product !== null
                 ? ProductPayload::make($product, $product->variants)
@@ -139,6 +149,60 @@ final class BootstrapController
      * @return array<string,mixed>
      */
     private function clubPayload(Site $site, ?\App\Models\EndUser $endUser): array
+    {
+        return $this->resolveClubBlock($site, $endUser);
+    }
+
+    /**
+     * The site's ACTIVE + in-schedule + artwork-ready banners for the widget to render. Each
+     * carries its PUBLIC image URL, the picked placements, and the audience/pages/frequency/locale
+     * rules the widget evaluates client-side (schedule is already enforced here). Site-scoped by
+     * site_id on top of the bound account — never another shop's banners. Capped at MAX_BANNERS.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function bannersPayload(Site $site): array
+    {
+        $media = app(MediaStorage::class);
+
+        return Banner::query()
+            ->where('site_id', $site->getKey())
+            ->active()
+            ->latest('updated_at')
+            ->limit(self::MAX_BANNERS * 3) // over-fetch a little; the schedule/artwork filter trims
+            ->get()
+            ->filter(static fn (Banner $b): bool => $b->hasArtwork() && $b->withinSchedule())
+            ->take(self::MAX_BANNERS)
+            ->map(static function (Banner $b) use ($media): array {
+                $rules = BannerRules::resolve($b->rules);
+
+                return [
+                    'id' => (int) $b->getKey(),
+                    'composition' => $b->composition,
+                    'image_url' => $media->publicUrl($b->image_path),
+                    'width' => $b->image_width,
+                    'height' => $b->image_height,
+                    'target_url' => $b->target_url,
+                    'alt' => $b->alt_text,
+                    'overlay' => $b->overlay ?? [],
+                    'placements' => $b->placements ?? [],
+                    // Schedule is server-enforced (above); ship only the client-evaluated rules.
+                    'rules' => [
+                        BannerRules::KEY_AUDIENCE => $rules[BannerRules::KEY_AUDIENCE],
+                        BannerRules::KEY_PAGES => $rules[BannerRules::KEY_PAGES],
+                        BannerRules::KEY_FREQUENCY => $rules[BannerRules::KEY_FREQUENCY],
+                        BannerRules::KEY_LOCALES => $rules[BannerRules::KEY_LOCALES],
+                    ],
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function resolveClubBlock(Site $site, ?\App\Models\EndUser $endUser): array
     {
         $config = ClubConfig::resolve($site->club_config);
 

@@ -9,6 +9,7 @@ use App\Filament\Merchant\Resources\BannerResource\Pages\EditBanner;
 use App\Filament\Merchant\Resources\BannerResource\Pages\ListBanners;
 use App\Models\Banner;
 use App\Models\BannerAsset;
+use App\Models\BannerEvent;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DateTimePicker;
@@ -47,6 +48,9 @@ class BannerResource extends Resource
     protected static ?string $navigationGroup = 'nav.marketing';
 
     protected static ?int $navigationSort = 1;
+
+    // The rolling window (days) the list's clicks/impressions/CTR columns aggregate over.
+    private const STATS_WINDOW_DAYS = 30;
 
     // i18n keys — never a literal in the resource.
     private const LABEL_SINGULAR = 'banners.singular';
@@ -251,12 +255,36 @@ class BannerResource extends Resource
                     ->badge()
                     ->color('gray')
                     ->formatStateUsing(static fn (string $state): string => __('banners.composition_option.'.$state)),
+                TextColumn::make('clicks_count')
+                    ->label(__('banners.col.clicks'))
+                    ->numeric()
+                    ->alignEnd()
+                    ->sortable(),
+                TextColumn::make('impressions_count')
+                    ->label(__('banners.col.impressions'))
+                    ->numeric()
+                    ->alignEnd()
+                    ->toggleable(),
+                TextColumn::make('ctr')
+                    ->label(__('banners.col.ctr'))
+                    ->state(static fn (Banner $record): string => ((int) ($record->impressions_count ?? 0)) > 0
+                        ? round(((int) $record->clicks_count) / ((int) $record->impressions_count) * 100, 1).'%'
+                        : '—')
+                    ->alignEnd(),
                 TextColumn::make('updated_at')
                     ->label(__('banners.col.updated'))
                     ->since()
                     ->sortable()
                     ->alignEnd(),
             ])
+            // Per-banner clicks + impressions over the last 30 days, computed as subqueries on the
+            // list query (no N+1). CTR is derived from the two in the column above.
+            ->modifyQueryUsing(static fn (Builder $query): Builder => $query->withCount([
+                'events as clicks_count' => static fn (Builder $q) => $q
+                    ->where('kind', BannerEvent::KIND_CLICK)->where('created_at', '>=', now()->subDays(self::STATS_WINDOW_DAYS)),
+                'events as impressions_count' => static fn (Builder $q) => $q
+                    ->where('kind', BannerEvent::KIND_IMPRESSION)->where('created_at', '>=', now()->subDays(self::STATS_WINDOW_DAYS)),
+            ]))
             ->filters([
                 SelectFilter::make('status')
                     ->label(__('banners.col.status'))

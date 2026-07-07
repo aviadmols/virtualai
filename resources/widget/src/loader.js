@@ -24,6 +24,7 @@ import * as pending from './pending.js';
 import * as resume from './resume.js';
 import * as track from './track.js';
 import * as club from './club.js';
+import * as banners from './banners.js';
 
 (function boot() {
   // The namespaced global: a double-boot guard + a teardown hook for SPA navigation.
@@ -46,6 +47,7 @@ import * as club from './club.js';
   // origin never collide). Cheap + synchronous — just sets the key/channel names.
   pending.configure(siteKey);
   club.configure(siteKey); // site-scoped member flag (like the anon token / pending entry)
+  banners.configure(siteKey); // site-scoped seen flag + per-session impression counters
 
   ns.booted = true;
   ns.state = state; // exposed for the verification harness (read-only inspection)
@@ -72,6 +74,10 @@ async function run() {
 
   // Locale is known even on a non-PDP page — the cross-page notification uses it.
   setLocale(data.site?.locale || 'en');
+  state.locale = data.site?.locale || 'en'; // banner locale targeting reads this
+
+  // Merchant banners apply SITE-WIDE (PDP or not); stash for the idle-path init below.
+  state.banners = data.banners || null;
 
   const onPdp = isProductPage(data);
 
@@ -123,6 +129,21 @@ async function run() {
   // Shadow shell for its floating banner + login modal; ensure a minimal one exists on a non-PDP
   // page (the resumer may already have built it; shell.create is idempotent).
   initClub(onPdp);
+
+  // Merchant banners — site-wide, same idle tick. They inject into the HOST DOM with their OWN
+  // per-spot shadow root (no widget shell needed), so this works on any page.
+  initBanners();
+}
+
+/** Wire the merchant banner runtime on the idle path (a no-op unless the bootstrap shipped any). */
+function initBanners() {
+  if (! state.banners || ! state.banners.length) return;
+
+  try {
+    banners.init(state.banners);
+  } catch {
+    warn('failed to initialise merchant banners');
+  }
 }
 
 /** Wire the Customer Club on the idle path (a no-op unless the bootstrap says it's enabled). */
@@ -147,18 +168,20 @@ function initClub(onPdp) {
   }
 }
 
-/** Teardown the mount engine, tracking, club, and the cross-tab channel (SPA nav away from a PDP). */
+/** Teardown the mount engine, tracking, club, banners, and the cross-tab channel (SPA nav away). */
 function combinedTeardown() {
   safeTeardown(track.teardown);
   safeTeardown(club.teardown);
+  safeTeardown(banners.teardown);
   safeTeardown(resume.teardown);
   mount.teardown();
 }
 
-/** Non-PDP teardown: flush + drop tracking + club, then the resume channel. */
+/** Non-PDP teardown: flush + drop tracking + club + banners, then the resume channel. */
 function nonPdpTeardown() {
   safeTeardown(track.teardown);
   safeTeardown(club.teardown);
+  safeTeardown(banners.teardown);
   resume.teardown();
 }
 

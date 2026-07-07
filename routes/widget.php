@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Widget\AddToCartEventController;
+use App\Http\Controllers\Widget\BannerEventController;
 use App\Http\Controllers\Widget\BootstrapController;
 use App\Http\Controllers\Widget\ClubRequestCodeController;
 use App\Http\Controllers\Widget\ClubVerifyCodeController;
@@ -22,6 +23,7 @@ defined('ROUTE_WIDGET_ADD_TO_CART') || define('ROUTE_WIDGET_ADD_TO_CART', 'widge
 defined('ROUTE_WIDGET_EVENTS') || define('ROUTE_WIDGET_EVENTS', 'widget.v1.events');
 defined('ROUTE_WIDGET_CLUB_REQUEST_CODE') || define('ROUTE_WIDGET_CLUB_REQUEST_CODE', 'widget.v1.club.request_code');
 defined('ROUTE_WIDGET_CLUB_VERIFY_CODE') || define('ROUTE_WIDGET_CLUB_VERIFY_CODE', 'widget.v1.club.verify_code');
+defined('ROUTE_WIDGET_BANNER_EVENT') || define('ROUTE_WIDGET_BANNER_EVENT', 'widget.v1.banners.event');
 
 /*
  * The signed widget API (Phase 7a). Every route is behind the widget-auth middleware
@@ -51,6 +53,9 @@ Route::post('/events/add-to-cart', AddToCartEventController::class)->name(ROUTE_
 
 // Behavioral events ingest (page views + interactions) — fire-and-forget, always { ok:true }.
 Route::post('/events', EventController::class)->name(ROUTE_WIDGET_EVENTS);
+
+// Per-banner impression/click analytics — fire-and-forget, always { ok:true }.
+Route::post('/banners/event', BannerEventController::class)->name(ROUTE_WIDGET_BANNER_EVENT);
 
 // Customer-Club email one-time-code (Phase 2a): request a code, then verify it to
 // become a member. Both always typed { ok:true, ... } (never a 500/HTML).

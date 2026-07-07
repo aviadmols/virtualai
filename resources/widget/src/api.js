@@ -20,6 +20,7 @@ import {
   CART_EVENT_FIELD,
   CLUB_ENDPOINTS,
   CLUB_FIELD,
+  BANNER_EVENT_FIELD,
 } from './constants.js';
 
 let apiBase = '';
@@ -175,5 +176,33 @@ export function recordEvents(payload, useBeacon = false) {
 
   // fetch keepalive: survives the unload, sets the site-key header, response ignored.
   request('POST', ENDPOINTS.events, { json: body, keepalive: true }).catch(() => {});
+  return true;
+}
+
+/**
+ * POST /banners/event — a single banner impression/click, fire-and-forget (response ignored).
+ * A CLICK prefers navigator.sendBeacon so it survives the navigation the click triggers (the
+ * beacon carries the public site_key on the query string, like recordEvents); otherwise fetch
+ * keepalive. An IMPRESSION uses plain keepalive fetch.
+ */
+export function recordBannerEvent(anonToken, bannerId, kind, path, useBeacon = false) {
+  const body = {
+    [BANNER_EVENT_FIELD.bannerId]: bannerId,
+    [BANNER_EVENT_FIELD.kind]: kind,
+    [BANNER_EVENT_FIELD.anonToken]: anonToken || null,
+    [BANNER_EVENT_FIELD.path]: path || null,
+  };
+
+  if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+    try {
+      const target = url(ENDPOINTS.bannerEvent, { [QUERY_SITE_KEY]: siteKey });
+      const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
+      if (navigator.sendBeacon(target, blob)) return true;
+    } catch {
+      // fall through to fetch keepalive
+    }
+  }
+
+  request('POST', ENDPOINTS.bannerEvent, { json: body, keepalive: true }).catch(() => {});
   return true;
 }

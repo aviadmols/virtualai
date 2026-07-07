@@ -85,6 +85,8 @@ function bootstrapBody(locale) {
     // Customer Club: OFF by default so the existing gates stay a complete no-op; the club/pricing
     // gates below override this block with an enabled/member config.
     club: { enabled: false, discount_percent: 0, price_zones: { pdp: [], catalog: [], cart: [] }, member: { verified: false } },
+    // Merchant banners: none by default (existing gates unaffected); the banner gate overrides this.
+    banners: [],
     product: {
       id: 42,
       name: 'Aviad Linen Tee',
@@ -1174,6 +1176,105 @@ async function clubBannerBehaviorGate(browser) {
   return failures;
 }
 
+/**
+ * Merchant banner runtime gate: an image banner injects at a merchant-picked host spot (own shadow
+ * root); an overlay banner renders crisp HTML text over the image; a club-members-only banner is
+ * hidden from a non-member (client-side rule eval); each SHOWN banner logs exactly one impression;
+ * and a click beacons a click event.
+ */
+async function bannerRuntimeGate(browser) {
+  console.log('\n=== merchant banners (inject / overlay / rule eval / impression / click) ===');
+  let failures = 0;
+  const events = [];
+  const page = await browser.newPage({ viewport: { width: 900, height: 1400 } });
+
+  await stubApi(page, 'en');
+  await page.route('**/widget/v1/banners/event*', (route) => {
+    // The trailing * matches the ?site_key= a sendBeacon click appends (a query-less fetch impression
+    // matches too). One entry per request. Impressions are fetch-keepalive (body parses -> impression); a
+    // click is a sendBeacon Blob whose body Playwright does not expose, so it lands as {kind:'beacon'}
+    // — still counted, so "a click fired an event" is provable by the request appearing.
+    let entry = { kind: 'beacon', banner_id: null };
+    try { const raw = route.request().postData(); if (raw) entry = JSON.parse(raw); } catch { /* beacon Blob */ }
+    events.push(entry);
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, recorded: true }) });
+  });
+
+  const dest = `${ORIGIN}/banner-dest`; // same-origin so a click navigates cleanly
+  const rulesAny = { audience: 'any', pages: { context: 'any', url_contains: null }, frequency: { max_per_session: 0 }, locales: [] };
+  const banners = [
+    { id: 1, composition: 'image', image_url: RESULT_PNG, width: 1200, height: 240, target_url: dest, alt: 'Sale',
+      overlay: {}, placements: [{ selector: '.product__price', position: 'after' }], rules: rulesAny },
+    { id: 2, composition: 'overlay', image_url: RESULT_PNG, width: 1200, height: 240, target_url: 'https://shop.example/promo', alt: 'Promo',
+      overlay: { headline: 'Big Summer Sale', subtext: 'Ends soon', cta_label: 'Shop now' },
+      placements: [{ selector: '#add-to-cart', position: 'before' }], rules: rulesAny },
+    { id: 3, composition: 'image', image_url: RESULT_PNG, width: 1200, height: 240, target_url: 'https://x', alt: 'Members',
+      overlay: {}, placements: [{ selector: '#variant', position: 'after' }],
+      rules: { audience: 'club_members', pages: { context: 'any', url_contains: null }, frequency: { max_per_session: 0 }, locales: [] } },
+  ];
+  await page.route('**/widget/v1/bootstrap*', (route) => {
+    const body = bootstrapBody('en');
+    body.banners = banners;
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+
+  try {
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+
+    // (1) image banner injected at the picked spot, inside its own shadow root.
+    await page.waitForFunction(() => !!document.querySelector('[data-trayon-banner="1"]'), { timeout: 6000 });
+    assert(await page.evaluate(() => {
+      const w = document.querySelector('[data-trayon-banner="1"]');
+      return !!(w && w.shadowRoot && w.shadowRoot.querySelector('img.ton-banner__img'));
+    }), 'image banner injected at the merchant-picked spot (own shadow root)');
+
+    // (2) overlay banner renders crisp HTML text over the image.
+    await page.waitForFunction(() => {
+      const w = document.querySelector('[data-trayon-banner="2"]');
+      return w && w.shadowRoot && w.shadowRoot.querySelector('.ton-banner__headline');
+    }, { timeout: 6000 });
+    const headline = await page.evaluate(() => document.querySelector('[data-trayon-banner="2"]').shadowRoot.querySelector('.ton-banner__headline').textContent);
+    assert(headline.includes('Big Summer Sale'), `overlay banner renders crisp HTML text (${headline.trim()})`);
+
+    // (3) rule eval: the club-members banner is hidden from a non-member.
+    assert((await page.evaluate(() => document.querySelectorAll('[data-trayon-banner="3"]').length)) === 0,
+      'club-members-only banner is hidden from a non-member (client-side rule eval)');
+
+    // (4) exactly one impression per SHOWN banner (1 + 2), none for the hidden 3.
+    for (let i = 0; i < 25; i++) {
+      await page.waitForTimeout(120);
+      if (events.filter((e) => e.kind === 'impression').length >= 2) break;
+    }
+    const impressions = events.filter((e) => e.kind === 'impression').map((e) => e.banner_id).sort();
+    assert(impressions.length === 2 && impressions.includes(1) && impressions.includes(2),
+      `one impression per shown banner, none for the hidden one (${impressions.join(',')})`);
+
+    await page.screenshot({ path: resolve(OUT, 'widget-banners.en.png'), fullPage: false });
+    console.log('  -> screenshot: widget-banners.en.png');
+
+    // (5) a click beacons a banner event (the destination is stubbed so the navigation resolves).
+    await page.route(`${dest}*`, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>ok</body></html>' }));
+    const preClick = events.length;
+    await page.evaluate(() => document.querySelector('[data-trayon-banner="1"]').shadowRoot.querySelector('a').click());
+    for (let i = 0; i < 25; i++) {
+      await page.waitForTimeout(120);
+      if (events.length > preClick) break;
+    }
+    assert(events.length > preClick, 'clicking a banner fires a banner event (beacon)');
+    // If the beacon body happened to be readable, it must be a click for the clicked banner.
+    const clickEvt = events.slice(preClick).find((e) => e.kind === 'click');
+    if (clickEvt) assert(clickEvt.banner_id === 1, 'the recorded click event is for the clicked banner');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, 'widget-banners-FAIL.png') }).catch(() => {});
+  }
+
+  await page.close();
+  return failures;
+}
+
 async function run() {
   // Static perf gates first (no browser needed): async snippet + gzip budget.
   let failures = staticPerfGates();
@@ -1352,6 +1453,7 @@ async function run() {
   failures += await clubFailureGate(browser);
   failures += await memberPricingGate(browser);
   failures += await clubBannerBehaviorGate(browser);
+  failures += await bannerRuntimeGate(browser);
 
   await browser.close();
   server.close();

@@ -780,3 +780,58 @@
     opacity: 1;
   }
 }
+
+/* ---- Merchant banner (injected at a merchant-picked host spot; its own shadow root) ----
+   The <img> reserves its box via width/height (CLS-safe). The overlay variant lays crisp HTML
+   text over the image with a bottom scrim for legibility; logical props mirror in RTL. */
+.ton-banner {
+  display: block;
+  position: relative;
+  inline-size: 100%;
+  overflow: hidden;
+  border-radius: var(--ton-radius);
+  text-decoration: none;
+  color: inherit;
+}
+
+.ton-banner__img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  object-fit: cover;
+}
+
+.ton-banner__overlay {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 18px;
+  text-align: start;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0));
+  color: #fff;
+}
+
+.ton-banner__headline {
+  font-size: 20px;
+  font-weight: var(--ton-fw-bold);
+  line-height: 1.12;
+}
+
+.ton-banner__subtext {
+  font-size: 13px;
+  opacity: 0.92;
+}
+
+.ton-banner__cta {
+  margin-block-start: 4px;
+  padding: 8px 14px;
+  background: var(--ton-accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: var(--ton-fw-bold);
+  border-radius: var(--ton-radius-sm);
+}

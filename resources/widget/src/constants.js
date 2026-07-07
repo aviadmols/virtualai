@@ -23,6 +23,7 @@ export const ENDPOINTS = {
   gallery: '/gallery',
   addToCart: '/events/add-to-cart',
   events: '/events',
+  bannerEvent: '/banners/event',
 };
 
 // The auth header the ResolveWidgetSite middleware reads (config/widget.php). The GET
@@ -276,6 +277,67 @@ export const CLUB_POSITIONS = ['bottom-end', 'bottom-start', 'top-end', 'top-sta
 
 // The price-zone surfaces (a union of all three is applied on whatever resolves on THIS page).
 export const CLUB_ZONES = ['pdp', 'catalog', 'cart'];
+
+// --- Merchant banners (runtime injection + per-banner analytics) ------------------------
+// A banner is a merchant-authored, AI-generated image the widget injects at merchant-picked
+// host-page spots, gated by client-side rules, with impression/click analytics. The bootstrap
+// `banners` block carries each banner's public image url, placements, and client-evaluated rules
+// (audience/pages/frequency/locale); the schedule was already enforced server-side.
+
+// The bootstrap banner object keys (BootstrapController::bannersPayload shape).
+export const BANNER_CONFIG = {
+  id: 'id',
+  composition: 'composition',
+  imageUrl: 'image_url',
+  width: 'width',
+  height: 'height',
+  targetUrl: 'target_url',
+  alt: 'alt',
+  overlay: 'overlay', // { headline, subtext, cta_label }
+  placements: 'placements', // [{ selector, position }]
+  rules: 'rules', // { audience, pages:{context,url_contains}, frequency:{max_per_session}, locales:[] }
+};
+
+export const BANNER_COMPOSITION = { image: 'image', overlay: 'overlay' };
+
+export const BANNER_OVERLAY = { headline: 'headline', subtext: 'subtext', ctaLabel: 'cta_label' };
+
+export const BANNER_PLACEMENT = { selector: 'selector', position: 'position' };
+
+// Injection positions relative to a picked element (mirror WidgetAppearance POSITION values).
+export const BANNER_PLACE = { before: 'before', after: 'after', prepend: 'prepend', append: 'append' };
+
+// Rule keys + their value enums (mirror App\Domain\Banners\BannerRules).
+export const BANNER_RULE = { audience: 'audience', pages: 'pages', frequency: 'frequency', locales: 'locales' };
+export const BANNER_PAGE_KEY = { context: 'context', urlContains: 'url_contains' };
+export const BANNER_FREQ_KEY = { max: 'max_per_session' };
+
+export const BANNER_AUDIENCE = {
+  any: 'any',
+  clubMembers: 'club_members',
+  nonMembers: 'non_members',
+  registered: 'registered',
+  newVisitors: 'new_visitors',
+  returningVisitors: 'returning_visitors',
+};
+
+export const BANNER_PAGE = { any: 'any', pdp: 'pdp', catalog: 'catalog', cart: 'cart' };
+
+// Analytics: the /banners/event body + kinds.
+export const BANNER_KIND = { impression: 'impression', click: 'click' };
+export const BANNER_EVENT_FIELD = { bannerId: 'banner_id', kind: 'kind', anonToken: 'anon_token', path: 'path' };
+
+// A mounted banner's sentinel (value = banner id) — idempotent injection per banner + spot.
+export const BANNER_SENTINEL_ATTR = 'data-trayon-banner';
+
+// localStorage: whether this shopper has been seen before (new vs returning targeting). + site_key.
+export const STORAGE_SEEN_PREFIX = 'trayon.seen.';
+
+// sessionStorage: per-session impression counter for the frequency cap. + site_key + ':' + banner id.
+export const SESSION_BANNER_IMPR_PREFIX = 'trayon.bimp.';
+
+// Best-effort cart-page heuristic for the `cart` page-context rule (merchants refine via url_contains).
+export const BANNER_CART_URL_RE = /\/(cart|checkout|basket|bag)(\/|$|\?|#)/i;
 
 // A processed price node is marked so a re-apply (variant change) never double-discounts it.
 // The ORIGINAL formatted text is stashed in a data-attr so a re-apply recomputes from source.

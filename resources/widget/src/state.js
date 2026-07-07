@@ -18,6 +18,10 @@ export const state = {
   // Customer Club config from the bootstrap (site-wide; PDP or not).
   club: null, // { enabled, discount_percent, price_zones{pdp,catalog,cart}, member{verified} }
 
+  // Merchant banners from the bootstrap (site-wide) + the store locale (banner locale targeting).
+  banners: null, // [{ id, composition, image_url, target_url, alt, overlay, placements, rules }]
+  locale: null, // the store locale ('en'|'he') — from the bootstrap
+
   // Per-intent generation state.
   clientRequestId: null,
   submitting: false,
