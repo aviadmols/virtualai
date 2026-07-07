@@ -33,6 +33,7 @@
   var PICKED_ID = '__trayon_picked'; // the persistent highlight of a role pick
   var ZONES_ID = '__trayon_zones'; // the layer holding every accumulated zone pick
   var ZONE_MARK = '__trayon_zone_mark'; // one accumulated zone highlight
+  var BANNER_PREV = '__trayon_banner_prev'; // a real banner injected at a placement (WYSIWYG)
   var MAX_DEPTH = 6;
 
   var MODE_PLACEMENT = 'placement';
@@ -54,7 +55,18 @@
     '#__trayon_ghost{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:#0a0a0c;' +
     'color:#fff;font:600 13px/1 system-ui,-apple-system,sans-serif;border:0;border-radius:0;' +
     'box-shadow:0 6px 20px rgba(0,0,0,.25);letter-spacing:.06em;}' +
-    '#__trayon_ghost::before{content:"\\2726";}';
+    '#__trayon_ghost::before{content:"\\2726";}' +
+    // A real banner injected at a placement — dashed frame + numbered badge so the merchant sees
+    // exactly WHERE and HOW it renders. The image is constrained to its container (responsive).
+    '.__trayon_banner_prev{position:relative;display:block;margin:6px 0;outline:2px dashed #2563eb;' +
+    'outline-offset:2px;box-shadow:0 6px 20px rgba(0,0,0,.2);}' +
+    '.__trayon_banner_prev>img{display:block;max-inline-size:100%;block-size:auto;}' +
+    '.__trayon_banner_prev.__trayon_banner_prev_empty{min-block-size:64px;display:flex;' +
+    'align-items:center;justify-content:center;background:rgba(37,99,235,.08);}' +
+    '.__trayon_banner_prev::after{content:attr(data-n);position:absolute;inset-block-start:-9px;' +
+    'inset-inline-start:-9px;min-inline-size:18px;block-size:18px;padding:0 4px;display:flex;' +
+    'align-items:center;justify-content:center;background:#2563eb;color:#fff;' +
+    'font:600 11px/1 system-ui,-apple-system,sans-serif;border-radius:9px;z-index:1;}';
   (document.head || document.documentElement).appendChild(style);
 
   var hilite = document.createElement('div');
@@ -86,6 +98,7 @@
       el.id !== HILITE_ID &&
       el.id !== PICKED_ID &&
       el.id !== GHOST_ID &&
+      !(el.closest && el.closest('.' + BANNER_PREV)) && // never pick an injected banner preview
       el !== document.documentElement &&
       el !== document.body
     );
@@ -231,6 +244,16 @@
     ghost = null;
   }
 
+  // Insert a node relative to a target using the placement position semantics the storefront
+  // widget uses (before | prepend | append | after-default). Shared by the ghost + banner preview.
+  function insertAt(target, node, position) {
+    var parentEl = target.parentNode;
+    if (position === 'before' && parentEl) parentEl.insertBefore(node, target);
+    else if (position === 'prepend') target.insertBefore(node, target.firstChild);
+    else if (position === 'append') target.appendChild(node);
+    else if (parentEl) parentEl.insertBefore(node, target.nextSibling);
+  }
+
   function drawGhost(selector, position, label) {
     clearGhost();
     var target = null;
@@ -243,13 +266,55 @@
     ghost.id = GHOST_ID;
     ghost.textContent = label || currentLabel;
 
-    var parentEl = target.parentNode;
-    if (position === 'before' && parentEl) parentEl.insertBefore(ghost, target);
-    else if (position === 'prepend') target.insertBefore(ghost, target.firstChild);
-    else if (position === 'append') target.appendChild(ghost);
-    else if (parentEl) parentEl.insertBefore(ghost, target.nextSibling);
+    insertAt(target, ghost, position);
 
     if (ghost.scrollIntoView) ghost.scrollIntoView({ block: 'center' });
+  }
+
+  // Remove every injected banner preview (they live in the page flow, not an overlay layer).
+  function clearBannerPreviews() {
+    var nodes = document.querySelectorAll('.' + BANNER_PREV);
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].parentNode) nodes[i].parentNode.removeChild(nodes[i]);
+    }
+  }
+
+  // Render the ACTUAL banner at each confirmed placement (selector + position) — a WYSIWYG preview
+  // of where and how it appears on the store. An empty imageUrl (no artwork chosen yet) paints a
+  // numbered placeholder block so the spot is still visible. Fully re-derived from the list each call.
+  function paintBannerPreviews(imageUrl, placements) {
+    clearBannerPreviews();
+    if (!placements || !placements.length) return;
+
+    var last = null;
+    for (var i = 0; i < placements.length; i++) {
+      var p = placements[i];
+      if (!p || !p.selector) continue;
+
+      var target = null;
+      try {
+        target = document.querySelector(p.selector);
+      } catch (e) {}
+      if (!target) continue;
+
+      var wrap = document.createElement('div');
+      wrap.className = BANNER_PREV;
+      wrap.setAttribute('data-n', String(i + 1));
+
+      if (imageUrl) {
+        var img = document.createElement('img');
+        img.src = imageUrl;
+        img.alt = '';
+        wrap.appendChild(img);
+      } else {
+        wrap.className += ' __trayon_banner_prev_empty';
+      }
+
+      insertAt(target, wrap, p.position);
+      last = wrap;
+    }
+
+    if (last && last.scrollIntoView) last.scrollIntoView({ block: 'center' });
   }
 
   document.addEventListener(
@@ -312,9 +377,14 @@
       clearGhost();
       showPicked(null);
       paintZones([]);
+      clearBannerPreviews();
     } else if (d.type === 'setZones') {
       // The parent's confirmed, server-verified selector list for the open zone.
       paintZones(d.selectors || []);
+    } else if (d.type === 'setBannerPreview') {
+      // The parent's confirmed placements + the chosen banner image → render the real banner at
+      // each spot (WYSIWYG). Repaints wholesale, so a removed/reordered placement is reflected.
+      paintBannerPreviews(d.imageUrl || '', d.placements || []);
     } else if (d.type === 'label') {
       currentLabel = d.label || currentLabel;
     } else if (d.type === 'setGhost') {
@@ -324,6 +394,7 @@
       clearGhost();
       showPicked(null);
       paintZones([]);
+      clearBannerPreviews();
     }
   });
 

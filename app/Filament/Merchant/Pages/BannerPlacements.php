@@ -5,6 +5,7 @@ namespace App\Filament\Merchant\Pages;
 use App\Domain\Banners\BannerPlacements as PlacementSchema;
 use App\Domain\Banners\BannerService;
 use App\Domain\Banners\InvalidBannerException;
+use App\Domain\Media\MediaStorage;
 use App\Domain\Scan\Fetch\FetchException;
 use App\Domain\Scan\Preview\PreviewFetcher;
 use App\Domain\Scan\Preview\PreviewResult;
@@ -137,6 +138,18 @@ class BannerPlacements extends Page
     public function pickerMode(): string
     {
         return self::PICKER_MODE_ZONE;
+    }
+
+    /**
+     * The selected artwork's PUBLIC URL — rendered as the real banner at each picked spot in the
+     * preview (WYSIWYG). Null when no candidate has been chosen yet; the picker then shows a
+     * numbered placeholder block instead.
+     */
+    public function bannerImageUrl(): ?string
+    {
+        $banner = $this->banner();
+
+        return $banner !== null ? app(MediaStorage::class)->publicUrl($banner->image_path) : null;
     }
 
     /** Position value => localized label (for the per-placement select). */

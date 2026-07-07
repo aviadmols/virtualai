@@ -89,22 +89,23 @@
             class="to-place-overlay"
             x-data="{
                 mode: @js($this->pickerMode()),
+                imageUrl: @js($this->bannerImageUrl()),
                 placements: $wire.entangle('placements'),
-                selectors() { return (this.placements || []).map((p) => p.selector); },
                 frameWin() { return $refs.frame ? $refs.frame.contentWindow : null; },
                 post(msg) { const w = this.frameWin(); if (w) { try { w.postMessage(Object.assign({ source: 'trayon-parent' }, msg), '*'); } catch (e) {} } },
-                syncZones() { this.post({ type: 'setZones', selectors: this.selectors() }); },
+                /* Render the REAL banner at each picked spot (selector + position) — WYSIWYG. */
+                syncPreview() { this.post({ type: 'setBannerPreview', imageUrl: this.imageUrl || '', placements: this.placements || [] }); },
                 onMessage(e) {
                     if (!this.$refs.frame || e.source !== this.$refs.frame.contentWindow) return;
                     const d = e.data;
                     if (!d || d.source !== 'trayon-picker') return;
-                    if (d.type === 'ready') { this.post({ type: 'setMode', mode: this.mode }); this.syncZones(); }
+                    if (d.type === 'ready') { this.post({ type: 'setMode', mode: this.mode }); this.syncPreview(); }
                     else if (d.type === 'pick' && d.mode === 'zone') { $wire.pickPlacement(d.selector); }
                 },
                 init() {
                     this._h = (e) => this.onMessage(e);
                     window.addEventListener('message', this._h);
-                    this.$watch('placements', () => this.syncZones());
+                    this.$watch('placements', () => this.syncPreview());
                 },
                 destroy() { window.removeEventListener('message', this._h); },
             }"
