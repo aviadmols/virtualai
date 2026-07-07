@@ -28,6 +28,8 @@ final class InvalidBannerException extends RuntimeException
 
     public const REASON_ASSET_NOT_SELECTABLE = 'asset_not_selectable';
 
+    public const REASON_INVALID_PLACEMENTS = 'invalid_placements';
+
     public function __construct(
         public readonly string $field,
         public readonly string $reason,

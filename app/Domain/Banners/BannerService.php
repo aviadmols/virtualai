@@ -52,6 +52,20 @@ final class BannerService
     }
 
     /**
+     * Replace the banner's placement list with a validated set of { selector, position } spots
+     * (the visual picker's confirmed picks). Selectors are allow-list validated + capped; a bad
+     * value throws a typed rejection. Which pages they show on is the rules layer's job.
+     *
+     * @param  array<int,mixed>  $placements
+     */
+    public function updatePlacements(Banner $banner, array $placements): Banner
+    {
+        $banner->forceFill(['placements' => BannerPlacements::sanitize($placements)])->save();
+
+        return $banner;
+    }
+
+    /**
      * Select a generated candidate as the banner's artwork: copy its PUBLIC image (path + mime
      * + dims) onto the banner and point selected_asset_id at it. The asset must belong to this
      * banner and be a succeeded generation with a stored image — else a typed rejection.

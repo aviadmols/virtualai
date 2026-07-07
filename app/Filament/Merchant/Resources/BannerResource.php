@@ -47,6 +47,7 @@ class BannerResource extends Resource
 
     // i18n keys — never a literal in the resource.
     private const LABEL_SINGULAR = 'banners.singular';
+    private const LABEL_PLURAL = 'banners.plural';
     private const NAV_LABEL = 'banners.nav';
 
     /** Narrow the banner list to the ACTIVE shop (Filament tenant) on top of the account scope. */
@@ -63,6 +64,13 @@ class BannerResource extends Resource
     public static function getModelLabel(): string
     {
         return __(self::LABEL_SINGULAR);
+    }
+
+    // Wire the localized plural so the breadcrumb/heading don't fall back to Filament's
+    // English pluralizer (which appends an "s" to the Hebrew label → "באנרs").
+    public static function getPluralModelLabel(): string
+    {
+        return __(self::LABEL_PLURAL);
     }
 
     public static function getNavigationLabel(): string
@@ -122,8 +130,11 @@ class BannerResource extends Resource
 
             Section::make(__('banners.overlay.section'))
                 ->description(__('banners.overlay.section_help'))
+                // Two independent guards on the two separate slots (isHidden OR !isVisible):
+                // hidden on create, and — on edit — visible ONLY for the overlay composition.
+                // (visibleOn('edit') would OVERWRITE the composition closure; both set isVisible.)
+                ->hiddenOn('create')
                 ->visible(static fn (callable $get): bool => $get('composition') === Banner::COMPOSITION_OVERLAY)
-                ->visibleOn('edit')
                 ->columns(2)
                 ->schema([
                     TextInput::make('overlay.headline')

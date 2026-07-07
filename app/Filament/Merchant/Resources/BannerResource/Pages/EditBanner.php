@@ -7,6 +7,7 @@ use App\Domain\Banners\BannerGenerationRequest;
 use App\Domain\Banners\BannerService;
 use App\Domain\Banners\InvalidBannerException;
 use App\Domain\Banners\StartBannerGeneration;
+use App\Filament\Merchant\Pages\BannerPlacements;
 use App\Filament\Merchant\Resources\BannerResource;
 use App\Models\Banner;
 use Filament\Actions\Action;
@@ -47,11 +48,22 @@ class EditBanner extends EditRecord
     {
         return [
             $this->generateAction(),
+            $this->placementsAction(),
             $this->activateAction(),
             $this->pauseAction(),
             $this->archiveAction(),
             DeleteAction::make(),
         ];
+    }
+
+    /** Open the visual placement picker (a dedicated page) for this banner. */
+    private function placementsAction(): Action
+    {
+        return Action::make('placements')
+            ->label(__('banners.placements.action'))
+            ->icon('heroicon-o-map-pin')
+            ->color('gray')
+            ->url(fn (): string => BannerPlacements::getUrl(['banner' => $this->getRecord()->getKey()]));
     }
 
     // --- Content save: route through the single validated writer ---
