@@ -76,7 +76,7 @@ copied, by the family layers (e.g. `--tow-radius-image: var(--to-r-card)`).
 | Track tight | `--to-track-tight` | `-0.01em` | Big display occasional negative. |
 | Track zero | `--to-track-zero` | `0` | Body default. |
 | Track label | `--to-track-label` | `3px` | Uppercase section labels. |
-| Track eyebrow | `--to-track-eyebrow` | `4px` | Eyebrow + footer micro-copy. |
+| Track eyebrow | `--to-track-eyebrow` | `1px` | Eyebrow + footer micro-copy. |
 | Track button | `--to-track-button` | `2px` | Button text. |
 | Track display HE | `--to-track-he` | `2px` | **RTL** — Hebrew display (Latin 5px breaks Hebrew kerning). |
 | Track display EN | `--to-track-en` | `5px` | Latin display stylistic moments. |
