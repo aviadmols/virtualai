@@ -66,6 +66,33 @@ final readonly class MetricWindow
     }
 
     /**
+     * Resolve a window from a report page's filter state: `period` of a day count → lastDays(N);
+     * `custom` with from+until → between(); anything missing → the default 30-day window. The one
+     * place the filter shape maps to a window, shared by the costs widgets + the log page.
+     *
+     * @param  array<string,mixed>  $filters
+     */
+    public static function fromFilters(array $filters): self
+    {
+        $period = (string) ($filters['period'] ?? (string) self::DEFAULT_DAYS);
+
+        if ($period === self::LABEL_CUSTOM) {
+            $from = $filters['from'] ?? null;
+            $until = $filters['until'] ?? null;
+
+            if (filled($from) && filled($until)) {
+                return self::between(CarbonImmutable::parse((string) $from), CarbonImmutable::parse((string) $until));
+            }
+
+            return self::lastDays();
+        }
+
+        $days = (int) $period;
+
+        return $days > 0 ? self::lastDays($days) : self::lastDays();
+    }
+
+    /**
      * An explicit inclusive date range [from, until] — for the Super-Admin report date picker.
      * Normalised to whole days (start-of-day .. end-of-day) so both edge days count in full, and
      * reversed bounds are swapped so a picker never yields an empty window.

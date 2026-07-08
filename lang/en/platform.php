@@ -91,6 +91,20 @@ return [
         ],
     ],
 
+    // P1 — Generation timing log (every try-on call + how long it took).
+    'timing_log' => [
+        'title' => 'Generation log',
+        'time' => 'Time',
+        'account' => 'Account',
+        'model' => 'Model',
+        'provider' => 'Provider',
+        'status' => 'Status',
+        'duration' => 'Render time',
+        'cost' => 'Cost',
+        'empty' => 'No generations in this window yet',
+        'empty_sub' => 'Each try-on call and how long it took to generate appears here.',
+    ],
+
     // P2 — Accounts.
     'accounts' => [
         'title' => 'Accounts',
