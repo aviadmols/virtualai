@@ -160,7 +160,8 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
 
         $asset->transitionTo(BannerAsset::STATUS_PROCESSING, ['model' => $config->model]);
 
-        // --- GENERATE ---
+        // --- GENERATE --- (time the provider render only, for the timing report)
+        $startedAt = hrtime(true);
         try {
             $result = $this->callProvider($config, $asset);
         } catch (OpenRouterException $e) {
@@ -175,6 +176,7 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
 
             return;
         }
+        $durationMs = $this->elapsedMs($startedAt);
 
         // Cost must be real to charge honestly (defense in depth on both conditions).
         if (! $result->cost->available || $result->cost->costUsd === null) {
@@ -198,7 +200,13 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
             return;
         }
 
-        $this->finalizeSuccess($asset, $account, $config, $result, $stored, $reservation);
+        $this->finalizeSuccess($asset, $account, $config, $result, $stored, $reservation, $durationMs);
+    }
+
+    /** Milliseconds elapsed since an hrtime(true) reading (nanoseconds). */
+    private function elapsedMs(int $startedAtNs): int
+    {
+        return (int) round((hrtime(true) - $startedAtNs) / 1_000_000);
     }
 
     /**
@@ -323,6 +331,7 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
         BannerResult $result,
         StoredMedia $stored,
         Reservation $reservation,
+        int $durationMs = 0,
     ): void {
         $costUsd = $result->cost->costUsd;
 
@@ -337,7 +346,7 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
         $actualCostMicro = CreditMath::usdToMicro($costUsd);
         [$width, $height] = $this->imageDimensions($result->imageBytes);
 
-        DB::transaction(function () use ($asset, $account, $result, $stored, $reservation, $chargeMicro, $actualCostMicro, $width, $height): void {
+        DB::transaction(function () use ($asset, $account, $result, $stored, $reservation, $chargeMicro, $actualCostMicro, $width, $height, $durationMs): void {
             /** @var BannerAsset $locked */
             $locked = BannerAsset::query()->lockForUpdate()->findOrFail($asset->getKey());
 
@@ -364,6 +373,7 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
                 'image_mime' => $result->mimeType,
                 'image_width' => $width,
                 'image_height' => $height,
+                'duration_ms' => $durationMs,
                 'model_used' => $result->modelUsed,
                 'actual_cost_micro_usd' => $actualCostMicro,
                 'charge_ledger_id' => $charge->getKey(),

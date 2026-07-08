@@ -84,6 +84,11 @@ return [
             'charges' => 'Charges',
             'empty' => 'No account charges in this window yet.',
         ],
+        'timing' => [
+            'title' => 'Try-on generation time',
+            'sub' => 'Average time to generate a try-on image (ms) per day.',
+            'avg_ms' => 'Avg time (ms)',
+        ],
     ],
 
     // P2 — Accounts.

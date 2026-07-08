@@ -86,6 +86,7 @@ class Generation extends Model
         'result_image_path',
         'model_used',
         'actual_cost_micro_usd',
+        'duration_ms',
         'charge_ledger_id',
         'failure_code',
         'meta',
@@ -102,6 +103,7 @@ class Generation extends Model
             'product_id' => 'integer',
             'product_variant_id' => 'integer',
             'actual_cost_micro_usd' => 'integer',
+            'duration_ms' => 'integer',
             'charge_ledger_id' => 'integer',
             'meta' => 'array',
         ];

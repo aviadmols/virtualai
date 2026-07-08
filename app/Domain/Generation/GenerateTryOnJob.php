@@ -165,6 +165,9 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         ]);
 
         // --- GENERATE (ai-openrouter owns the OpenRouter call; bytes back) ---
+        // Time the provider render only (the "how long each try-on took" graph), isolated from the
+        // queue wait + store + charge around it.
+        $startedAt = hrtime(true);
         try {
             $result = $this->callOpenRouter($config, $generation, $product);
         } catch (OpenRouterException $e) {
@@ -179,6 +182,7 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
 
             return;
         }
+        $durationMs = $this->elapsedMs($startedAt);
 
         // Cost must be real to charge honestly — never invent a number. ParsedCost
         // already enforces "available => non-null cost" in its constructor, but we
@@ -206,7 +210,13 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
             return;
         }
 
-        $this->finalizeSuccess($generation, $endUser, $config, $result, $stored, $reservation);
+        $this->finalizeSuccess($generation, $endUser, $config, $result, $stored, $reservation, $durationMs);
+    }
+
+    /** Milliseconds elapsed since an hrtime(true) reading (nanoseconds). */
+    private function elapsedMs(int $startedAtNs): int
+    {
+        return (int) round((hrtime(true) - $startedAtNs) / 1_000_000);
     }
 
     /**
@@ -406,6 +416,7 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         TryOnResult $result,
         \App\Domain\Media\StoredMedia $stored,
         Reservation $reservation,
+        int $durationMs = 0,
     ): void {
         // Defense in depth: finalizeSuccess is only reached past the available/non-null
         // guard in process(), but pin the precondition locally too so a future caller
@@ -422,7 +433,7 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         $chargeMicro = CreditMath::chargeMicroUsd($costUsd, $multiplier);
         $actualCostMicro = CreditMath::usdToMicro($costUsd);
 
-        DB::transaction(function () use ($generation, $endUser, $result, $stored, $reservation, $chargeMicro, $actualCostMicro): void {
+        DB::transaction(function () use ($generation, $endUser, $result, $stored, $reservation, $chargeMicro, $actualCostMicro, $durationMs): void {
             /** @var Generation $locked */
             $locked = Generation::query()->lockForUpdate()->findOrFail($generation->getKey());
 
@@ -449,6 +460,7 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
                 'result_image_path' => $stored->path,
                 'model_used' => $result->modelUsed,
                 'actual_cost_micro_usd' => $actualCostMicro,
+                'duration_ms' => $durationMs,
                 'charge_ledger_id' => $charge->getKey(),
                 'meta' => array_merge($locked->meta ?? [], [
                     Generation::META_OPENROUTER_GENERATION_ID => $result->openrouterGenerationId,

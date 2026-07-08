@@ -98,6 +98,9 @@ class GenerateBannerJobTest extends TestCase
         $this->assertSame(BannerAsset::STATUS_SUCCEEDED, $asset->status);
         $this->assertNotNull($asset->image_path);
         $this->assertNotNull($asset->charge_ledger_id);
+        // The provider render time was measured + persisted for the timing report.
+        $this->assertNotNull($asset->duration_ms);
+        $this->assertGreaterThanOrEqual(0, $asset->duration_ms);
         $this->assertSame(CreditMath::usdToMicro(0.40), $asset->actual_cost_micro_usd);
 
         // Exactly ONE charge row, at the selling value, referencing the BANNER ASSET.

@@ -79,6 +79,7 @@ class BannerAsset extends Model
         'image_height',
         'model_used',
         'actual_cost_micro_usd',
+        'duration_ms',
         'charge_ledger_id',
         'failure_code',
         'meta',
@@ -95,6 +96,7 @@ class BannerAsset extends Model
             'image_width' => 'integer',
             'image_height' => 'integer',
             'actual_cost_micro_usd' => 'integer',
+            'duration_ms' => 'integer',
             'charge_ledger_id' => 'integer',
             'meta' => 'array',
         ];

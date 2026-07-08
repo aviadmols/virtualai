@@ -157,6 +157,36 @@ final class CostsMetricsBuilder
             ->all();
     }
 
+    /**
+     * Try-on generation timings per day over $window — the AVERAGE provider render time (ms) and
+     * the count of SUCCEEDED try-ons that recorded a duration, one row per calendar day (oldest
+     * first) for a trend line. duration_ms is captured going forward; rows generated before it
+     * existed simply don't appear (they have a null duration).
+     *
+     * @return array<int,array{day:string,avgMs:int,count:int}>
+     */
+    public function generationTimings(?MetricWindow $window = null): array
+    {
+        $window ??= MetricWindow::lastDays();
+
+        $query = DB::table(self::TABLE_GENERATIONS)
+            ->where('status', Generation::STATUS_SUCCEEDED)
+            ->whereNotNull('duration_ms');
+
+        $window->constrain($query, 'created_at');
+
+        return $query->selectRaw('DATE(created_at) as day, AVG(duration_ms) as avg_ms, COUNT(*) as n')
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get()
+            ->map(static fn (object $row): array => [
+                'day' => (string) $row->day,
+                'avgMs' => (int) round((float) $row->avg_ms),
+                'count' => (int) $row->n,
+            ])
+            ->all();
+    }
+
     /** Per-provider cost + count from one operation table's SUCCEEDED rows over the window. */
     private function providerSpend(string $table, MetricWindow $window): \Illuminate\Support\Collection
     {

@@ -5,6 +5,7 @@ namespace App\Filament\Platform\Pages;
 use App\Domain\Reporting\MetricWindow;
 use App\Filament\Platform\Widgets\AccountCostsWidget;
 use App\Filament\Platform\Widgets\CostsVsRevenueWidget;
+use App\Filament\Platform\Widgets\GenerationTimingWidget;
 use App\Filament\Platform\Widgets\PlatformKpiWidget;
 use App\Filament\Platform\Widgets\ProviderCostsWidget;
 use App\Filament\Platform\Widgets\QueueHealthWidget;
@@ -67,6 +68,7 @@ class Dashboard extends BaseDashboard
             QueueHealthWidget::class,
             PlatformKpiWidget::class,
             CostsVsRevenueWidget::class,
+            GenerationTimingWidget::class,
             ProviderCostsWidget::class,
             AccountCostsWidget::class,
         ];

@@ -115,10 +115,10 @@ class CostsMetricsTest extends TestCase
         $this->assertSame(400_000, $metrics->actualCostMicroUsd);
     }
 
-    /** A succeeded try-on on a given model with a given real cost, under $account. */
-    private function succeededGeneration(Account $account, string $modelUsed, int $costMicro): void
+    /** A succeeded try-on on a given model with a given real cost (+ optional render duration). */
+    private function succeededGeneration(Account $account, string $modelUsed, int $costMicro, ?int $durationMs = null): void
     {
-        Tenant::run($account, function () use ($account, $modelUsed, $costMicro): void {
+        Tenant::run($account, function () use ($account, $modelUsed, $costMicro, $durationMs): void {
             $site = Site::factory()->forAccount($account)->create();
             $endUser = EndUser::factory()->forSite($site)->create();
             $product = Product::factory()->forSite($site)->confirmed()->create();
@@ -128,8 +128,29 @@ class CostsMetricsTest extends TestCase
                 'status' => Generation::STATUS_SUCCEEDED,
                 'model_used' => $modelUsed,
                 'actual_cost_micro_usd' => $costMicro,
+                'duration_ms' => $durationMs,
             ]);
         });
+    }
+
+    public function test_generation_timings_average_render_time_per_day(): void
+    {
+        $account = Account::factory()->create();
+
+        // Today: two try-ons at 1000ms + 2000ms (avg 1500). "Yesterday": one at 500ms.
+        $this->succeededGeneration($account, 'or/model', 100_000, 1000);
+        $this->succeededGeneration($account, 'or/model', 100_000, 2000);
+        $this->succeededGeneration($account, 'or/model', 100_000, 500);
+        DB::table('generations')->where('duration_ms', 500)->update(['created_at' => CarbonImmutable::now()->subDay()]);
+
+        $rows = $this->builder()->generationTimings(MetricWindow::lastDays(7));
+
+        // Oldest first: yesterday (avg 500, n=1) then today (avg 1500, n=2).
+        $this->assertCount(2, $rows);
+        $this->assertSame(500, $rows[0]['avgMs']);
+        $this->assertSame(1, $rows[0]['count']);
+        $this->assertSame(1500, $rows[1]['avgMs']);
+        $this->assertSame(2, $rows[1]['count']);
     }
 
     public function test_by_provider_splits_cost_between_openrouter_and_byteplus(): void
