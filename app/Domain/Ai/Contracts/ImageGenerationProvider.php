@@ -7,7 +7,7 @@ use App\Domain\Ai\ParsedCost;
 /**
  * ImageGenerationProvider — the provider seam for try-on image generation.
  *
- * One implementation per upstream (OpenRouter, BytePlus/Seedream). The caller
+ * One implementation per upstream (OpenRouter, BytePlus/Seedream, xAI/Grok). The caller
  * (TryOnGenerationCaller) speaks ONLY this interface; it never knows which upstream is
  * behind it. Fallback/retry classification stays provider-side (each upstream has its own
  * error envelope + status semantics + response shape).
@@ -17,8 +17,9 @@ interface ImageGenerationProvider
     // Stable provider ids — also the ai_models.provider enum values.
     public const PROVIDER_OPENROUTER = 'openrouter';
     public const PROVIDER_BYTEPLUS = 'byteplus';
+    public const PROVIDER_XAI = 'xai';
 
-    public const PROVIDERS = [self::PROVIDER_OPENROUTER, self::PROVIDER_BYTEPLUS];
+    public const PROVIDERS = [self::PROVIDER_OPENROUTER, self::PROVIDER_BYTEPLUS, self::PROVIDER_XAI];
 
     /**
      * Run $buildBody($model) against the primary then the fallback model, retrying

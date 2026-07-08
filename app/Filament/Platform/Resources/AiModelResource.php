@@ -123,11 +123,11 @@ class AiModelResource extends Resource
                         ->numeric()
                         ->prefix('$')
                         ->step('0.000001')
-                        // A BytePlus (flat-rate) model returns no cost, so its per-image price
+                        // A flat-rate model (BytePlus, xAI) returns no cost, so its per-image price
                         // IS the charge — it can't be saved price-less (that was the silent
-                        // cost_unavailable). Required + strictly positive when provider=byteplus.
-                        ->required(fn (Get $get): bool => $get('provider') === AiModel::PROVIDER_BYTEPLUS)
-                        ->minValue(fn (Get $get): ?string => $get('provider') === AiModel::PROVIDER_BYTEPLUS ? '0.000001' : null)
+                        // cost_unavailable). Required + strictly positive for a flat-rate provider.
+                        ->required(fn (Get $get): bool => self::isFlatRateProvider($get('provider')))
+                        ->minValue(fn (Get $get): ?string => self::isFlatRateProvider($get('provider')) ? '0.000001' : null)
                         ->validationMessages([
                             'required' => __('platform.models.field.cost_hint_required_byteplus'),
                             'min' => __('platform.models.field.cost_hint_required_byteplus'),
@@ -173,7 +173,11 @@ class AiModelResource extends Resource
                 TextColumn::make('provider')
                     ->label(__('platform.models.col.provider'))
                     ->badge()
-                    ->color(static fn (string $state): string => $state === AiModel::PROVIDER_BYTEPLUS ? 'warning' : 'gray')
+                    ->color(static fn (string $state): string => match ($state) {
+                        AiModel::PROVIDER_BYTEPLUS => 'warning',
+                        AiModel::PROVIDER_XAI => 'info',
+                        default => 'gray',
+                    })
                     ->formatStateUsing(static fn (string $state): string => self::providerOptions()[$state] ?? $state)
                     ->sortable(),
                 IconColumn::make('is_default')
@@ -277,7 +281,17 @@ class AiModelResource extends Resource
         return [
             AiModel::PROVIDER_OPENROUTER => 'OpenRouter',
             AiModel::PROVIDER_BYTEPLUS => 'BytePlus (Seedream)',
+            AiModel::PROVIDER_XAI => 'xAI (Grok)',
         ];
+    }
+
+    /**
+     * A flat-rate provider (BytePlus, xAI) returns no inline USD cost, so a positive per-image
+     * price hint is mandatory — otherwise a generation would succeed but never charge.
+     */
+    private static function isFlatRateProvider(?string $provider): bool
+    {
+        return in_array($provider, [AiModel::PROVIDER_BYTEPLUS, AiModel::PROVIDER_XAI], true);
     }
 
     /** Cost-unit → localised label (from the AiModel UNIT_* CONSTs). */

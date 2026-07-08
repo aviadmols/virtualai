@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Filament\Platform;
 
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Domain\Credits\CreditLedgerService;
 use App\Domain\Credits\IdempotencyKey;
 use App\Domain\Reporting\MetricWindow;
@@ -100,14 +101,15 @@ class CostsFilterTest extends TestCase
         $this->assertSame('$0.60', $accounts['rows'][0]['margin']);
     }
 
-    public function test_the_provider_widget_always_shows_both_providers(): void
+    public function test_the_provider_widget_always_shows_every_provider(): void
     {
-        // With no generations yet, spend is zero — but the comparison still lists both providers.
+        // With no generations yet, spend is zero — but the comparison still lists every known
+        // provider (OpenRouter, BytePlus, xAI) so the split is complete.
         $providers = Livewire::test(ProviderCostsWidget::class, ['filters' => ['period' => '30']])
             ->instance()->getProviders();
 
         $this->assertFalse($providers['hasData']);
-        $this->assertCount(2, $providers['cards']);
+        $this->assertCount(count(ImageGenerationProvider::PROVIDERS), $providers['cards']);
         $this->assertSame('$0.00', $providers['cards'][0]['value']);
     }
 

@@ -25,6 +25,7 @@ class AiModel extends Model
 
     public const PROVIDER_OPENROUTER = ImageGenerationProvider::PROVIDER_OPENROUTER;
     public const PROVIDER_BYTEPLUS = ImageGenerationProvider::PROVIDER_BYTEPLUS;
+    public const PROVIDER_XAI = ImageGenerationProvider::PROVIDER_XAI;
 
     protected $fillable = [
         'operation_key',

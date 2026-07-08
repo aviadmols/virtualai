@@ -63,6 +63,16 @@ return [
         'probe_model' => env('BYTEPLUS_PROBE_MODEL', 'seedream-4-0-250828'),
     ],
 
+    // xAI / Grok — a THIRD image provider (text-to-image, OpenAI-compatible). Key is
+    // server-side only. base_url is the single global host (no per-model region). The
+    // Test-connection button + per-model probe are no-spend GETs against /models (no
+    // probe model id needed — the key alone is validated).
+    'xai' => [
+        'api_key' => env('XAI_API_KEY'),
+        'base_url' => env('XAI_BASE_URL', 'https://api.x.ai/v1'),
+        'timeout' => (int) env('XAI_TIMEOUT', 80),
+    ],
+
     // PayPlus — the LOCKED credit-purchase rail for v1 (behind CreditPaymentProvider).
     // secret_key is BOTH the request auth header and the webhook-signature HMAC key (the
     // `hash` header = base64(HMAC-SHA256(rawBody, secret_key))). webhook_secret is kept

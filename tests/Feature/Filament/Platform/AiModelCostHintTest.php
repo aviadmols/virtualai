@@ -99,6 +99,24 @@ class AiModelCostHintTest extends TestCase
         $this->assertDatabaseMissing('ai_models', ['model_id' => 'seedream-5-0-260128']);
     }
 
+    public function test_an_xai_model_cannot_be_saved_without_a_per_image_price(): void
+    {
+        // xAI/Grok is also flat-rate (text-to-image, no inline cost) — a price-less Grok model
+        // must be rejected for the same money-safety reason as BytePlus.
+        Livewire::test(CreateAiModel::class)
+            ->fillForm([
+                'model_id' => 'grok-2-image',
+                'operation_key' => 'banner_generation',
+                'provider' => AiModel::PROVIDER_XAI,
+                'cost_hint_micro_usd' => null, // no price
+                'cost_unit' => AiModel::UNIT_PER_IMAGE,
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['cost_hint_micro_usd']);
+
+        $this->assertDatabaseMissing('ai_models', ['model_id' => 'grok-2-image']);
+    }
+
     public function test_an_openrouter_model_may_be_saved_without_a_price(): void
     {
         // The requirement is BytePlus-only: OpenRouter returns a real inline cost, so a

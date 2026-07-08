@@ -7,13 +7,15 @@ use App\Domain\Ai\Contracts\ImageGenerationProvider;
 /**
  * ProviderRouter — picks the image-generation client for a provider id. The provider comes
  * from the resolved model's `provider` column (AiOperationResolver), so a Seedream model
- * routes to BytePlus and a Gemini model routes to OpenRouter, transparently to the caller.
+ * routes to BytePlus, a Grok model routes to xAI, and a Gemini model routes to OpenRouter,
+ * transparently to the caller.
  */
 final class ProviderRouter
 {
     public function __construct(
         private readonly OpenRouterClient $openRouter,
         private readonly BytePlusImageClient $bytePlus,
+        private readonly XaiImageClient $xai,
     ) {}
 
     public function for(string $provider): ImageGenerationProvider
@@ -21,6 +23,7 @@ final class ProviderRouter
         return match ($provider) {
             ImageGenerationProvider::PROVIDER_OPENROUTER => $this->openRouter,
             ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->bytePlus,
+            ImageGenerationProvider::PROVIDER_XAI => $this->xai,
             default => throw OpenRouterException::make(
                 OpenRouterException::CODE_BAD_REQUEST,
                 sprintf('Unknown AI provider "%s".', $provider),

@@ -58,6 +58,15 @@ class AiControlPlaneSeeder extends Seeder
         'seedream-5-0-260128' => 'Seedream 5.0 Lite (BytePlus)',
     ];
 
+    // xAI/Grok banner models, catalogued but INACTIVE — the admin activates one after adding an
+    // xAI key (Settings) + confirming its per-image price. xAI images/generations is TEXT-TO-IMAGE,
+    // so Grok suits BANNERS (not a true try-on). The $0.07/image starter matches grok-2-image's
+    // published price; adjust per model. model id (the xAI `model`) => label.
+    private const XAI_BANNER_MODELS = [
+        'grok-2-image' => 'Grok 2 Image (xAI)',
+        'grok-imagine-image-quality' => 'Grok Imagine (xAI)',
+    ];
+
     private const TRYON_IMAGE_QUALITY = 'high';
     private const TRYON_ASPECT_RATIO = '3:4';
 
@@ -138,6 +147,11 @@ class AiControlPlaneSeeder extends Seeder
         // Extra Gemini image models the Super-Admin can switch to for banners (Models page).
         foreach (self::BANNER_ALT_MODELS as $modelId => $meta) {
             $this->seedModel(AiOperation::KEY_BANNER_GENERATION, $modelId, $meta['label'], costHint: $meta['cost'], unit: AiModel::UNIT_PER_IMAGE);
+        }
+
+        // xAI/Grok text-to-image banner models, OFF by default (admin adds an xAI key + confirms price).
+        foreach (self::XAI_BANNER_MODELS as $modelId => $label) {
+            $this->seedModel(AiOperation::KEY_BANNER_GENERATION, $modelId, $label, costHint: 70_000, unit: AiModel::UNIT_PER_IMAGE, provider: AiModel::PROVIDER_XAI, isActive: false);
         }
 
         Prompt::updateOrCreate(

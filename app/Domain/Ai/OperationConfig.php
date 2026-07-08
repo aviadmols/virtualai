@@ -104,10 +104,13 @@ final readonly class OperationConfig
         return $this->fallbackFlatRatePriceMicroUsd() === null;
     }
 
-    /** A provider is flat-rate when it returns no inline USD cost (BytePlus today). */
+    /** A provider is flat-rate when it returns no inline USD cost (BytePlus + xAI/Grok). */
     private function isFlatRate(string $provider): bool
     {
-        return $provider === ImageGenerationProvider::PROVIDER_BYTEPLUS;
+        return in_array($provider, [
+            ImageGenerationProvider::PROVIDER_BYTEPLUS,
+            ImageGenerationProvider::PROVIDER_XAI,
+        ], true);
     }
 
     /** A price is usable only when it is a positive micro-USD amount; else null. */

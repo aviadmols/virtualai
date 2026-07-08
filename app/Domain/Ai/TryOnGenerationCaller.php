@@ -31,6 +31,11 @@ final class TryOnGenerationCaller
         'low' => '1K',
     ];
 
+    // xAI/Grok images/generations is TEXT-TO-IMAGE: only model + prompt + these two are sent
+    // (no size/quality/aspect/seed — xAI rejects unknown params).
+    private const XAI_RESPONSE_FORMAT = 'b64_json';
+    private const XAI_IMAGE_COUNT = 1;
+
     public function __construct(
         private readonly ProviderRouter $router,
     ) {}
@@ -99,9 +104,11 @@ final class TryOnGenerationCaller
             $config->operationKey,
             $modelId,
             null, // cross-provider stepping is generate()'s job; the provider serves one model
-            fn (string $model): array => $providerId === ImageGenerationProvider::PROVIDER_BYTEPLUS
-                ? $this->buildBytePlusBody($config, $model, $shopperImage, $variantImage, $vars)
-                : $this->buildOpenRouterBody($config, $model, $shopperImage, $variantImage, $vars),
+            fn (string $model): array => match ($providerId) {
+                ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->buildBytePlusBody($config, $model, $shopperImage, $variantImage, $vars),
+                ImageGenerationProvider::PROVIDER_XAI => $this->buildXaiBody($config, $model, $vars),
+                default => $this->buildOpenRouterBody($config, $model, $shopperImage, $variantImage, $vars),
+            },
         );
 
         $modelUsed = $provider->extractModelUsed($response, $modelId);
@@ -202,6 +209,32 @@ final class TryOnGenerationCaller
         }
 
         return $body;
+    }
+
+    /**
+     * xAI/Grok images/generations body — TEXT-TO-IMAGE (OpenAI-compatible). A single prompt
+     * (system prepended) + response format + count. xAI's endpoint takes NO input image, so the
+     * shopper/product photos are not sent; a Grok model renders from the prompt alone (it fits
+     * banners better than a true try-on). No size/quality/aspect/seed — xAI rejects unknown params.
+     *
+     * @param  array<string,string|int|float|null>  $vars
+     * @return array<string,mixed>
+     */
+    private function buildXaiBody(OperationConfig $config, string $model, array $vars): array
+    {
+        $prompt = $config->substituteUser($vars);
+        $system = $config->substituteSystem($vars);
+
+        if ($system !== null && $system !== '') {
+            $prompt = $system."\n\n".$prompt;
+        }
+
+        return [
+            'model' => $model,
+            'prompt' => $prompt,
+            'response_format' => self::XAI_RESPONSE_FORMAT,
+            'n' => self::XAI_IMAGE_COUNT,
+        ];
     }
 
     /**

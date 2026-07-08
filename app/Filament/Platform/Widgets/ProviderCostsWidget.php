@@ -26,6 +26,7 @@ class ProviderCostsWidget extends Widget
     private const LABELS = [
         ImageGenerationProvider::PROVIDER_OPENROUTER => 'platform.costs.providers.openrouter',
         ImageGenerationProvider::PROVIDER_BYTEPLUS => 'platform.costs.providers.byteplus',
+        ImageGenerationProvider::PROVIDER_XAI => 'platform.costs.providers.xai',
     ];
 
     private const LABEL_UNKNOWN = 'platform.costs.providers.unknown';
