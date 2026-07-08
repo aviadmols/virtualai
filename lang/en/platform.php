@@ -36,6 +36,13 @@ return [
         'title' => 'Costs vs revenue',
         'heading' => 'Platform margin',
         'window' => 'Last :days days',
+        'filter' => [
+            'period' => 'Period',
+            'last_days' => 'Last :days days',
+            'custom' => 'Custom range',
+            'from' => 'From',
+            'to' => 'To',
+        ],
         'kpi' => [
             'revenue' => 'Revenue billed',
             'cost' => 'OpenRouter cost',

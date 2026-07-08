@@ -5,7 +5,7 @@ namespace App\Filament\Platform\Widgets;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Reporting\CostsMetrics;
 use App\Domain\Reporting\CostsMetricsBuilder;
-use App\Domain\Reporting\MetricWindow;
+use App\Filament\Platform\Concerns\ResolvesReportWindow;
 use App\Models\Account;
 use Filament\Widgets\Widget;
 
@@ -23,6 +23,8 @@ use Filament\Widgets\Widget;
  */
 class PlatformKpiWidget extends Widget
 {
+    use ResolvesReportWindow;
+
     // === CONSTANTS ===
     protected static string $view = 'filament.platform.widgets.platform-kpi';
 
@@ -90,10 +92,10 @@ class PlatformKpiWidget extends Widget
         ];
     }
 
-    /** The platform-wide costs snapshot over the default 30-day window. */
+    /** The platform-wide costs snapshot over the page's selected window (default 30 days). */
     private function metrics(): CostsMetrics
     {
-        return app(CostsMetricsBuilder::class)->build(MetricWindow::lastDays());
+        return app(CostsMetricsBuilder::class)->build($this->reportWindow());
     }
 
     /** Active (non-suspended) account count — Account is the tenant root, read globally. */

@@ -32,6 +32,7 @@ final readonly class MetricWindow
     public const LABEL_TODAY = 'today';
     public const LABEL_LAST_N_DAYS = 'last_n_days';
     public const LABEL_ALL_TIME = 'all_time';
+    public const LABEL_CUSTOM = 'custom';
 
     private function __construct(
         public ?CarbonImmutable $from,
@@ -62,6 +63,23 @@ final readonly class MetricWindow
     public static function allTime(): self
     {
         return new self(null, null, self::LABEL_ALL_TIME);
+    }
+
+    /**
+     * An explicit inclusive date range [from, until] — for the Super-Admin report date picker.
+     * Normalised to whole days (start-of-day .. end-of-day) so both edge days count in full, and
+     * reversed bounds are swapped so a picker never yields an empty window.
+     */
+    public static function between(CarbonImmutable $from, CarbonImmutable $until): self
+    {
+        $start = $from->startOfDay();
+        $end = $until->endOfDay();
+
+        if ($start->greaterThan($end)) {
+            [$start, $end] = [$until->startOfDay(), $from->endOfDay()];
+        }
+
+        return new self($start, $end, self::LABEL_CUSTOM);
     }
 
     /**

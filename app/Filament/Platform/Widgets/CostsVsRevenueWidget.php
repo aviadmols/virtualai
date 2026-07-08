@@ -3,9 +3,8 @@
 namespace App\Filament\Platform\Widgets;
 
 use App\Domain\Credits\CreditMath;
-use App\Domain\Reporting\CostsMetrics;
 use App\Domain\Reporting\CostsMetricsBuilder;
-use App\Domain\Reporting\MetricWindow;
+use App\Filament\Platform\Concerns\ResolvesReportWindow;
 use Filament\Widgets\Widget;
 
 /**
@@ -17,13 +16,12 @@ use Filament\Widgets\Widget;
  */
 class CostsVsRevenueWidget extends Widget
 {
+    use ResolvesReportWindow;
+
     // === CONSTANTS ===
     protected static string $view = 'filament.platform.widgets.costs-vs-revenue';
 
     protected int|string|array $columnSpan = 'full';
-
-    // The default reporting window (last 30 days), surfaced in the header.
-    private const WINDOW_DAYS = MetricWindow::DEFAULT_DAYS;
 
     private const EMPTY_VALUE = '—';
 
@@ -41,12 +39,12 @@ class CostsVsRevenueWidget extends Widget
      */
     public function getSummary(): array
     {
-        $metrics = $this->metrics();
+        $metrics = app(CostsMetricsBuilder::class)->build($this->reportWindow());
         $revenue = $metrics->revenueMicroUsd;
 
         return [
             'hasData' => $metrics->chargeCount > 0,
-            'window' => self::WINDOW_DAYS,
+            'window' => $this->reportWindowDays(),
             'revenue' => $this->usd($metrics->revenueMicroUsd),
             'cost' => $this->usd($metrics->actualCostMicroUsd),
             'margin' => $this->usd($metrics->grossMarginMicroUsd),
@@ -64,12 +62,6 @@ class CostsVsRevenueWidget extends Widget
             'barCost' => $this->shareOf($metrics->actualCostMicroUsd, $revenue),
             'barMargin' => $this->shareOf(max(0, $metrics->grossMarginMicroUsd), $revenue),
         ];
-    }
-
-    /** The platform-wide snapshot over the default window. */
-    private function metrics(): CostsMetrics
-    {
-        return app(CostsMetricsBuilder::class)->build(MetricWindow::lastDays(self::WINDOW_DAYS));
     }
 
     /** Integer micro-USD → a $X.XX display string. */
