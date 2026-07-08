@@ -65,6 +65,25 @@ return [
         ],
         'empty' => 'No charges in this window yet',
         'empty_sub' => 'Cost and revenue appear once merchants run paid generations.',
+        'providers' => [
+            'title' => 'Spend by provider',
+            'sub' => 'The real cost paid to each AI provider in this window.',
+            'openrouter' => 'OpenRouter',
+            'byteplus' => 'BytePlus',
+            'unknown' => 'Other / legacy',
+            'empty' => 'No provider spend in this window yet.',
+        ],
+        'accounts' => [
+            'title' => 'Cost vs revenue by account',
+            'sub' => 'For each merchant: the real cost paid vs the amount billed, in this window.',
+            'account' => 'Account',
+            'cost' => 'Cost',
+            'revenue' => 'Charged',
+            'margin' => 'Margin',
+            'markup' => 'Markup',
+            'charges' => 'Charges',
+            'empty' => 'No account charges in this window yet.',
+        ],
     ],
 
     // P2 — Accounts.

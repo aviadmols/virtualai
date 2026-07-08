@@ -8,10 +8,18 @@ use App\Domain\Reporting\CostsMetrics;
 use App\Domain\Reporting\CostsMetricsBuilder;
 use App\Domain\Reporting\MetricWindow;
 use App\Models\Account;
+use App\Models\AiModel;
+use App\Models\AiOperation;
+use App\Models\EndUser;
+use App\Models\Generation;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\Site;
 use App\Support\Tenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 use Tests\TestCase;
 
 /**
@@ -105,6 +113,63 @@ class CostsMetricsTest extends TestCase
         $this->assertSame(1, $metrics->chargeCount);
         $this->assertSame(1_000_000, $metrics->revenueMicroUsd);
         $this->assertSame(400_000, $metrics->actualCostMicroUsd);
+    }
+
+    /** A succeeded try-on on a given model with a given real cost, under $account. */
+    private function succeededGeneration(Account $account, string $modelUsed, int $costMicro): void
+    {
+        Tenant::run($account, function () use ($account, $modelUsed, $costMicro): void {
+            $site = Site::factory()->forAccount($account)->create();
+            $endUser = EndUser::factory()->forSite($site)->create();
+            $product = Product::factory()->forSite($site)->confirmed()->create();
+            $variant = ProductVariant::factory()->forProduct($product)->create();
+
+            Generation::factory()->forContext($endUser, $product, $variant, uniqid('crq_'))->create([
+                'status' => Generation::STATUS_SUCCEEDED,
+                'model_used' => $modelUsed,
+                'actual_cost_micro_usd' => $costMicro,
+            ]);
+        });
+    }
+
+    public function test_by_provider_splits_cost_between_openrouter_and_byteplus(): void
+    {
+        AiModel::factory()->create(['operation_key' => AiOperation::KEY_TRY_ON_GENERATION, 'model_id' => 'or/model', 'provider' => 'openrouter']);
+        AiModel::factory()->create(['operation_key' => AiOperation::KEY_TRY_ON_GENERATION, 'model_id' => 'bp/model', 'provider' => 'byteplus']);
+
+        $account = Account::factory()->create();
+        $this->succeededGeneration($account, 'or/model', 400_000);
+        $this->succeededGeneration($account, 'or/model', 400_000);
+        $this->succeededGeneration($account, 'bp/model', 300_000);
+
+        $by = (new Collection($this->builder()->byProvider(MetricWindow::allTime())))->keyBy('provider');
+
+        $this->assertSame(800_000, $by['openrouter']['costMicroUsd']);
+        $this->assertSame(2, $by['openrouter']['count']);
+        $this->assertSame(300_000, $by['byteplus']['costMicroUsd']);
+        $this->assertSame(1, $by['byteplus']['count']);
+    }
+
+    public function test_by_account_splits_cost_and_revenue_per_account(): void
+    {
+        $alpha = Account::factory()->create(['name' => 'Alpha']);
+        $beta = Account::factory()->create(['name' => 'Beta']);
+
+        $this->charge($alpha, 1_000_000, 400_000, 1);
+        $this->charge($alpha, 1_000_000, 400_000, 2);
+        $this->charge($beta, 1_500_000, 600_000, 3);
+
+        $rows = $this->builder()->byAccount(MetricWindow::allTime());
+        $by = (new Collection($rows))->keyBy('accountName');
+
+        // Alpha: revenue 2.0, cost 0.8, margin 1.2, 2 charges — never mixed with Beta's.
+        $this->assertSame(2_000_000, $by['Alpha']['revenueMicroUsd']);
+        $this->assertSame(800_000, $by['Alpha']['costMicroUsd']);
+        $this->assertSame(1_200_000, $by['Alpha']['marginMicroUsd']);
+        $this->assertSame(2, $by['Alpha']['charges']);
+        $this->assertSame(1_500_000, $by['Beta']['revenueMicroUsd']);
+        // Ordered by revenue desc → Alpha ($2.00) before Beta ($1.50).
+        $this->assertSame('Alpha', $rows[0]['accountName']);
     }
 
     public function test_window_excludes_charges_outside_the_period(): void

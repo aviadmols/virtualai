@@ -6,7 +6,9 @@ use App\Domain\Credits\CreditLedgerService;
 use App\Domain\Credits\IdempotencyKey;
 use App\Domain\Reporting\MetricWindow;
 use App\Filament\Platform\Pages\Dashboard;
+use App\Filament\Platform\Widgets\AccountCostsWidget;
 use App\Filament\Platform\Widgets\CostsVsRevenueWidget;
+use App\Filament\Platform\Widgets\ProviderCostsWidget;
 use App\Models\Account;
 use App\Models\User;
 use App\Support\Tenant;
@@ -81,6 +83,32 @@ class CostsFilterTest extends TestCase
         $last90 = Livewire::test(CostsVsRevenueWidget::class, ['filters' => ['period' => '90']])
             ->instance()->getSummary();
         $this->assertSame('$10.00', $last90['revenue'], 'a 90-day window includes both charges');
+    }
+
+    public function test_the_account_breakdown_widget_formats_per_account_rows(): void
+    {
+        $account = Account::factory()->create(['name' => 'Kollector']);
+        $this->charge($account, 1_000_000, 400_000, 1);
+
+        $accounts = Livewire::test(AccountCostsWidget::class, ['filters' => ['period' => '30']])
+            ->instance()->getAccounts();
+
+        $this->assertTrue($accounts['hasData']);
+        $this->assertSame('Kollector', $accounts['rows'][0]['name']);
+        $this->assertSame('$0.40', $accounts['rows'][0]['cost']);
+        $this->assertSame('$1.00', $accounts['rows'][0]['revenue']);
+        $this->assertSame('$0.60', $accounts['rows'][0]['margin']);
+    }
+
+    public function test_the_provider_widget_always_shows_both_providers(): void
+    {
+        // With no generations yet, spend is zero — but the comparison still lists both providers.
+        $providers = Livewire::test(ProviderCostsWidget::class, ['filters' => ['period' => '30']])
+            ->instance()->getProviders();
+
+        $this->assertFalse($providers['hasData']);
+        $this->assertCount(2, $providers['cards']);
+        $this->assertSame('$0.00', $providers['cards'][0]['value']);
     }
 
     public function test_a_custom_range_narrows_to_that_range(): void

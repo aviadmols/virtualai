@@ -1,0 +1,66 @@
+/* ============================================================================
+ * Costs breakdown — the Super-Admin per-account cost-vs-revenue table (P1 costs
+ * view). A plain, scannable table: account, cost we paid, revenue billed, margin,
+ * realized markup, charges. Token-backed, tabular-nums for the money columns,
+ * logical properties so it mirrors in HE, horizontal-scroll safe on narrow widths.
+ * TOKENS: --toa-surface --toa-border --to-ink --to-ink-muted --to-danger
+ *   --to-space-2 --to-space-3 --to-space-4 --to-r-card --to-shadow-card
+ *   --toa-type-body-size --toa-type-caption-size --to-fw-medium --to-fw-semibold --to-bw-input
+ * ==========================================================================*/
+
+.to-cbd {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-3);
+}
+
+.to-cbd__scroll {
+    overflow-x: auto;
+    border-radius: var(--to-r-card);
+    border: var(--to-bw-input) solid var(--toa-border);
+    background: var(--toa-surface);
+    box-shadow: var(--to-shadow-card);
+}
+
+.to-cbd-table {
+    inline-size: 100%;
+    border-collapse: collapse;
+    font-size: var(--toa-type-body-size);
+}
+
+.to-cbd-table th {
+    text-align: start;
+    padding: var(--to-space-3) var(--to-space-4);
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-semibold);
+    letter-spacing: var(--to-track-eyebrow);
+    text-transform: uppercase;
+    border-block-end: var(--to-bw-input) solid var(--toa-border);
+    white-space: nowrap;
+}
+
+.to-cbd-table td {
+    padding: var(--to-space-3) var(--to-space-4);
+    color: var(--to-ink);
+    border-block-end: var(--to-bw-input) solid var(--toa-border);
+    white-space: nowrap;
+}
+
+.to-cbd-table tr:last-child td {
+    border-block-end: 0;
+}
+
+.to-cbd-table__name {
+    font-weight: var(--to-fw-medium);
+}
+
+/* Money / count columns — end-aligned, tabular figures so they line up. */
+.to-cbd-table__num {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.to-cbd-table__neg {
+    color: var(--to-danger);
+}
