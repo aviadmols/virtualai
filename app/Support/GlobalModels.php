@@ -30,6 +30,7 @@ final class GlobalModels
         'App\\Models\\AiOperation',          // per-operation defaults (ai-openrouter).
         'App\\Models\\Prompt',               // global/product_type-scoped prompts (ai-openrouter).
         'App\\Models\\PlatformSetting',      // platform-wide settings (control plane).
+        'App\\Models\\PlaygroundRun',        // Super-Admin model-test runs (no tenant; never charges).
     ];
 
     /** True if $class is on the global (non-tenant) allow-list. */

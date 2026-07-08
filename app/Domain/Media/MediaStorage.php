@@ -52,12 +52,16 @@ final class MediaStorage
     public const KIND_BANNER = 'banner';
     public const KIND_BANNER_SOURCE = 'banner-source';
 
+    // Playground (Super-Admin model test) result media prefix — NOT tenant-scoped.
+    private const PATH_PLAYGROUND = 'playground';
+
     // mime -> extension (the disk key carries a sane extension for the CDN).
     private const EXTENSIONS = [
         'image/jpeg' => 'jpg',
         'image/jpg' => 'jpg',
         'image/png' => 'png',
         'image/webp' => 'webp',
+        'video/mp4' => 'mp4',
     ];
     private const DEFAULT_EXTENSION = 'bin';
 
@@ -97,6 +101,20 @@ final class MediaStorage
     public function storeBannerResult(int $accountId, int $siteId, int $bannerAssetId, string $bytes, string $mime): StoredMedia
     {
         return $this->putBanner($accountId, $siteId, $bannerAssetId, self::KIND_BANNER, $bytes, $mime, 'public');
+    }
+
+    /**
+     * Store a Super-Admin PLAYGROUND result (image or mp4) PRIVATE under a non-tenant path
+     * (playground/{run}/...). Signed on demand for the admin view — never a tenant object.
+     */
+    public function storePlaygroundResult(int $runId, string $bytes, string $mime): StoredMedia
+    {
+        $extension = self::EXTENSIONS[strtolower($mime)] ?? self::DEFAULT_EXTENSION;
+        $path = implode('/', [self::PATH_PLAYGROUND, $runId, self::KIND_RESULT.'-'.Str::random(24).'.'.$extension]);
+
+        $this->disk()->put($path, $bytes, ['visibility' => 'private']);
+
+        return new StoredMedia($path, $mime, strlen($bytes));
     }
 
     /**

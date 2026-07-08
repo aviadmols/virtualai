@@ -92,6 +92,64 @@ return [
         ],
     ],
 
+    // Model Playground — the standalone Super-Admin model-test tool (never charges).
+    'playground' => [
+        'nav' => 'Playground',
+        'title' => 'Model Playground',
+        'started' => 'Run started — the result appears below when it finishes.',
+        'history' => 'Recent runs',
+        'run' => 'Run test',
+        'empty' => 'No test runs yet',
+        'empty_sub' => 'Pick a model, write a prompt, optionally add images, and run it.',
+        'generating' => 'Generating…',
+        'no_result' => 'No result',
+        'form' => [
+            'title' => 'New test',
+            'sub' => 'Test any image or video model directly. This never charges — it only calls the provider and records the result, render time and cost.',
+        ],
+        'video' => [
+            'title' => 'Video options',
+            'sub' => 'Sent to BytePlus (Seedance). Only these knobs are sent.',
+        ],
+        'field' => [
+            'kind' => 'Type',
+            'provider' => 'Provider',
+            'provider_help' => 'Images run on any provider; video runs on BytePlus (Seedance).',
+            'model_id' => 'Model ID',
+            'model_id_placeholder' => 'e.g. seedream-5-0-260128 or dreamina-seedance-2-0-260128',
+            'model_id_help' => 'The exact provider model id. Free text — test a new model without cataloguing it first.',
+            'prompt' => 'Prompt',
+            'inputs' => 'Input images',
+            'inputs_help' => 'Optional. Used as image-to-image / the video first frame. xAI (Grok) is text-to-image and ignores them.',
+            'price' => 'Price per run (USD)',
+            'price_help' => 'Optional. Shown as the run cost for flat-rate providers (BytePlus, xAI) and video (which return no cost). OpenRouter reports its real cost automatically.',
+            'resolution' => 'Resolution',
+            'duration' => 'Duration (seconds)',
+            'ratio' => 'Aspect ratio',
+            'ratio_auto' => 'Model default',
+        ],
+        'kind' => [
+            'image' => 'Image',
+            'video' => 'Video',
+        ],
+        'status' => [
+            'queued' => 'Queued',
+            'running' => 'Running',
+            'succeeded' => 'Done',
+            'failed' => 'Failed',
+        ],
+        'col' => [
+            'provider' => 'Provider',
+            'time' => 'Time',
+            'cost' => 'Cost',
+            'tokens' => 'Tokens',
+        ],
+        'unit' => [
+            'ms' => 'ms',
+            'seconds' => 's',
+        ],
+    ],
+
     // P1 — Generation timing log (every try-on call + how long it took).
     'timing_log' => [
         'title' => 'Generation log',

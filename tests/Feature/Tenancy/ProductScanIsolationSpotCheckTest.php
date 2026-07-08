@@ -236,13 +236,14 @@ class ProductScanIsolationSpotCheckTest extends TestCase
         $this->assertFalse(GlobalModels::isGlobal(Product::class));
         $this->assertFalse(GlobalModels::isGlobal(ProductVariant::class));
 
-        // The allow-list is exactly the documented five — nothing silently escaped.
+        // The allow-list is exactly the documented set — nothing silently escaped.
         $this->assertSame([
             \App\Models\User::class,
             'App\\Models\\AiModel',
             'App\\Models\\AiOperation',
             'App\\Models\\Prompt',
             'App\\Models\\PlatformSetting',
+            'App\\Models\\PlaygroundRun',
         ], GlobalModels::ALLOW_LIST);
     }
 

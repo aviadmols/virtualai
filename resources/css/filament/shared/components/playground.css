@@ -1,0 +1,135 @@
+/* ============================================================================
+ * Model Playground — the Super-Admin model-test gallery. A form section (Filament
+ * renders it) followed by a responsive card grid of runs: each card shows the result
+ * image/video, the status, model, prompt, and the measured render time + cost. Token
+ * -backed, logical properties so it mirrors in HE, no magic values.
+ * TOKENS: --toa-surface --toa-surface-alt --toa-border --to-r-card --to-shadow-card
+ *   --to-bw-input --to-space-* --to-ink --to-ink-muted --to-success --to-danger
+ *   --toa-accent --to-fw-semibold --toa-type-body-size --toa-type-caption-size
+ * ==========================================================================*/
+
+.to-pg {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-4);
+}
+
+/* The Run button sits under the form, aligned to the inline end (RTL-aware). */
+.to-pg__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-block-start: var(--to-space-4);
+}
+
+.to-pg__heading {
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-semibold);
+    color: var(--to-ink);
+}
+
+/* Responsive card grid — as many cards per row as fit at the min card width. */
+.to-pg-runs {
+    display: grid;
+    gap: var(--to-space-4);
+    grid-template-columns: repeat(auto-fill, minmax(var(--to-pg-card-min, 280px), 1fr));
+}
+
+.to-pg-run {
+    display: flex;
+    flex-direction: column;
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-card);
+    background: var(--toa-surface);
+    box-shadow: var(--to-shadow-card);
+    overflow: hidden;
+}
+
+.to-pg-run__media {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 4 / 3;
+    background: var(--toa-surface-alt);
+    overflow: hidden;
+}
+
+.to-pg-run__media img,
+.to-pg-run__media video {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: contain;
+}
+
+.to-pg-run__placeholder {
+    padding: var(--to-space-4);
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    text-align: center;
+}
+
+.to-pg-run__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+    padding: var(--to-space-4);
+}
+
+.to-pg-run__model {
+    color: var(--to-ink);
+    font-weight: var(--to-fw-semibold);
+    word-break: break-all;
+}
+
+.to-pg-run__prompt {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+}
+
+.to-pg-run__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--to-space-3);
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-ink-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.to-pg-run__fact-value {
+    color: var(--to-ink);
+    font-weight: var(--to-fw-semibold);
+}
+
+/* Status pill with a leading dot in the state colour. */
+.to-pg-run__status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-2);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-semibold);
+}
+
+.to-pg-run__status::before {
+    content: "";
+    inline-size: var(--to-space-2);
+    block-size: var(--to-space-2);
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.to-pg-run__status--queued,
+.to-pg-run__status--running {
+    color: var(--toa-accent);
+}
+
+.to-pg-run__status--succeeded {
+    color: var(--to-success);
+}
+
+.to-pg-run__status--failed {
+    color: var(--to-danger);
+}
+
+.to-pg-run__error {
+    color: var(--to-danger);
+    font-size: var(--toa-type-caption-size);
+}
