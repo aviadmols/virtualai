@@ -18,6 +18,7 @@
 @import '../shared/components/base.css';
 @import '../shared/components/badge.css';
 @import '../shared/components/kpi-card.css';
+@import '../shared/components/kpi-grid.css';
 @import '../shared/components/buttons.css';
 @import '../shared/components/data-table.css';
 @import '../shared/components/empty-state.css';
