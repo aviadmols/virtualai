@@ -18,8 +18,11 @@ interface ImageGenerationProvider
     public const PROVIDER_OPENROUTER = 'openrouter';
     public const PROVIDER_BYTEPLUS = 'byteplus';
     public const PROVIDER_XAI = 'xai';
+    // AtlasCloud is a VIDEO-only upstream (async task API); it never serves try-on images, but its
+    // id lives here as the single canonical provider list (ai_models.provider enum, costs report).
+    public const PROVIDER_ATLASCLOUD = 'atlascloud';
 
-    public const PROVIDERS = [self::PROVIDER_OPENROUTER, self::PROVIDER_BYTEPLUS, self::PROVIDER_XAI];
+    public const PROVIDERS = [self::PROVIDER_OPENROUTER, self::PROVIDER_BYTEPLUS, self::PROVIDER_XAI, self::PROVIDER_ATLASCLOUD];
 
     /**
      * Run $buildBody($model) against the primary then the fallback model, retrying

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Ai;
 
+use App\Domain\Ai\Contracts\VideoGenerationProvider;
 use App\Domain\Platform\PlatformSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\Log;
  * may be passed in). NO USD cost is returned (only usage tokens) — the caller applies the admin
  * per-video flat-rate price. Failures classify into the shared OpenRouterException codes.
  */
-final class BytePlusVideoClient
+final class BytePlusVideoClient implements VideoGenerationProvider
 {
     // === CONSTANTS ===
     private const TASKS_PATH = '/contents/generations/tasks';
@@ -45,8 +46,8 @@ final class BytePlusVideoClient
     private const MAX_VIDEO_BYTES = 104_857_600; // 100 MiB result-download ceiling
 
     private const STATUS_SUCCEEDED = 'succeeded';
-    // Terminal, non-success task states — a poll that sees these stops (a result, not an error).
-    public const TERMINAL_FAILURE = ['failed', 'cancelled', 'expired'];
+    // TERMINAL_FAILURE (the terminal non-success states) is inherited from VideoGenerationProvider,
+    // the shared contract, so BytePlusVideoClient::TERMINAL_FAILURE still resolves to it.
 
     private const STATUS_RATE_LIMITED = 429;
     private const STATUS_SERVER_MIN = 500;

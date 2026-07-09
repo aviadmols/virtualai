@@ -3,7 +3,7 @@
 namespace App\Domain\Storyboard;
 
 use App\Domain\Ai\AiOperationResolver;
-use App\Domain\Ai\BytePlusVideoClient;
+use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Media\MediaStorage;
 use App\Models\AiModel;
 use App\Models\AiOperation;
@@ -13,15 +13,16 @@ use Throwable;
 /**
  * StoryboardClipGenerator — animates a frame's selected image into a short video clip.
  *
- * Uses the storyboard_clip AiOperation (admin-configured Seedance model + params + motion prompt)
- * and submits an image-to-video task via BytePlusVideoClient (the frame image = first_frame). Async:
- * this only SUBMITS + records the task id; PollStoryboardClipJob completes it. NOT a money path.
+ * Uses the storyboard_clip AiOperation (admin-configured model + params + motion prompt) and submits
+ * an image-to-video task via the provider the operation resolves to (BytePlus/Seedance or AtlasCloud)
+ * — VideoProviderRouter picks the client (the frame image = the input reference). Async: this only
+ * SUBMITS + records the task id + the provider; PollStoryboardClipJob completes it. NOT a money path.
  */
 final class StoryboardClipGenerator
 {
     public function __construct(
         private readonly AiOperationResolver $resolver,
-        private readonly BytePlusVideoClient $video,
+        private readonly VideoProviderRouter $router,
         private readonly MediaStorage $media,
     ) {}
 
@@ -43,16 +44,18 @@ final class StoryboardClipGenerator
             'motion' => (string) $frame->motion_prompt,
         ]);
         $baseUrl = $this->baseUrl($config->model);
+        $video = $this->router->for($config->provider);
 
         $frame->update([
             'video_status' => StoryboardFrame::VIDEO_GENERATING,
             'video_poll_attempts' => 0,
             // Video is flat-rate (no inline USD) — carry the per-clip price so the poller records it.
-            'video_meta' => ['base_url' => $baseUrl, 'model' => $config->model, 'cost' => $config->flatRatePriceMicroUsd()],
+            // The provider is carried so the poller resolves the SAME upstream client that submitted.
+            'video_meta' => ['provider' => $config->provider, 'base_url' => $baseUrl, 'model' => $config->model, 'cost' => $config->flatRatePriceMicroUsd()],
         ]);
 
         try {
-            $taskId = $this->video->submitTask($config->model, $prompt, [$firstFrame], $config->params, $baseUrl);
+            $taskId = $video->submitTask($config->model, $prompt, [$firstFrame], $config->params, $baseUrl);
         } catch (Throwable $e) {
             $frame->update([
                 'video_status' => StoryboardFrame::VIDEO_FAILED,

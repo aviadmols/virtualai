@@ -70,6 +70,7 @@ return [
             'openrouter' => 'OpenRouter',
             'byteplus' => 'BytePlus',
             'xai' => 'xAI (Grok)',
+            'atlascloud' => 'AtlasCloud',
             'unknown' => 'אחר / ישן',
             'empty' => 'אין הוצאה לספקים בחלון הזמן הזה.',
         ],

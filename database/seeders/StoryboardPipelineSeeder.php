@@ -134,6 +134,9 @@ class StoryboardPipelineSeeder extends Seeder
         );
 
         $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, 'dreamina-seedance-2-0-260128', 'Seedance 2.0 (BytePlus)', isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_BYTEPLUS);
+        // A NON-default AtlasCloud option so an admin can switch the clip step to AtlasCloud from the
+        // pipeline settings; BytePlus Seedance stays the default. The model id is volatile — verify it.
+        $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, 'bytedance/seedance-2.0/reference-to-video', 'Seedance 2.0 (AtlasCloud)', unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_ATLASCLOUD);
 
         $this->seedPrompt(
             AiOperation::KEY_STORYBOARD_CLIP,

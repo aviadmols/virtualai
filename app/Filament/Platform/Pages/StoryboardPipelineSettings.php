@@ -68,6 +68,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
         AiModel::PROVIDER_OPENROUTER => 'OpenRouter',
         AiModel::PROVIDER_BYTEPLUS => 'BytePlus',
         AiModel::PROVIDER_XAI => 'xAI (Grok)',
+        AiModel::PROVIDER_ATLASCLOUD => 'AtlasCloud',
     ];
 
     // Known model ids per provider — offered in the Model dropdown alongside catalogued models so
@@ -76,6 +77,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
         AiModel::PROVIDER_OPENROUTER => ['google/gemini-2.5-flash', 'openai/gpt-4o-mini', 'google/gemini-2.5-flash-image', 'google/gemini-2.0-flash-exp'],
         AiModel::PROVIDER_BYTEPLUS => ['seedream-4-0-250828', 'seedream-5-0-260128', 'seedream-4-5-251128', 'dreamina-seedance-2-0-260128'],
         AiModel::PROVIDER_XAI => ['grok-2-image', 'grok-imagine-image-quality'],
+        AiModel::PROVIDER_ATLASCLOUD => ['bytedance/seedance-2.0/reference-to-video', 'bytedance/seedance-2.0/image-to-video'],
     ];
 
     /** @var array<string,mixed> */

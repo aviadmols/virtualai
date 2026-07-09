@@ -71,6 +71,7 @@ return [
             'openrouter' => 'OpenRouter',
             'byteplus' => 'BytePlus',
             'xai' => 'xAI (Grok)',
+            'atlascloud' => 'AtlasCloud',
             'unknown' => 'Other / legacy',
             'empty' => 'No provider spend in this window yet.',
         ],

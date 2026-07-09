@@ -35,10 +35,15 @@ class PlaygroundRun extends Model
     public const COST_SOURCE_FLAT_RATE = 'flat_rate';   // the admin-entered per-run price
     public const COST_SOURCE_UNAVAILABLE = 'unavailable';
 
-    // Providers reuse the canonical ids (image: all; video: byteplus).
+    // Providers reuse the canonical ids (image: all; video: byteplus + atlascloud).
     public const PROVIDER_OPENROUTER = ImageGenerationProvider::PROVIDER_OPENROUTER;
     public const PROVIDER_BYTEPLUS = ImageGenerationProvider::PROVIDER_BYTEPLUS;
     public const PROVIDER_XAI = ImageGenerationProvider::PROVIDER_XAI;
+    public const PROVIDER_ATLASCLOUD = ImageGenerationProvider::PROVIDER_ATLASCLOUD;
+
+    // The async VIDEO-capable providers; a video run must use one of these (else it falls back to
+    // the BytePlus default so a stale image-provider selection can't mis-route).
+    public const VIDEO_PROVIDERS = [self::PROVIDER_BYTEPLUS, self::PROVIDER_ATLASCLOUD];
 
     // meta keys — the video request knobs + the resolved region host.
     public const META_RATIO = 'ratio';

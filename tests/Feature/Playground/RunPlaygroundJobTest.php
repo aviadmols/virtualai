@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Playground;
 
-use App\Domain\Ai\BytePlusVideoClient;
+use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Playground\PlaygroundImageRunner;
 use App\Jobs\PollPlaygroundVideoJob;
@@ -39,7 +39,7 @@ class RunPlaygroundJobTest extends TestCase
     {
         (new RunPlaygroundJob($run->id))->handle(
             app(PlaygroundImageRunner::class),
-            app(BytePlusVideoClient::class),
+            app(VideoProviderRouter::class),
             app(MediaStorage::class),
         );
     }

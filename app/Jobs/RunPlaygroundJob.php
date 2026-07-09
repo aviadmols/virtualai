@@ -2,9 +2,9 @@
 
 namespace App\Jobs;
 
-use App\Domain\Ai\BytePlusVideoClient;
 use App\Domain\Ai\ImagePayload;
 use App\Domain\Ai\ParsedCost;
+use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Playground\PlaygroundImageRunner;
@@ -45,7 +45,7 @@ final class RunPlaygroundJob implements ShouldQueue
         $this->onQueue((string) config('trayon.queues.generations'));
     }
 
-    public function handle(PlaygroundImageRunner $images, BytePlusVideoClient $video, MediaStorage $media): void
+    public function handle(PlaygroundImageRunner $images, VideoProviderRouter $router, MediaStorage $media): void
     {
         $run = PlaygroundRun::find($this->runId);
 
@@ -57,7 +57,7 @@ final class RunPlaygroundJob implements ShouldQueue
 
         try {
             $run->isVideo()
-                ? $this->submitVideo($run, $video, $media)
+                ? $this->submitVideo($run, $router, $media)
                 : $this->runImage($run, $images, $media);
         } catch (Throwable $e) {
             $this->markFailed($run, $e->getMessage());
@@ -87,13 +87,13 @@ final class RunPlaygroundJob implements ShouldQueue
         ]);
     }
 
-    /** Submit the async video task, then hand off to the poller (delayed). */
-    private function submitVideo(PlaygroundRun $run, BytePlusVideoClient $video, MediaStorage $media): void
+    /** Submit the async video task via the run's provider client, then hand off to the poller (delayed). */
+    private function submitVideo(PlaygroundRun $run, VideoProviderRouter $router, MediaStorage $media): void
     {
         $urls = $this->inputUrls($run, $media);
         $baseUrl = is_array($run->meta) ? ($run->meta[PlaygroundRun::META_BASE_URL] ?? null) : null;
 
-        $taskId = $video->submitTask($run->model_id, $run->prompt, $urls, $run->meta ?? [], $baseUrl);
+        $taskId = $router->for($run->provider)->submitTask($run->model_id, $run->prompt, $urls, $run->meta ?? [], $baseUrl);
 
         $run->update([
             'provider_task_id' => $taskId,

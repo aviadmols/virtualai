@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Playground;
 
-use App\Domain\Ai\BytePlusVideoClient;
+use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Media\MediaStorage;
 use App\Jobs\PollPlaygroundVideoJob;
 use App\Models\PlaygroundRun;
@@ -45,7 +45,7 @@ class PollPlaygroundVideoJobTest extends TestCase
 
     private function poll(PlaygroundRun $run): void
     {
-        (new PollPlaygroundVideoJob($run->id))->handle(app(BytePlusVideoClient::class), app(MediaStorage::class));
+        (new PollPlaygroundVideoJob($run->id))->handle(app(VideoProviderRouter::class), app(MediaStorage::class));
     }
 
     public function test_a_succeeded_task_stores_the_video_and_records_time_cost_and_tokens(): void

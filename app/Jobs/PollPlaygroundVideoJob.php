@@ -2,7 +2,8 @@
 
 namespace App\Jobs;
 
-use App\Domain\Ai\BytePlusVideoClient;
+use App\Domain\Ai\Contracts\VideoGenerationProvider;
+use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Media\MediaStorage;
 use App\Models\PlaygroundRun;
 use Illuminate\Bus\Queueable;
@@ -43,7 +44,7 @@ final class PollPlaygroundVideoJob implements ShouldQueue
         $this->onQueue((string) config('trayon.queues.media'));
     }
 
-    public function handle(BytePlusVideoClient $video, MediaStorage $media): void
+    public function handle(VideoProviderRouter $router, MediaStorage $media): void
     {
         $run = PlaygroundRun::find($this->runId);
 
@@ -58,6 +59,8 @@ final class PollPlaygroundVideoJob implements ShouldQueue
         }
 
         $baseUrl = is_array($run->meta) ? ($run->meta[PlaygroundRun::META_BASE_URL] ?? null) : null;
+        // Resolve the SAME upstream client that submitted this task (the run's provider).
+        $video = $router->for($run->provider);
 
         try {
             $task = $video->pollTask($run->provider_task_id, $baseUrl);
@@ -74,7 +77,7 @@ final class PollPlaygroundVideoJob implements ShouldQueue
             return;
         }
 
-        if (in_array((string) ($task['status'] ?? ''), BytePlusVideoClient::TERMINAL_FAILURE, true)) {
+        if (in_array((string) ($task['status'] ?? ''), VideoGenerationProvider::TERMINAL_FAILURE, true)) {
             $this->markFailed($run, $this->taskError($task));
 
             return;
@@ -84,7 +87,7 @@ final class PollPlaygroundVideoJob implements ShouldQueue
     }
 
     /** Download + store the MP4 and record duration + cost. */
-    private function finish(PlaygroundRun $run, array $task, BytePlusVideoClient $video, MediaStorage $media): void
+    private function finish(PlaygroundRun $run, array $task, VideoGenerationProvider $video, MediaStorage $media): void
     {
         $url = data_get($task, 'content.video_url');
         if (! is_string($url) || $url === '') {

@@ -62,23 +62,37 @@ class ModelPlayground extends Page implements HasForms
     private const MAX_INPUT_KB = 5120;
     private const PROMPT_PREVIEW_CHARS = 140;
 
-    // Provider id → display label (image: all; video: byteplus only).
+    // Provider id → display label (image: all; video: byteplus + atlascloud).
     private const PROVIDER_LABELS = [
         ImageGenerationProvider::PROVIDER_OPENROUTER => 'OpenRouter',
         ImageGenerationProvider::PROVIDER_BYTEPLUS => 'BytePlus',
         ImageGenerationProvider::PROVIDER_XAI => 'xAI (Grok)',
+        ImageGenerationProvider::PROVIDER_ATLASCLOUD => 'AtlasCloud',
     ];
 
-    // Video resolution + ratio choices (only these knobs are sent to BytePlus).
+    // The async VIDEO-capable providers offered for a video run.
+    private const VIDEO_PROVIDER_LABELS = [
+        ImageGenerationProvider::PROVIDER_BYTEPLUS => 'BytePlus',
+        ImageGenerationProvider::PROVIDER_ATLASCLOUD => 'AtlasCloud',
+    ];
+
+    // Video resolution + ratio choices (only these knobs are sent to the video provider).
     private const RESOLUTIONS = ['480p', '720p', '1080p'];
     private const RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', 'adaptive'];
 
-    // Known Seedance video model ids offered as datalist suggestions (free text — verify per account).
+    // Known video model ids offered as datalist suggestions per video provider (free text — verify
+    // per account: BytePlus/Seedance ids vs AtlasCloud path-style ids).
     private const VIDEO_MODEL_SUGGESTIONS = [
-        'dreamina-seedance-2-0-260128',
-        'dreamina-seedance-2-0-fast-260128',
-        'seedance-1-0-pro-250528',
-        'seedance-1-0-lite-i2v-250428',
+        ImageGenerationProvider::PROVIDER_BYTEPLUS => [
+            'dreamina-seedance-2-0-260128',
+            'dreamina-seedance-2-0-fast-260128',
+            'seedance-1-0-pro-250528',
+            'seedance-1-0-lite-i2v-250428',
+        ],
+        ImageGenerationProvider::PROVIDER_ATLASCLOUD => [
+            'bytedance/seedance-2.0/reference-to-video',
+            'bytedance/seedance-2.0/image-to-video',
+        ],
     ];
 
     /** @var array<string,mixed> */
@@ -197,8 +211,12 @@ class ModelPlayground extends Page implements HasForms
         $data = $this->form->getState();
 
         $kind = (string) $data['kind'];
-        // Video is BytePlus-only; force it so a stale provider selection can't mis-route.
-        $provider = $kind === PlaygroundRun::KIND_VIDEO ? PlaygroundRun::PROVIDER_BYTEPLUS : (string) $data['provider'];
+        $provider = (string) $data['provider'];
+        // A video run must use a video-capable provider; fall back to BytePlus so a stale image
+        // provider selection can't mis-route.
+        if ($kind === PlaygroundRun::KIND_VIDEO && ! in_array($provider, PlaygroundRun::VIDEO_PROVIDERS, true)) {
+            $provider = PlaygroundRun::PROVIDER_BYTEPLUS;
+        }
 
         $priceMicro = filled($data['price'] ?? null) ? CreditMath::usdToMicro((float) $data['price']) : null;
 
@@ -284,21 +302,21 @@ class ModelPlayground extends Page implements HasForms
             ->all();
     }
 
-    /** Providers offered for a kind — video is BytePlus-only. @return array<string,string> */
+    /** Providers offered for a kind — video is the async video-capable set. @return array<string,string> */
     private static function providerOptions(string $kind): array
     {
         if ($kind === PlaygroundRun::KIND_VIDEO) {
-            return [PlaygroundRun::PROVIDER_BYTEPLUS => self::PROVIDER_LABELS[PlaygroundRun::PROVIDER_BYTEPLUS]];
+            return self::VIDEO_PROVIDER_LABELS;
         }
 
         return self::PROVIDER_LABELS;
     }
 
-    /** Datalist model-id suggestions: catalogued models for images, known Seedance ids for video. */
+    /** Datalist model-id suggestions: catalogued models for images, known video ids per provider. */
     private static function modelSuggestions(string $kind, string $provider): array
     {
         if ($kind === PlaygroundRun::KIND_VIDEO) {
-            return self::VIDEO_MODEL_SUGGESTIONS;
+            return self::VIDEO_MODEL_SUGGESTIONS[$provider] ?? self::VIDEO_MODEL_SUGGESTIONS[PlaygroundRun::PROVIDER_BYTEPLUS];
         }
 
         return AiModel::query()

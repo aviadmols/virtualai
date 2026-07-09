@@ -2,7 +2,9 @@
 
 namespace App\Jobs;
 
-use App\Domain\Ai\BytePlusVideoClient;
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
+use App\Domain\Ai\Contracts\VideoGenerationProvider;
+use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Media\MediaStorage;
 use App\Models\StoryboardFrame;
 use Illuminate\Bus\Queueable;
@@ -39,7 +41,7 @@ final class PollStoryboardClipJob implements ShouldQueue
         $this->onQueue((string) config('trayon.queues.media'));
     }
 
-    public function handle(BytePlusVideoClient $video, MediaStorage $media): void
+    public function handle(VideoProviderRouter $router, MediaStorage $media): void
     {
         $frame = StoryboardFrame::find($this->frameId);
 
@@ -53,7 +55,10 @@ final class PollStoryboardClipJob implements ShouldQueue
             return;
         }
 
-        $baseUrl = is_array($frame->video_meta) ? ($frame->video_meta['base_url'] ?? null) : null;
+        $meta = is_array($frame->video_meta) ? $frame->video_meta : [];
+        $baseUrl = $meta['base_url'] ?? null;
+        // Resolve the SAME upstream client that submitted this task (recorded at submit time).
+        $video = $router->for((string) ($meta['provider'] ?? ImageGenerationProvider::PROVIDER_BYTEPLUS));
 
         try {
             $task = $video->pollTask($frame->video_task_id, $baseUrl);
@@ -69,7 +74,7 @@ final class PollStoryboardClipJob implements ShouldQueue
             return;
         }
 
-        if (in_array((string) ($task['status'] ?? ''), BytePlusVideoClient::TERMINAL_FAILURE, true)) {
+        if (in_array((string) ($task['status'] ?? ''), VideoGenerationProvider::TERMINAL_FAILURE, true)) {
             $this->markFailed($frame, $this->taskError($task));
 
             return;
@@ -78,7 +83,7 @@ final class PollStoryboardClipJob implements ShouldQueue
         $this->reschedule($frame, null);
     }
 
-    private function finish(StoryboardFrame $frame, array $task, BytePlusVideoClient $video, MediaStorage $media): void
+    private function finish(StoryboardFrame $frame, array $task, VideoGenerationProvider $video, MediaStorage $media): void
     {
         $url = data_get($task, 'content.video_url');
         if (! is_string($url) || $url === '') {

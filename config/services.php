@@ -73,6 +73,16 @@ return [
         'timeout' => (int) env('XAI_TIMEOUT', 80),
     ],
 
+    // AtlasCloud — an async VIDEO provider (generateVideo task API) for storyboard clips. Key is
+    // server-side only. base_url is the single global API host (no per-model region). Video is
+    // flat-rate (no inline USD) and storyboard clips never charge. timeout must fit a submit or a
+    // poll+download under the media-queue worker timeout.
+    'atlascloud' => [
+        'api_key' => env('ATLASCLOUD_API_KEY'),
+        'base_url' => env('ATLASCLOUD_BASE_URL', 'https://api.atlascloud.ai/api/v1'),
+        'timeout' => (int) env('ATLASCLOUD_TIMEOUT', 80),
+    ],
+
     // PayPlus — the LOCKED credit-purchase rail for v1 (behind CreditPaymentProvider).
     // secret_key is BOTH the request auth header and the webhook-signature HMAC key (the
     // `hash` header = base64(HMAC-SHA256(rawBody, secret_key))). webhook_secret is kept
