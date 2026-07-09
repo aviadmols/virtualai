@@ -111,10 +111,9 @@ class StoryboardBuilder extends Page
                         Textarea::make('prompt')
                             ->label(__('platform.storyboard.combine_prompt'))
                             ->helperText(__('platform.storyboard.combine_prompt_help'))
-                            ->rows(4)
-                            ->default(fn (): string => (string) $this->record->story_idea)
-                            ->visible(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_REFERENCE)
-                            ->required(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_REFERENCE),
+                            ->placeholder(__('platform.storyboard.combine_prompt_placeholder'))
+                            ->rows(3)
+                            ->visible(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_REFERENCE),
                         Select::make('ratio')
                             ->label(__('platform.storyboard.combine_ratio'))
                             ->options(self::RATIOS)

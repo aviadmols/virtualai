@@ -50,6 +50,12 @@ final class CombineStoryboardVideoJob implements ShouldQueue
     private const MAX_POLL_ATTEMPTS = 60;   // 60 × 15s ≈ 15 min for the render(s) to finish
     private const POLL_DELAY = 15;
     private const DEFAULT_RATIO = 'adaptive';
+    private const MAX_REFERENCE_IMAGES = 8; // cap the frames/refs sent inline to the provider
+
+    // The default directive when the admin leaves the prompt empty — the video must FOLLOW the
+    // storyboard (same characters, plot, structure). The story + per-frame scenes are appended as data.
+    private const AUTO_DIRECTIVE = 'Create ONE continuous cinematic video that follows this storyboard exactly, in order. '
+        .'Keep the SAME characters, appearance, wardrobe and visual style shown in the reference images, and preserve the plot and the film\'s structure across the whole video.';
 
     public function __construct(
         public readonly int $projectId,
@@ -108,7 +114,8 @@ final class CombineStoryboardVideoJob implements ShouldQueue
 
         $config = app(AiOperationResolver::class)->for(AiOperation::KEY_STORYBOARD_CLIP);
         $client = $router->for($config->provider);
-        $prompt = ($this->prompt !== null && $this->prompt !== '') ? $this->prompt : (string) $project->story_idea;
+        // No prompt entered → auto-build one from the storyboard (keeps characters, plot, structure).
+        $prompt = ($this->prompt !== null && $this->prompt !== '') ? $this->prompt : $this->autoPrompt($project);
 
         $taskId = $client->submitTask($config->model, $prompt, $refUrls, [
             'resolution' => $this->resolution,
@@ -229,10 +236,27 @@ final class CombineStoryboardVideoJob implements ShouldQueue
         $this->finish($project, $composer->concatClips($project, $this->resolution));
     }
 
-    /** Signed URLs of the project's uploaded reference images (@image1..N), in order. */
+    /**
+     * Signed URLs to feed the reference-to-video: the generated storyboard FRAMES (they carry the
+     * characters + scenes the video must follow), capped; falls back to the uploaded @image refs.
+     */
     private function referenceImageUrls(StoryboardProject $project): array
     {
         $media = app(MediaStorage::class);
+
+        $urls = $project->frames()
+            ->whereNotNull('image_path')
+            ->orderBy('frame_number')
+            ->limit(self::MAX_REFERENCE_IMAGES)
+            ->get()
+            ->map(fn ($frame): ?string => $media->signedUrl($frame->image_path))
+            ->filter()
+            ->values()
+            ->all();
+
+        if ($urls !== []) {
+            return $urls;
+        }
 
         return $project->assets()
             ->whereNotNull('file_path')
@@ -242,6 +266,34 @@ final class CombineStoryboardVideoJob implements ShouldQueue
             ->filter()
             ->values()
             ->all();
+    }
+
+    /**
+     * Auto-build the video prompt from the storyboard when the admin leaves it empty: a fixed
+     * directive to FOLLOW the storyboard (same characters, plot, structure) + the story idea +
+     * every frame's description, in order. The variable parts are DATA, not a creative prompt.
+     */
+    private function autoPrompt(StoryboardProject $project): string
+    {
+        $scenes = $project->frames()
+            ->orderBy('frame_number')
+            ->get()
+            ->map(fn ($frame): string => trim((string) $frame->description))
+            ->filter()
+            ->values()
+            ->all();
+
+        $parts = [self::AUTO_DIRECTIVE];
+
+        if (($story = trim((string) $project->story_idea)) !== '') {
+            $parts[] = 'Story: '.$story;
+        }
+
+        if ($scenes !== []) {
+            $parts[] = 'Scenes in order: '.implode(' | ', $scenes);
+        }
+
+        return implode("\n", $parts);
     }
 
     /** Aggregate each frame's clip-failure reason (video_meta.error) for the log + on-screen error. */
