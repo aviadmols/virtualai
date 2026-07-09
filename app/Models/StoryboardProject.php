@@ -30,6 +30,11 @@ class StoryboardProject extends Model
     public const PIPE_CHARACTERS = 'characters';
     public const PIPE_VISUAL_BIBLE = 'visual_bible';
 
+    // Combined-video (all frames stitched into one MP4) lifecycle.
+    public const VIDEO_GENERATING = 'generating';
+    public const VIDEO_READY = 'ready';
+    public const VIDEO_FAILED = 'failed';
+
     protected $fillable = [
         'created_by',
         'title',
@@ -44,6 +49,9 @@ class StoryboardProject extends Model
         'status',
         'pipeline',
         'meta',
+        'final_video_path',
+        'final_video_status',
+        'final_video_meta',
     ];
 
     protected function casts(): array
@@ -51,6 +59,7 @@ class StoryboardProject extends Model
         return [
             'pipeline' => 'array',
             'meta' => 'array',
+            'final_video_meta' => 'array',
             'duration_seconds' => 'integer',
             'frame_interval_seconds' => 'integer',
         ];

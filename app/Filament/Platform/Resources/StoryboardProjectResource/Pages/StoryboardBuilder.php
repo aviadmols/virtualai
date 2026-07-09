@@ -6,6 +6,7 @@ use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Storyboard\StoryboardFrameGenerator;
 use App\Filament\Platform\Resources\StoryboardProjectResource;
+use App\Jobs\CombineStoryboardVideoJob;
 use App\Jobs\GenerateStoryboardClipJob;
 use App\Jobs\GenerateStoryboardFrameJob;
 use App\Jobs\RunStoryboardPipelineJob;
@@ -14,6 +15,8 @@ use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
 use App\Models\StoryboardStepRun;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
@@ -34,6 +37,11 @@ class StoryboardBuilder extends Page
     protected static string $view = 'filament.platform.storyboard.builder';
 
     private const MS_SECOND_THRESHOLD = 1000;
+
+    // Combined-video options (output height per key; width derived from the project aspect).
+    private const RESOLUTIONS = ['720p' => '720p', '1080p' => '1080p'];
+    private const DEFAULT_RESOLUTION = '1080p';
+    private const DEFAULT_SECONDS = 15;
 
     // Inline frame-prompt editor state (no modal — a per-frame inline form).
     public ?int $editingFrameId = null;
@@ -79,13 +87,35 @@ class StoryboardBuilder extends Page
                 ->color('gray')
                 ->visible(fn (): bool => $this->record->frames()->exists())
                 ->action(fn () => $this->generateAllFrames()),
-            Action::make('generateAllClips')
-                ->label(__('platform.storyboard.generate_all_clips'))
-                ->icon('heroicon-o-video-camera')
+            Action::make('combineVideo')
+                ->label(__('platform.storyboard.combine_video'))
+                ->icon('heroicon-o-film')
                 ->color('gray')
-                ->requiresConfirmation()
                 ->visible(fn (): bool => $this->record->frames()->whereNotNull('image_path')->exists())
-                ->action(fn () => $this->generateAllClips()),
+                ->form([
+                    Select::make('resolution')
+                        ->label(__('platform.storyboard.combine_resolution'))
+                        ->options(self::RESOLUTIONS)
+                        ->default(self::DEFAULT_RESOLUTION)
+                        ->selectablePlaceholder(false)
+                        ->required(),
+                    TextInput::make('seconds')
+                        ->label(__('platform.storyboard.combine_seconds'))
+                        ->helperText(__('platform.storyboard.combine_seconds_help'))
+                        ->numeric()
+                        ->minValue(3)
+                        ->maxValue(120)
+                        ->default(fn (): int => max(3, ((int) $this->record->duration_seconds) ?: self::DEFAULT_SECONDS))
+                        ->required(),
+                ])
+                ->action(function (array $data): void {
+                    $this->record->update([
+                        'final_video_status' => StoryboardProject::VIDEO_GENERATING,
+                        'final_video_meta' => null,
+                    ]);
+                    CombineStoryboardVideoJob::dispatch($this->record->id, (int) $data['seconds'], (string) $data['resolution']);
+                    Notification::make()->success()->title(__('platform.storyboard.combine_started'))->send();
+                }),
         ];
     }
 
@@ -248,6 +278,25 @@ class StoryboardBuilder extends Page
     public function getVisualBible(): ?array
     {
         return $this->record->pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] ?? null;
+    }
+
+    /** The combined video (all frames stitched into one MP4), for the top-of-builder card. */
+    public function getFinalVideo(): ?array
+    {
+        $status = $this->record->final_video_status;
+        if ($status === null) {
+            return null;
+        }
+
+        $media = app(MediaStorage::class);
+
+        return [
+            'generating' => $status === StoryboardProject::VIDEO_GENERATING,
+            'ready' => $status === StoryboardProject::VIDEO_READY,
+            'failed' => $status === StoryboardProject::VIDEO_FAILED,
+            'url' => $this->record->final_video_path !== null ? $media->signedUrl($this->record->final_video_path) : null,
+            'error' => is_array($this->record->final_video_meta) ? ($this->record->final_video_meta['error'] ?? null) : null,
+        ];
     }
 
     /**

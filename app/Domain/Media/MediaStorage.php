@@ -136,6 +136,30 @@ final class MediaStorage
     }
 
     /**
+     * Store the COMBINED storyboard video (all frames stitched into one MP4) PRIVATE under
+     * storyboard/{project}/final-{rand}.mp4. Signed on demand for the admin builder.
+     */
+    public function storeStoryboardVideo(int $projectId, string $bytes, string $mime = 'video/mp4'): StoredMedia
+    {
+        $extension = self::EXTENSIONS[strtolower($mime)] ?? self::DEFAULT_EXTENSION;
+        $path = implode('/', [self::PATH_STORYBOARD, $projectId, 'final-'.Str::random(24).'.'.$extension]);
+
+        $this->disk()->put($path, $bytes, ['visibility' => 'private']);
+
+        return new StoredMedia($path, $mime, strlen($bytes));
+    }
+
+    /** Read a stored object's raw bytes (used to feed source frames to ffmpeg). Null if absent. */
+    public function get(?string $path): ?string
+    {
+        if ($path === null || $path === '' || ! $this->disk()->exists($path)) {
+            return null;
+        }
+
+        return $this->disk()->get($path);
+    }
+
+    /**
      * A STABLE public URL for a public banner path (the widget embeds this directly). Uses
      * the disk's public/CDN url — no signing, no expiry. Returns null for a null/empty path.
      */

@@ -39,8 +39,9 @@ RUN npm run build
 FROM dunglas/frankenphp:1-php8.4
 
 # System packages required by the PHP extensions below.
+# ffmpeg: stitches the storyboard frame images into ONE combined MP4 (CombineStoryboardVideoJob).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git unzip libicu-dev libzip-dev libpq-dev libpng-dev \
+        git unzip libicu-dev libzip-dev libpq-dev libpng-dev ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions. pdo_pgsql (Postgres), redis (queue/cache/Horizon/locks),

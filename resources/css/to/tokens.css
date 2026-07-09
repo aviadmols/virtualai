@@ -108,6 +108,9 @@
     --to-space-20: 80px;
     --to-space-24: 96px;
     --to-space-32: 128px;
+    --to-space-48: 192px;
+    --to-space-64: 256px;
+    --to-space-96: 384px;
 
     /* ---- 1.4 Radius --------------------------------------------------
        OpenRouter look: gently rounded — buttons/fields ~8px, cards ~10px. Not
