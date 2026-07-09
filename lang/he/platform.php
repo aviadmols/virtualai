@@ -170,6 +170,7 @@ return [
         'visual_bible' => 'Visual bible',
         'negative' => 'להימנע',
         'total_cost' => 'עלות כוללת עד כה',
+        'mention_placeholder' => 'פרומפט — הקלד @ כדי להפנות לתמונה שהעלית',
         'process_log' => 'לוג התהליך — הפלט של כל שלב',
         'generating' => 'מייצר…',
         'no_image' => 'לא נוצר',
@@ -228,6 +229,7 @@ return [
         'pipe' => [
             'provider' => 'ספק (מנוע)',
             'model' => 'מודל',
+            'model_help' => 'המודלים של הספק שנבחר — חפשו או בחרו אחד.',
             'fallback' => 'מודל גיבוי',
             'params' => 'פרמטרים',
             'param_key' => 'מפתח',

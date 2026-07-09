@@ -11,6 +11,7 @@
     @php($frames = $this->getFrames())
     @php($bible = $this->getVisualBible())
     @php($totalCost = $this->getTotalCost())
+    @php($assetTags = $this->getAssetTags())
 
     <div class="to-sb" @if (! $editingFrameId) wire:poll.5s @endif>
         @if ($totalCost)
@@ -109,10 +110,21 @@
                             @endif
 
                             @if ($editingFrameId === $frame['id'])
-                                {{-- Inline prompt editor --}}
+                                {{-- Inline prompt editor with @-mention of reference images --}}
                                 <div class="to-sb-frame__edit">
-                                    <textarea class="to-sb-input" wire:model="editPrompt" rows="3"
-                                        placeholder="{{ __('platform.storyboard.field.image_prompt') }}"></textarea>
+                                    <div class="to-sb-mention" x-data="sbMention(@js($assetTags))">
+                                        <textarea x-ref="ta" class="to-sb-input" wire:model="editPrompt" rows="3"
+                                            @input="onInput($event)" @keydown.escape="show = false"
+                                            placeholder="{{ __('platform.storyboard.mention_placeholder') }}"></textarea>
+                                        <div class="to-sb-mention__menu" x-show="show" x-cloak @click.outside="show = false">
+                                            <template x-for="t in items" :key="t.tag">
+                                                <button type="button" class="to-sb-mention__item" @click="pick(t.tag)">
+                                                    <img class="to-sb-mention__thumb" :src="t.url" x-show="t.url" alt="" />
+                                                    <span>@<span x-text="t.tag"></span></span>
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </div>
                                     <textarea class="to-sb-input" wire:model="editNegative" rows="2"
                                         placeholder="{{ __('platform.storyboard.field.negative') }}"></textarea>
                                     <div class="to-sb-frame__actions">
@@ -182,4 +194,42 @@
             </div>
         @endif
     </div>
+
+    {{-- @-mention: type @ in a prompt to pick a reference image (inserts its @tag). --}}
+    <script>
+        (function () {
+            const register = () => {
+                if (! window.Alpine || window.Alpine.__sbMentionRegistered) return;
+                window.Alpine.__sbMentionRegistered = true;
+                window.Alpine.data('sbMention', (tags) => ({
+                    tags: tags || [],
+                    show: false,
+                    items: [],
+                    onInput(e) {
+                        const el = e.target;
+                        const before = el.value.slice(0, el.selectionStart);
+                        const m = before.match(/@([\p{L}\p{N}_]*)$/u);
+                        if (m) {
+                            const q = m[1].toLowerCase();
+                            this.items = this.tags.filter((t) => t.tag.toLowerCase().includes(q));
+                            this.show = this.items.length > 0;
+                        } else {
+                            this.show = false;
+                        }
+                    },
+                    pick(tag) {
+                        const el = this.$refs.ta;
+                        const pos = el.selectionStart;
+                        const before = el.value.slice(0, pos).replace(/@([\p{L}\p{N}_]*)$/u, '@' + tag + ' ');
+                        el.value = before + el.value.slice(pos);
+                        el.dispatchEvent(new Event('input'));
+                        this.show = false;
+                        el.focus();
+                    },
+                }));
+            };
+            if (window.Alpine) register();
+            else document.addEventListener('alpine:init', register);
+        })();
+    </script>
 </x-filament-panels::page>

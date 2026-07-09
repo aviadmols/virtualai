@@ -171,6 +171,7 @@ return [
         'visual_bible' => 'Visual bible',
         'negative' => 'Avoid',
         'total_cost' => 'Total cost so far',
+        'mention_placeholder' => 'Prompt — type @ to reference an uploaded image',
         'process_log' => 'Process log — every step\'s output',
         'generating' => 'Generating…',
         'no_image' => 'Not generated',
@@ -229,6 +230,7 @@ return [
         'pipe' => [
             'provider' => 'Provider (engine)',
             'model' => 'Model',
+            'model_help' => 'Models for the selected provider — search or pick one.',
             'fallback' => 'Fallback model',
             'params' => 'Params',
             'param_key' => 'Key',

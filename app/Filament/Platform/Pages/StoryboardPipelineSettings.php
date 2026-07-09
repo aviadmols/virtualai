@@ -18,6 +18,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Str;
@@ -67,6 +68,14 @@ class StoryboardPipelineSettings extends Page implements HasForms
         AiModel::PROVIDER_OPENROUTER => 'OpenRouter',
         AiModel::PROVIDER_BYTEPLUS => 'BytePlus',
         AiModel::PROVIDER_XAI => 'xAI (Grok)',
+    ];
+
+    // Known model ids per provider — offered in the Model dropdown alongside catalogued models so
+    // the common choices appear even before a model is catalogued.
+    private const MODEL_SUGGESTIONS = [
+        AiModel::PROVIDER_OPENROUTER => ['google/gemini-2.5-flash', 'openai/gpt-4o-mini', 'google/gemini-2.5-flash-image', 'google/gemini-2.0-flash-exp'],
+        AiModel::PROVIDER_BYTEPLUS => ['seedream-4-0-250828', 'seedream-5-0-260128', 'seedream-4-5-251128', 'dreamina-seedance-2-0-260128'],
+        AiModel::PROVIDER_XAI => ['grok-2-image', 'grok-imagine-image-quality'],
     ];
 
     /** @var array<string,mixed> */
@@ -135,9 +144,14 @@ class StoryboardPipelineSettings extends Page implements HasForms
                     Select::make($key.'.provider')
                         ->label(__('platform.storyboard.pipe.provider'))
                         ->options(self::PROVIDERS)
-                        ->selectablePlaceholder(false),
-                    TextInput::make($key.'.model')
+                        ->selectablePlaceholder(false)
+                        ->live(),
+                    Select::make($key.'.model')
                         ->label(__('platform.storyboard.pipe.model'))
+                        ->helperText(__('platform.storyboard.pipe.model_help'))
+                        ->options(fn (Get $get): array => $this->modelOptions((string) $get($key.'.provider'), (string) $get($key.'.model')))
+                        ->searchable()
+                        ->native(false)
                         ->required(),
                     TextInput::make($key.'.fallback_model')
                         ->label(__('platform.storyboard.pipe.fallback')),
@@ -332,6 +346,35 @@ class StoryboardPipelineSettings extends Page implements HasForms
         }
 
         return $params;
+    }
+
+    /**
+     * The Model dropdown options for a provider: its catalogued models + the known suggestions +
+     * the current value (so an existing custom id is never dropped). Reacts to the Provider select.
+     *
+     * @return array<string,string>
+     */
+    private function modelOptions(string $provider, string $current = ''): array
+    {
+        if ($provider === '') {
+            $provider = AiModel::PROVIDER_OPENROUTER;
+        }
+
+        $options = [];
+
+        foreach (AiModel::query()->where('provider', $provider)->orderBy('model_id')->pluck('label', 'model_id') as $id => $label) {
+            $options[(string) $id] = filled($label) ? $id.' — '.$label : (string) $id;
+        }
+
+        foreach (self::MODEL_SUGGESTIONS[$provider] ?? [] as $id) {
+            $options[$id] ??= $id;
+        }
+
+        if ($current !== '' && ! isset($options[$current])) {
+            $options[$current] = $current;
+        }
+
+        return $options;
     }
 
     /** Upsert the ai_models row so the resolver knows the model's provider + that it's allowed. */

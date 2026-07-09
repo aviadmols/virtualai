@@ -120,7 +120,17 @@ final class StoryboardFrameGenerator
     /** @return array<int,ImagePayload> the referenced assets' signed image urls, capped */
     private function referenceImages(StoryboardFrame $frame): array
     {
-        $tags = array_map(static fn ($t): string => ltrim((string) $t, '@'), $frame->reference_tags ?? []);
+        // Tags from the structured field AND any @tag typed into the prompt (the @-mention flow),
+        // so mentioning a reference in the prompt attaches its image. Unicode-aware (Hebrew tags).
+        $inPrompt = [];
+        if (preg_match_all('/@([\p{L}\p{N}_]+)/u', (string) $frame->image_prompt, $matches)) {
+            $inPrompt = $matches[1];
+        }
+
+        $tags = array_values(array_unique(array_merge(
+            array_map(static fn ($t): string => ltrim((string) $t, '@'), $frame->reference_tags ?? []),
+            $inPrompt,
+        )));
 
         if ($tags === []) {
             return [];

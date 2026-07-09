@@ -250,6 +250,24 @@ class StoryboardBuilder extends Page
         return $this->record->pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] ?? null;
     }
 
+    /**
+     * The project's tagged reference images for the @-mention picker: type @ in a prompt and pick
+     * one to insert its @tag (the generator attaches the matching image). @return array<int,array<string,mixed>>
+     */
+    public function getAssetTags(): array
+    {
+        $media = app(MediaStorage::class);
+
+        return $this->record->assets()
+            ->whereNotNull('file_path')
+            ->get()
+            ->map(fn ($asset): array => [
+                'tag' => (string) $asset->tag,
+                'url' => $media->signedUrl($asset->file_path),
+            ])
+            ->all();
+    }
+
     /** The REAL total cost so far: pipeline steps + frame images + video clips (display only). */
     public function getTotalCost(): ?string
     {
