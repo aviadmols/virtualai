@@ -156,6 +156,7 @@ return [
         'singular' => 'Storyboard project',
         'run' => 'Run pipeline',
         'run_started' => 'Pipeline started — steps + frames appear on the Builder.',
+        'generate_now' => 'Generate storyboard',
         'generate_all' => 'Generate all frames',
         'generate_all_clips' => 'Generate all clips',
         'combine_video' => 'Create one video',
@@ -265,7 +266,8 @@ return [
         ],
         'asset' => [
             'section' => 'Reference images',
-            'section_help' => 'Upload images and tag them (@main_character, @location_pool …). Reference the tags inside your story idea above and the pipeline binds each tag to its image.',
+            'section_help' => 'Drop images here — each one is auto-numbered @image1, @image2 … (the number is the tag). Reference them in your story idea above with @image1, and the pipeline binds each to its image.',
+            'upload_help' => 'Drag to reorder — reordering renumbers (@image1, @image2 …).',
             'add' => 'Add reference',
             'tag' => 'Tag',
             'tag_help' => 'Referenced in the story as @tag (e.g. main_character).',

@@ -6,15 +6,14 @@ use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Storyboard\StoryboardFrameGenerator;
 use App\Filament\Platform\Resources\StoryboardProjectResource;
+use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\Concerns\StartsStoryboardPipeline;
 use App\Jobs\CombineStoryboardVideoJob;
 use App\Jobs\GenerateStoryboardClipJob;
 use App\Jobs\GenerateStoryboardFrameJob;
-use App\Jobs\RunStoryboardPipelineJob;
-use App\Domain\Storyboard\StoryboardStep;
 use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
-use App\Models\StoryboardStepRun;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -30,6 +29,7 @@ use Filament\Resources\Pages\Page;
 class StoryboardBuilder extends Page
 {
     use InteractsWithRecord;
+    use StartsStoryboardPipeline;
 
     // === CONSTANTS ===
     protected static string $resource = StoryboardProjectResource::class;
@@ -62,60 +62,54 @@ class StoryboardBuilder extends Page
 
     protected function getHeaderActions(): array
     {
+        // One "Generate" dropdown: run the pipeline, generate all frames, or combine into one video.
         return [
-            Action::make('runPipeline')
-                ->label(__('platform.storyboard.run'))
-                ->icon('heroicon-o-play')
-                ->requiresConfirmation()
-                ->action(function (): void {
-                    // Pre-create the step rows as pending so the pipeline is visible IMMEDIATELY
-                    // (before a worker picks the job up) — the admin sees it started, not a blank.
-                    foreach (StoryboardStep::TEXT_STEPS as $stepKey) {
-                        $this->record->stepRuns()->updateOrCreate(
-                            ['step_key' => $stepKey],
-                            ['status' => StoryboardStepRun::STATUS_PENDING, 'error' => null, 'output' => null, 'duration_ms' => null],
-                        );
-                    }
-
-                    $this->record->update(['status' => StoryboardProject::STATUS_RUNNING]);
-                    RunStoryboardPipelineJob::dispatch($this->record->id);
-                    Notification::make()->success()->title(__('platform.storyboard.run_started'))->send();
-                }),
-            Action::make('generateAll')
-                ->label(__('platform.storyboard.generate_all'))
+            ActionGroup::make([
+                Action::make('runPipeline')
+                    ->label(__('platform.storyboard.run'))
+                    ->icon('heroicon-o-play')
+                    ->requiresConfirmation()
+                    ->action(function (): void {
+                        $this->startStoryboardPipeline($this->record);
+                        Notification::make()->success()->title(__('platform.storyboard.run_started'))->send();
+                    }),
+                Action::make('generateAll')
+                    ->label(__('platform.storyboard.generate_all'))
+                    ->icon('heroicon-o-sparkles')
+                    ->visible(fn (): bool => $this->record->frames()->exists())
+                    ->action(fn () => $this->generateAllFrames()),
+                Action::make('combineVideo')
+                    ->label(__('platform.storyboard.combine_video'))
+                    ->icon('heroicon-o-film')
+                    ->visible(fn (): bool => $this->record->frames()->whereNotNull('image_path')->exists())
+                    ->form([
+                        Select::make('resolution')
+                            ->label(__('platform.storyboard.combine_resolution'))
+                            ->options(self::RESOLUTIONS)
+                            ->default(self::DEFAULT_RESOLUTION)
+                            ->selectablePlaceholder(false)
+                            ->required(),
+                        TextInput::make('seconds')
+                            ->label(__('platform.storyboard.combine_seconds'))
+                            ->helperText(__('platform.storyboard.combine_seconds_help'))
+                            ->numeric()
+                            ->minValue(3)
+                            ->maxValue(120)
+                            ->default(fn (): int => max(3, ((int) $this->record->duration_seconds) ?: self::DEFAULT_SECONDS))
+                            ->required(),
+                    ])
+                    ->action(function (array $data): void {
+                        $this->record->update([
+                            'final_video_status' => StoryboardProject::VIDEO_GENERATING,
+                            'final_video_meta' => null,
+                        ]);
+                        CombineStoryboardVideoJob::dispatch($this->record->id, (int) $data['seconds'], (string) $data['resolution']);
+                        Notification::make()->success()->title(__('platform.storyboard.combine_started'))->send();
+                    }),
+            ])
+                ->label(__('platform.storyboard.generate'))
                 ->icon('heroicon-o-sparkles')
-                ->color('gray')
-                ->visible(fn (): bool => $this->record->frames()->exists())
-                ->action(fn () => $this->generateAllFrames()),
-            Action::make('combineVideo')
-                ->label(__('platform.storyboard.combine_video'))
-                ->icon('heroicon-o-film')
-                ->color('gray')
-                ->visible(fn (): bool => $this->record->frames()->whereNotNull('image_path')->exists())
-                ->form([
-                    Select::make('resolution')
-                        ->label(__('platform.storyboard.combine_resolution'))
-                        ->options(self::RESOLUTIONS)
-                        ->default(self::DEFAULT_RESOLUTION)
-                        ->selectablePlaceholder(false)
-                        ->required(),
-                    TextInput::make('seconds')
-                        ->label(__('platform.storyboard.combine_seconds'))
-                        ->helperText(__('platform.storyboard.combine_seconds_help'))
-                        ->numeric()
-                        ->minValue(3)
-                        ->maxValue(120)
-                        ->default(fn (): int => max(3, ((int) $this->record->duration_seconds) ?: self::DEFAULT_SECONDS))
-                        ->required(),
-                ])
-                ->action(function (array $data): void {
-                    $this->record->update([
-                        'final_video_status' => StoryboardProject::VIDEO_GENERATING,
-                        'final_video_meta' => null,
-                    ]);
-                    CombineStoryboardVideoJob::dispatch($this->record->id, (int) $data['seconds'], (string) $data['resolution']);
-                    Notification::make()->success()->title(__('platform.storyboard.combine_started'))->send();
-                }),
+                ->button(),
         ];
     }
 

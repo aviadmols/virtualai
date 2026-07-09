@@ -7,10 +7,8 @@ use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\EditStoryboa
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\ListStoryboardProjects;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\StoryboardBuilder;
 use App\Jobs\RunStoryboardPipelineJob;
-use App\Models\StoryboardAsset;
 use App\Models\StoryboardProject;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -49,6 +47,11 @@ class StoryboardProjectResource extends Resource
     // Aspect-ratio choices offered for a project.
     private const ASPECTS = ['16:9', '9:16', '1:1', '4:3', '3:4'];
 
+    // Reference-image pool: dropped images become auto-numbered @image1..@imageN.
+    private const MAX_REFERENCE_IMAGES = 9;
+    private const MAX_REFERENCE_KB = 5120;
+    private const REFERENCE_DIRECTORY = 'storyboard/inputs';
+
     public static function getNavigationLabel(): string
     {
         return __(self::NAV_LABEL);
@@ -82,34 +85,22 @@ class StoryboardProjectResource extends Resource
             Section::make(__('platform.storyboard.asset.section'))
                 ->description(__('platform.storyboard.asset.section_help'))
                 ->schema([
-                    Repeater::make('assets')
-                        ->relationship()
+                    // Drop images into one pool — each becomes an auto-numbered @image1, @image2 …
+                    // (the number IS the tag). Reconciled into StoryboardAsset rows on save by
+                    // SyncsNumberedReferenceImages; order = upload order (drag to renumber).
+                    FileUpload::make('reference_uploads')
                         ->hiddenLabel()
-                        ->schema([
-                            TextInput::make('tag')
-                                ->label(__('platform.storyboard.asset.tag'))
-                                ->helperText(__('platform.storyboard.asset.tag_help'))
-                                ->prefix('@')
-                                ->required()
-                                ->maxLength(64),
-                            Select::make('type')
-                                ->label(__('platform.storyboard.asset.type'))
-                                ->options(array_combine(StoryboardAsset::TYPES, StoryboardAsset::TYPES))
-                                ->default(StoryboardAsset::TYPE_CHARACTER)
-                                ->required(),
-                            FileUpload::make('file_path')
-                                ->label(__('platform.storyboard.asset.image'))
-                                ->image()
-                                ->maxSize(5120)
-                                ->disk((string) config('trayon.media.disk'))
-                                ->directory('storyboard/inputs')
-                                ->visibility('private')
-                                ->columnSpanFull(),
-                        ])
-                        ->columns(2)
-                        ->addActionLabel(__('platform.storyboard.asset.add'))
-                        ->collapsible()
-                        ->itemLabel(static fn (array $state): ?string => filled($state['tag'] ?? null) ? '@'.$state['tag'] : null),
+                        ->helperText(__('platform.storyboard.asset.upload_help'))
+                        ->image()
+                        ->multiple()
+                        ->reorderable()
+                        ->appendFiles()
+                        ->maxFiles(self::MAX_REFERENCE_IMAGES)
+                        ->maxSize(self::MAX_REFERENCE_KB)
+                        ->disk((string) config('trayon.media.disk'))
+                        ->directory(self::REFERENCE_DIRECTORY)
+                        ->visibility('private')
+                        ->columnSpanFull(),
                 ]),
             Section::make(__('platform.storyboard.form.advanced'))
                 ->description(__('platform.storyboard.form.advanced_help'))

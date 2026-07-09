@@ -7,8 +7,10 @@ use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\EditStoryboa
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\ListStoryboardProjects;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\StoryboardBuilder;
 use App\Jobs\GenerateStoryboardFrameJob;
+use App\Jobs\RunStoryboardPipelineJob;
 use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
+use App\Models\StoryboardStepRun;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -39,27 +41,73 @@ class StoryboardUiTest extends TestCase
         Livewire::test(ListStoryboardProjects::class)->assertOk();
     }
 
-    public function test_creating_a_project_saves_inline_tagged_references(): void
+    public function test_creating_a_project_auto_numbers_the_reference_images(): void
     {
+        config()->set('trayon.media.disk', 'public');
+        Storage::fake('public');
+        Storage::disk('public')->put('storyboard/inputs/a.png', 'a');
+        Storage::disk('public')->put('storyboard/inputs/b.png', 'b');
+
         Livewire::test(CreateStoryboardProject::class)
             ->fillForm([
                 'title' => 'Pool Party',
-                'story_idea' => 'A trailer featuring @hero at @location_pool',
+                'story_idea' => 'A trailer featuring @image1 at @image2',
                 'duration_seconds' => 9,
                 'frame_interval_seconds' => 3,
                 'aspect_ratio' => '16:9',
-                'assets' => [
-                    ['tag' => 'hero', 'type' => 'character'],
-                    ['tag' => 'location_pool', 'type' => 'location'],
-                ],
+                'reference_uploads' => ['storyboard/inputs/a.png', 'storyboard/inputs/b.png'],
             ])
             ->call('create')
             ->assertHasNoFormErrors();
 
         $project = StoryboardProject::query()->firstOrFail();
-        $this->assertSame(2, $project->assets()->count());
-        $this->assertEqualsCanonicalizing(['hero', 'location_pool'], $project->assets()->pluck('tag')->all());
+        // No manual naming: the pool is auto-numbered @image1, @image2 in upload order.
+        $this->assertSame(['image1', 'image2'], $project->assets()->orderBy('id')->pluck('tag')->all());
+        $this->assertSame(
+            ['storyboard/inputs/a.png', 'storyboard/inputs/b.png'],
+            $project->assets()->orderBy('id')->pluck('file_path')->all(),
+        );
         $this->assertSame(auth()->id(), $project->created_by);
+    }
+
+    public function test_editing_renumbers_the_reference_images_in_the_new_order(): void
+    {
+        config()->set('trayon.media.disk', 'public');
+        Storage::fake('public');
+
+        $project = StoryboardProject::factory()->create();
+        $project->assets()->create(['tag' => 'image1', 'type' => 'character', 'file_path' => 'storyboard/inputs/a.png']);
+
+        Livewire::test(EditStoryboardProject::class, ['record' => $project->getRouteKey()])
+            ->fillForm(['reference_uploads' => ['storyboard/inputs/b.png', 'storyboard/inputs/a.png']])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(['image1', 'image2'], $project->assets()->orderBy('id')->pluck('tag')->all());
+        $this->assertSame(
+            ['storyboard/inputs/b.png', 'storyboard/inputs/a.png'],
+            $project->assets()->orderBy('id')->pluck('file_path')->all(),
+        );
+    }
+
+    public function test_the_form_generate_action_creates_and_runs_the_pipeline(): void
+    {
+        Bus::fake();
+
+        Livewire::test(CreateStoryboardProject::class)
+            ->fillForm([
+                'title' => 'Runner',
+                'story_idea' => 'A short film with @image1',
+                'duration_seconds' => 9,
+                'frame_interval_seconds' => 3,
+                'aspect_ratio' => '16:9',
+            ])
+            ->call('submitAndGenerate', true);
+
+        $project = StoryboardProject::query()->firstOrFail();
+        $this->assertSame(StoryboardProject::STATUS_RUNNING, $project->status);
+        $this->assertGreaterThan(0, $project->stepRuns()->where('status', StoryboardStepRun::STATUS_PENDING)->count());
+        Bus::assertDispatched(RunStoryboardPipelineJob::class);
     }
 
     public function test_the_builder_page_renders(): void
