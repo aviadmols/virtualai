@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -111,12 +112,40 @@ final class CombineStoryboardVideoJob implements ShouldQueue
 
         // No clip is still rendering (or we ran out of patience) — stitch whatever is ready.
         if ($project->frames()->whereNotNull('video_path')->count() === 0) {
-            $this->markFailed($project, 'All frame clips failed to render.');
+            $reasons = $this->clipFailureReasons($project);
+
+            // Detailed reason in the log AND on the builder card, so the real cause is visible
+            // (usually: the video provider could not fetch the frame image, a bad/retired model id,
+            // or a missing provider key). Switching the clip provider to AtlasCloud avoids the
+            // image-reachability failure since it sends the frame inline as base64.
+            Log::warning('storyboard.combine.all_clips_failed', [
+                'project_id' => $project->id,
+                'mode' => $this->mode,
+                'reasons' => $reasons !== '' ? $reasons : 'no per-frame error recorded',
+            ]);
+
+            $this->markFailed($project, trim('All frame clips failed to render. '.$reasons));
 
             return;
         }
 
         $this->finish($project, $composer->concatClips($project, $this->resolution));
+    }
+
+    /** Aggregate each frame's clip-failure reason (video_meta.error) for the log + on-screen error. */
+    private function clipFailureReasons(StoryboardProject $project): string
+    {
+        return $project->frames()
+            ->whereNotNull('image_path')
+            ->orderBy('frame_number')
+            ->get()
+            ->map(function (StoryboardFrame $frame): ?string {
+                $error = is_array($frame->video_meta) ? ($frame->video_meta['error'] ?? null) : null;
+
+                return $error ? 'Frame #'.$frame->frame_number.': '.$error : null;
+            })
+            ->filter()
+            ->implode(' | ');
     }
 
     private function finish(StoryboardProject $project, string $path): void
