@@ -13,7 +13,8 @@
 
 <x-dynamic-component :component="$getFieldWrapperView()" :field="$field">
     <div class="to-sb-composer" wire:ignore
-        x-data="sbComposer({ statePath: @js($statePath), assetsPath: @js($assetsPath) })">
+        x-data="sbComposer({ statePath: @js($statePath), assetsPath: @js($assetsPath) })"
+        @reference-uploads-changed.window="reloadRefs()">
         <div class="to-sb-composer__box">
             <div class="to-sb-composer__editor" contenteditable="true" x-ref="editor"
                 role="textbox" aria-multiline="true"

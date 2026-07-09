@@ -29,22 +29,28 @@
                 active: 0,
 
                 init() {
-                    // assetsPath is a READ-ONLY reactive source (the uploaded reference pool) — entangle
-                    // is fine here. The writable statePath is synced with $wire.set (below), NOT entangle:
-                    // reassigning an entangled property replaces the proxy and silently drops the write.
+                    // The uploaded reference pool is re-read on demand (initial + on the
+                    // 'reference-uploads-changed' event the FileUpload dispatches) rather than entangled,
+                    // so the @-picker + gallery renumber LIVE the moment an image is added/removed/reordered.
                     if (this.assetsPath) {
-                        this.assetsState = this.$wire.$entangle(this.assetsPath);
-                        if (typeof this.$wire.getStoryboardAssetUrls === 'function') {
-                            this.$wire.getStoryboardAssetUrls().then((map) => {
-                                this.urls = map || {};
-                                // Refresh initial pills with thumbnails once URLs arrive (unless typing).
-                                if (document.activeElement !== this.$refs.editor) {
-                                    this.renderText(this.serialize());
-                                }
-                            });
-                        }
+                        this.reloadRefs();
                     }
                     this.renderText(this.statePath ? (this.$wire.get(this.statePath) || '') : '');
+                },
+
+                // Re-read the uploaded pool (drives the gallery + @-picker reactively) + saved thumbnails.
+                reloadRefs() {
+                    if (! this.assetsPath) return;
+                    this.assetsState = this.$wire.get(this.assetsPath) || [];
+                    if (typeof this.$wire.getStoryboardAssetUrls === 'function') {
+                        this.$wire.getStoryboardAssetUrls().then((map) => {
+                            this.urls = map || {};
+                            // Refresh existing pills with thumbnails once URLs arrive (unless typing).
+                            if (document.activeElement !== this.$refs.editor) {
+                                this.renderText(this.serialize());
+                            }
+                        });
+                    }
                 },
 
                 // The reference tags: LIVE from the uploaded pool (auto-numbered @image1..@imageN, the

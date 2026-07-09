@@ -21,6 +21,7 @@ use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Livewire\Component;
 
 /**
  * Storyboard projects — the admin AI pre-production builder (image storyboard; video later).
@@ -100,6 +101,10 @@ class StoryboardProjectResource extends Resource
                         ->disk((string) config('trayon.media.disk'))
                         ->directory(self::REFERENCE_DIRECTORY)
                         ->visibility('private')
+                        // Sync on every add/remove/reorder so the @-picker + gallery renumber LIVE
+                        // (the composer re-reads on this event — no save/refresh needed).
+                        ->live()
+                        ->afterStateUpdated(static fn (Component $livewire) => $livewire->dispatch('reference-uploads-changed'))
                         ->columnSpanFull(),
                 ]),
             Section::make(__('platform.storyboard.form.advanced'))
