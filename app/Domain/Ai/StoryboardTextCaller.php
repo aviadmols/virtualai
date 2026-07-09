@@ -98,13 +98,19 @@ final class StoryboardTextCaller
         $body = [
             'model' => $model,
             'messages' => $messages,
-            'max_tokens' => $config->params['max_tokens'] ?? self::DEFAULT_MAX_TOKENS,
+            // Params may arrive as STRINGS (the admin KeyValue editor), but the API needs numbers —
+            // a string temperature is a 400. Coerce every numeric knob.
+            'max_tokens' => (int) ($config->params['max_tokens'] ?? self::DEFAULT_MAX_TOKENS),
         ];
 
-        foreach (['temperature', 'top_p', 'seed'] as $knob) {
-            if (array_key_exists($knob, $config->params)) {
-                $body[$knob] = $config->params[$knob];
+        foreach (['temperature', 'top_p'] as $knob) {
+            if (isset($config->params[$knob]) && is_numeric($config->params[$knob])) {
+                $body[$knob] = (float) $config->params[$knob];
             }
+        }
+
+        if (isset($config->params['seed']) && is_numeric($config->params['seed'])) {
+            $body['seed'] = (int) $config->params['seed'];
         }
 
         $body['response_format'] = $config->inputSchema !== null

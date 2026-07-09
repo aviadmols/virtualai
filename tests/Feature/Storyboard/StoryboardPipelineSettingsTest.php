@@ -55,7 +55,8 @@ class StoryboardPipelineSettingsTest extends TestCase
 
         $op = AiOperation::query()->where('operation_key', AiOperation::KEY_STORYBOARD_READ_IDEA)->first();
         $this->assertSame('google/gemini-custom', $op->default_model);
-        $this->assertSame('0.9', $op->params['temperature']);
+        // The string param is coerced to a number on save (a string temperature is a 400).
+        $this->assertSame(0.9, $op->params['temperature']);
 
         $this->assertDatabaseHas('ai_models', [
             'operation_key' => AiOperation::KEY_STORYBOARD_READ_IDEA,

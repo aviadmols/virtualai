@@ -21,8 +21,8 @@ class StoryboardPipelineSeeder extends Seeder
     private const TEXT_MODEL = 'google/gemini-2.5-flash';
     private const TEXT_FALLBACK = 'openai/gpt-4o-mini';
 
-    private const IMAGE_MODEL = 'google/gemini-3.1-flash-image';
-    private const IMAGE_FALLBACK = 'google/gemini-2.5-flash-image';
+    // gemini-3.1-flash-image returns 400 on OpenRouter; gemini-2.5-flash-image is the proven one.
+    private const IMAGE_MODEL = 'google/gemini-2.5-flash-image';
 
     private const TEXT_PARAMS = ['temperature' => 0.6, 'top_p' => 0.95, 'max_tokens' => 4096];
     private const IMAGE_QUALITY = 'high';
@@ -136,7 +136,7 @@ class StoryboardPipelineSeeder extends Seeder
             [
                 'label' => 'Storyboard · Frame Image',
                 'default_model' => self::IMAGE_MODEL,
-                'fallback_model' => self::IMAGE_FALLBACK,
+                'fallback_model' => null,
                 'image_quality' => self::IMAGE_QUALITY,
                 'aspect_ratio' => self::IMAGE_ASPECT,
                 'params' => ['temperature' => 0.7, 'top_p' => 0.95],
@@ -147,8 +147,7 @@ class StoryboardPipelineSeeder extends Seeder
             ],
         );
 
-        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL, 'Gemini 3.1 Flash Image', isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 60_000);
-        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_FALLBACK, 'Gemini 2.5 Flash Image', isFallback: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 40_000);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL, 'Gemini 2.5 Flash Image', isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 40_000);
 
         $this->seedPrompt(
             AiOperation::KEY_STORYBOARD_FRAME_IMAGE,

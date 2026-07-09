@@ -173,7 +173,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
             $op->update([
                 'default_model' => $step['model'],
                 'fallback_model' => filled($step['fallback_model']) ? $step['fallback_model'] : null,
-                'params' => is_array($step['params']) ? $step['params'] : [],
+                'params' => $this->coerceParams(is_array($step['params']) ? $step['params'] : []),
             ]);
 
             Prompt::updateOrCreate(
@@ -259,6 +259,30 @@ class StoryboardPipelineSettings extends Page implements HasForms
             'characters' => '{"characters":[{"name":"Hero","description":"the party host"}]}',
             'visual_bible' => '{"global_style":"realistic cinematic","negative_prompt":"no cartoon"}',
         ];
+    }
+
+    // Numeric param keys → their type. The KeyValue editor yields strings; the APIs need numbers.
+    private const NUMERIC_PARAMS = [
+        'temperature' => 'float',
+        'top_p' => 'float',
+        'max_tokens' => 'int',
+        'seed' => 'int',
+        'duration_seconds' => 'int',
+    ];
+
+    /**
+     * Coerce known numeric params (temperature, top_p, …) from strings to numbers so a saved value
+     * doesn't become a string a provider rejects (a string temperature is a 400). @param array<string,mixed> $params @return array<string,mixed>
+     */
+    private function coerceParams(array $params): array
+    {
+        foreach ($params as $key => $value) {
+            if (isset(self::NUMERIC_PARAMS[$key]) && is_numeric($value)) {
+                $params[$key] = self::NUMERIC_PARAMS[$key] === 'int' ? (int) $value : (float) $value;
+            }
+        }
+
+        return $params;
     }
 
     /** Upsert the ai_models row so the resolver knows the model's provider + that it's allowed. */

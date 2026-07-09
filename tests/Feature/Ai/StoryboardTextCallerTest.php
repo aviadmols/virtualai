@@ -97,6 +97,37 @@ class StoryboardTextCallerTest extends TestCase
         $this->assertStringContainsString("\n", $result->json['global_style']); // the newline is preserved
     }
 
+    public function test_it_coerces_string_params_to_numbers(): void
+    {
+        // The admin KeyValue editor yields string params; a string temperature is a 400.
+        $this->fakeContent('{"genre":"x"}');
+
+        $config = new OperationConfig(
+            operationKey: 'storyboard_genre',
+            model: 'google/gemini-2.5-flash',
+            fallbackModel: null,
+            systemPrompt: 'sys',
+            userPrompt: 'do it',
+            imageQuality: null,
+            aspectRatio: null,
+            params: ['temperature' => '0.9', 'top_p' => '0.8', 'max_tokens' => '2048'],
+            creditMultiplier: null,
+            promptVersion: 1,
+            estimatedCostMicroUsd: 4_000,
+            inputSchema: null,
+        );
+
+        app(StoryboardTextCaller::class)->extract($config);
+
+        Http::assertSent(function ($req) {
+            $body = $req->data();
+
+            return $body['temperature'] === 0.9
+                && $body['top_p'] === 0.8
+                && $body['max_tokens'] === 2048;
+        });
+    }
+
     public function test_it_throws_with_the_raw_output_when_no_json_is_recoverable(): void
     {
         $this->fakeContent('I cannot produce that output.');
