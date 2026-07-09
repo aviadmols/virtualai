@@ -55,6 +55,10 @@ final class MediaStorage
     // Playground (Super-Admin model test) result media prefix — NOT tenant-scoped.
     private const PATH_PLAYGROUND = 'playground';
 
+    // Storyboard (admin pre-production builder) media prefix — NOT tenant-scoped.
+    private const PATH_STORYBOARD = 'storyboard';
+    private const PATH_FRAMES = 'frames';
+
     // mime -> extension (the disk key carries a sane extension for the CDN).
     private const EXTENSIONS = [
         'image/jpeg' => 'jpg',
@@ -111,6 +115,20 @@ final class MediaStorage
     {
         $extension = self::EXTENSIONS[strtolower($mime)] ?? self::DEFAULT_EXTENSION;
         $path = implode('/', [self::PATH_PLAYGROUND, $runId, self::KIND_RESULT.'-'.Str::random(24).'.'.$extension]);
+
+        $this->disk()->put($path, $bytes, ['visibility' => 'private']);
+
+        return new StoredMedia($path, $mime, strlen($bytes));
+    }
+
+    /**
+     * Store a storyboard FRAME image PRIVATE under a non-tenant path
+     * (storyboard/{project}/frames/{frame}/...). Signed on demand for the admin view.
+     */
+    public function storeStoryboardFrame(int $projectId, int $frameId, string $bytes, string $mime): StoredMedia
+    {
+        $extension = self::EXTENSIONS[strtolower($mime)] ?? self::DEFAULT_EXTENSION;
+        $path = implode('/', [self::PATH_STORYBOARD, $projectId, self::PATH_FRAMES, $frameId, self::KIND_RESULT.'-'.Str::random(24).'.'.$extension]);
 
         $this->disk()->put($path, $bytes, ['visibility' => 'private']);
 

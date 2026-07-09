@@ -1,0 +1,215 @@
+<?php
+
+namespace App\Filament\Platform\Resources\StoryboardProjectResource\Pages;
+
+use App\Domain\Media\MediaStorage;
+use App\Domain\Storyboard\StoryboardFrameGenerator;
+use App\Filament\Platform\Resources\StoryboardProjectResource;
+use App\Jobs\GenerateStoryboardFrameJob;
+use App\Jobs\RunStoryboardPipelineJob;
+use App\Models\StoryboardFrame;
+use App\Models\StoryboardProject;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
+use Filament\Resources\Pages\Concerns\InteractsWithRecord;
+use Filament\Resources\Pages\Page;
+
+/**
+ * StoryboardBuilder — the working surface for one project: run the pipeline, watch step progress,
+ * and generate + edit each frame (regenerate, edit the prompt, pick a version, approve, lock). All
+ * mutations guard that the frame belongs to THIS project. Admin-only; never charges. The gallery
+ * polls so async generations appear without a manual refresh.
+ */
+class StoryboardBuilder extends Page
+{
+    use InteractsWithRecord;
+
+    // === CONSTANTS ===
+    protected static string $resource = StoryboardProjectResource::class;
+
+    protected static string $view = 'filament.platform.storyboard.builder';
+
+    private const MS_SECOND_THRESHOLD = 1000;
+
+    // Inline frame-prompt editor state (no modal — a per-frame inline form).
+    public ?int $editingFrameId = null;
+
+    public string $editPrompt = '';
+
+    public string $editNegative = '';
+
+    public function mount(int|string $record): void
+    {
+        $this->record = $this->resolveRecord($record);
+    }
+
+    public function getTitle(): string
+    {
+        return $this->record->title;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('runPipeline')
+                ->label(__('platform.storyboard.run'))
+                ->icon('heroicon-o-play')
+                ->requiresConfirmation()
+                ->action(function (): void {
+                    RunStoryboardPipelineJob::dispatch($this->record->id);
+                    $this->record->update(['status' => StoryboardProject::STATUS_RUNNING]);
+                    Notification::make()->success()->title(__('platform.storyboard.run_started'))->send();
+                }),
+            Action::make('generateAll')
+                ->label(__('platform.storyboard.generate_all'))
+                ->icon('heroicon-o-sparkles')
+                ->color('gray')
+                ->visible(fn (): bool => $this->record->frames()->exists())
+                ->action(fn () => $this->generateAllFrames()),
+        ];
+    }
+
+    public function generateAllFrames(): void
+    {
+        $frames = $this->record->frames()->where('is_locked', false)->get();
+
+        foreach ($frames as $frame) {
+            $frame->update(['status' => StoryboardFrame::STATUS_GENERATING]);
+            GenerateStoryboardFrameJob::dispatch($frame->id);
+        }
+
+        Notification::make()->success()->title(__('platform.storyboard.generating_frames', ['count' => $frames->count()]))->send();
+    }
+
+    public function generateFrame(int $frameId): void
+    {
+        $frame = $this->frame($frameId);
+        if ($frame === null || $frame->is_locked) {
+            return;
+        }
+
+        $frame->update(['status' => StoryboardFrame::STATUS_GENERATING]);
+        GenerateStoryboardFrameJob::dispatch($frame->id);
+    }
+
+    public function approveFrame(int $frameId): void
+    {
+        $frame = $this->frame($frameId);
+        $frame?->update(['is_approved' => ! $frame->is_approved]);
+    }
+
+    public function toggleLock(int $frameId): void
+    {
+        $frame = $this->frame($frameId);
+        $frame?->update(['is_locked' => ! $frame->is_locked]);
+    }
+
+    public function selectVersion(int $frameId, int $versionId): void
+    {
+        $frame = $this->frame($frameId);
+        $version = $frame?->versions()->find($versionId);
+
+        if ($frame !== null && $version !== null) {
+            app(StoryboardFrameGenerator::class)->selectVersion($frame, $version);
+        }
+    }
+
+    public function startEdit(int $frameId): void
+    {
+        $frame = $this->frame($frameId);
+        if ($frame === null) {
+            return;
+        }
+
+        $this->editingFrameId = $frame->id;
+        $this->editPrompt = (string) $frame->image_prompt;
+        $this->editNegative = (string) $frame->negative_prompt;
+    }
+
+    public function cancelEdit(): void
+    {
+        $this->editingFrameId = null;
+        $this->editPrompt = '';
+        $this->editNegative = '';
+    }
+
+    public function saveEdit(bool $regenerate = false): void
+    {
+        $frame = $this->frame((int) $this->editingFrameId);
+        if ($frame === null) {
+            return;
+        }
+
+        $frame->update(['image_prompt' => $this->editPrompt, 'negative_prompt' => $this->editNegative]);
+        $this->cancelEdit();
+
+        if ($regenerate && ! $frame->is_locked) {
+            $frame->update(['status' => StoryboardFrame::STATUS_GENERATING]);
+            GenerateStoryboardFrameJob::dispatch($frame->id);
+        }
+    }
+
+    /** The pipeline step-run log for the progress panel. @return array<int,array<string,mixed>> */
+    public function getSteps(): array
+    {
+        return $this->record->stepRuns()
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($run): array => [
+                'label' => __('platform.storyboard.step.'.$run->step_key),
+                'status' => $run->status,
+                'duration' => $run->duration_ms !== null ? $this->duration($run->duration_ms) : null,
+            ])
+            ->all();
+    }
+
+    /** Frames formatted for the gallery (signed image urls + versions). @return array<int,array<string,mixed>> */
+    public function getFrames(): array
+    {
+        $media = app(MediaStorage::class);
+
+        return $this->record->frames()->with('versions')->get()->map(fn (StoryboardFrame $f): array => [
+            'id' => $f->id,
+            'number' => $f->frame_number,
+            'time' => $f->start_second.'–'.$f->end_second.'s',
+            'description' => $f->description,
+            'prompt' => $f->image_prompt,
+            'textOverlay' => $f->text_overlay,
+            'status' => $f->status,
+            'generating' => $f->status === StoryboardFrame::STATUS_GENERATING,
+            'failed' => $f->status === StoryboardFrame::STATUS_FAILED,
+            'approved' => $f->is_approved,
+            'locked' => $f->is_locked,
+            'imageUrl' => $f->image_path !== null ? $media->signedUrl($f->image_path) : null,
+            'versions' => $f->versions->map(fn ($v): array => [
+                'id' => $v->id,
+                'number' => $v->version_number,
+                'selected' => $v->is_selected,
+                'url' => $v->image_path !== null ? $media->signedUrl($v->image_path) : null,
+            ])->all(),
+        ])->all();
+    }
+
+    public function getVisualBible(): ?array
+    {
+        return $this->record->pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] ?? null;
+    }
+
+    public function getProjectStatus(): string
+    {
+        return $this->record->status;
+    }
+
+    private function frame(int $frameId): ?StoryboardFrame
+    {
+        // Guard: only this project's frames are mutable from this page.
+        return $this->record->frames()->whereKey($frameId)->first();
+    }
+
+    private function duration(int $ms): string
+    {
+        return $ms >= self::MS_SECOND_THRESHOLD
+            ? number_format($ms / self::MS_SECOND_THRESHOLD, 1).' s'
+            : $ms.' ms';
+    }
+}
