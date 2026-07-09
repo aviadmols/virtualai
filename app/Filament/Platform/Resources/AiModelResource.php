@@ -282,16 +282,17 @@ class AiModelResource extends Resource
             AiModel::PROVIDER_OPENROUTER => 'OpenRouter',
             AiModel::PROVIDER_BYTEPLUS => 'BytePlus (Seedream)',
             AiModel::PROVIDER_XAI => 'xAI (Grok)',
+            AiModel::PROVIDER_FAL => 'fal.ai',
         ];
     }
 
     /**
-     * A flat-rate provider (BytePlus, xAI) returns no inline USD cost, so a positive per-image
+     * A flat-rate provider (BytePlus, xAI, fal.ai) returns no inline USD cost, so a positive per-image
      * price hint is mandatory — otherwise a generation would succeed but never charge.
      */
     private static function isFlatRateProvider(?string $provider): bool
     {
-        return in_array($provider, [AiModel::PROVIDER_BYTEPLUS, AiModel::PROVIDER_XAI], true);
+        return in_array($provider, [AiModel::PROVIDER_BYTEPLUS, AiModel::PROVIDER_XAI, AiModel::PROVIDER_FAL], true);
     }
 
     /** Cost-unit → localised label (from the AiModel UNIT_* CONSTs). */

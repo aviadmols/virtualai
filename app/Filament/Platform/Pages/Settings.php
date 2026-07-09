@@ -3,6 +3,7 @@
 namespace App\Filament\Platform\Pages;
 
 use App\Domain\Ai\BytePlusImageClient;
+use App\Domain\Ai\FalImageClient;
 use App\Domain\Ai\OpenRouterClient;
 use App\Domain\Ai\XaiImageClient;
 use App\Domain\Platform\PlatformMailConfig;
@@ -57,6 +58,7 @@ class Settings extends Page implements HasForms
         'openrouter_api_key' => PlatformSettings::OPENROUTER_API_KEY,
         'byteplus_api_key' => PlatformSettings::BYTEPLUS_API_KEY,
         'xai_api_key' => PlatformSettings::XAI_API_KEY,
+        'fal_api_key' => PlatformSettings::FAL_API_KEY,
         'payplus_api_key' => PlatformSettings::PAYPLUS_API_KEY,
         'payplus_secret_key' => PlatformSettings::PAYPLUS_SECRET_KEY,
         'payplus_page_uid' => PlatformSettings::PAYPLUS_PAGE_UID,
@@ -121,6 +123,7 @@ class Settings extends Page implements HasForms
             $this->testAction('testOpenRouter', 'openrouter_api_key', 'platform.settings.openrouter', fn (?string $k) => app(OpenRouterClient::class)->checkConnection($k)),
             $this->testAction('testByteplus', 'byteplus_api_key', 'platform.settings.byteplus', fn (?string $k) => app(BytePlusImageClient::class)->checkConnection($k)),
             $this->testAction('testXai', 'xai_api_key', 'platform.settings.xai', fn (?string $k) => app(XaiImageClient::class)->checkConnection($k)),
+            $this->testAction('testFal', 'fal_api_key', 'platform.settings.fal', fn (?string $k) => app(FalImageClient::class)->checkConnection($k)),
             $this->sendTestEmailAction(),
         ];
     }
@@ -235,6 +238,11 @@ class Settings extends Page implements HasForms
                     ->description(__('platform.settings.xai.sub'))
                     ->schema([
                         $this->secretField('xai_api_key', 'platform.settings.xai.api_key', PlatformSettings::XAI_API_KEY),
+                    ]),
+                Section::make(__('platform.settings.fal.title'))
+                    ->description(__('platform.settings.fal.sub'))
+                    ->schema([
+                        $this->secretField('fal_api_key', 'platform.settings.fal.api_key', PlatformSettings::FAL_API_KEY),
                     ]),
                 Section::make(__('platform.settings.smtp.title'))
                     ->description(__('platform.settings.smtp.sub'))

@@ -21,8 +21,10 @@ interface ImageGenerationProvider
     // AtlasCloud is a VIDEO-only upstream (async task API); it never serves try-on images, but its
     // id lives here as the single canonical provider list (ai_models.provider enum, costs report).
     public const PROVIDER_ATLASCLOUD = 'atlascloud';
+    // fal.ai serves BOTH images and video through its queue API (one endpoint per model).
+    public const PROVIDER_FAL = 'fal';
 
-    public const PROVIDERS = [self::PROVIDER_OPENROUTER, self::PROVIDER_BYTEPLUS, self::PROVIDER_XAI, self::PROVIDER_ATLASCLOUD];
+    public const PROVIDERS = [self::PROVIDER_OPENROUTER, self::PROVIDER_BYTEPLUS, self::PROVIDER_XAI, self::PROVIDER_ATLASCLOUD, self::PROVIDER_FAL];
 
     /**
      * Run $buildBody($model) against the primary then the fallback model, retrying

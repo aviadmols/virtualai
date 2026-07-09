@@ -28,6 +28,7 @@ class ProviderCostsWidget extends Widget
         ImageGenerationProvider::PROVIDER_BYTEPLUS => 'platform.costs.providers.byteplus',
         ImageGenerationProvider::PROVIDER_XAI => 'platform.costs.providers.xai',
         ImageGenerationProvider::PROVIDER_ATLASCLOUD => 'platform.costs.providers.atlascloud',
+        ImageGenerationProvider::PROVIDER_FAL => 'platform.costs.providers.fal',
     ];
 
     private const LABEL_UNKNOWN = 'platform.costs.providers.unknown';

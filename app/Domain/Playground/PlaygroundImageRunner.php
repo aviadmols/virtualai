@@ -28,6 +28,16 @@ final class PlaygroundImageRunner
     private const RESPONSE_FORMAT = 'b64_json';
     private const XAI_IMAGE_COUNT = 1;
 
+    // Aspect ratio → fal's image_size enum (fal has no free-form ratio; unmapped ratios use the
+    // model's own default).
+    private const FAL_IMAGE_SIZES = [
+        '16:9' => 'landscape_16_9',
+        '9:16' => 'portrait_16_9',
+        '4:3' => 'landscape_4_3',
+        '3:4' => 'portrait_4_3',
+        '1:1' => 'square_hd',
+    ];
+
     public function __construct(
         private readonly ProviderRouter $router,
     ) {}
@@ -37,7 +47,7 @@ final class PlaygroundImageRunner
      *
      * @param  array<int,ImagePayload>  $inputs  input images (signed https urls)
      */
-    public function run(string $provider, string $model, string $prompt, array $inputs, ?int $priceHintMicroUsd): PlaygroundImageResult
+    public function run(string $provider, string $model, string $prompt, array $inputs, ?int $priceHintMicroUsd, ?string $aspectRatio = null): PlaygroundImageResult
     {
         $client = $this->router->for($provider);
 
@@ -45,7 +55,7 @@ final class PlaygroundImageRunner
             self::OP_KEY,
             $model,
             null,
-            fn (string $m): array => $this->buildBody($provider, $m, $prompt, $inputs),
+            fn (string $m): array => $this->buildBody($provider, $m, $prompt, $inputs, $aspectRatio),
         );
 
         [$bytes, $mime] = $client->extractImage($response);
@@ -70,11 +80,12 @@ final class PlaygroundImageRunner
      * @param  array<int,ImagePayload>  $inputs
      * @return array<string,mixed>
      */
-    private function buildBody(string $provider, string $model, string $prompt, array $inputs): array
+    private function buildBody(string $provider, string $model, string $prompt, array $inputs, ?string $aspectRatio = null): array
     {
         return match ($provider) {
             ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->bytePlusBody($model, $prompt, $inputs),
             ImageGenerationProvider::PROVIDER_XAI => $this->xaiBody($model, $prompt),
+            ImageGenerationProvider::PROVIDER_FAL => $this->falBody($model, $prompt, $inputs, $aspectRatio),
             default => $this->openRouterBody($model, $prompt, $inputs),
         };
     }
@@ -130,5 +141,32 @@ final class PlaygroundImageRunner
             'response_format' => self::RESPONSE_FORMAT,
             'n' => self::XAI_IMAGE_COUNT,
         ];
+    }
+
+    /**
+     * fal's generic queue input: prompt (+ image_size when the aspect maps onto fal's enum), and
+     * the input images as image_url/image_urls — the two field names fal models declare. The Fal
+     * client inlines them as data URIs; a text-to-image model (no image fields declared) ignores
+     * the extras. 'model' is popped by the client (fal's model id is the URL path, not a field).
+     *
+     * @param  array<int,ImagePayload>  $inputs
+     * @return array<string,mixed>
+     */
+    private function falBody(string $model, string $prompt, array $inputs, ?string $aspectRatio): array
+    {
+        $body = ['model' => $model, 'prompt' => $prompt];
+
+        $size = self::FAL_IMAGE_SIZES[$aspectRatio ?? ''] ?? null;
+        if ($size !== null) {
+            $body['image_size'] = $size;
+        }
+
+        $urls = array_values(array_map(static fn (ImagePayload $i): string => $i->url, $inputs));
+        if ($urls !== []) {
+            $body['image_url'] = $urls[0];
+            $body['image_urls'] = $urls;
+        }
+
+        return $body;
     }
 }

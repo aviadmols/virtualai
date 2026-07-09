@@ -104,13 +104,14 @@ final readonly class OperationConfig
         return $this->fallbackFlatRatePriceMicroUsd() === null;
     }
 
-    /** A provider is flat-rate when it returns no inline USD cost (BytePlus + xAI/Grok + AtlasCloud). */
+    /** A provider is flat-rate when it returns no inline USD cost (BytePlus + xAI/Grok + AtlasCloud + fal). */
     private function isFlatRate(string $provider): bool
     {
         return in_array($provider, [
             ImageGenerationProvider::PROVIDER_BYTEPLUS,
             ImageGenerationProvider::PROVIDER_XAI,
             ImageGenerationProvider::PROVIDER_ATLASCLOUD,
+            ImageGenerationProvider::PROVIDER_FAL,
         ], true);
     }
 

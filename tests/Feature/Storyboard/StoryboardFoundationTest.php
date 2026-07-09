@@ -65,7 +65,12 @@ class StoryboardFoundationTest extends TestCase
 
             $this->assertNotEmpty($config->model, "step {$stepKey} has a default model");
             $this->assertNotNull($config->userPrompt, "step {$stepKey} has a user prompt");
-            $this->assertSame(ImageGenerationProvider::PROVIDER_OPENROUTER, $config->provider);
+
+            // Planning is OpenRouter; the frame image runs on fal.ai (Krea 2 Turbo).
+            $expected = $stepKey === AiOperation::KEY_STORYBOARD_FRAME_IMAGE
+                ? ImageGenerationProvider::PROVIDER_FAL
+                : ImageGenerationProvider::PROVIDER_OPENROUTER;
+            $this->assertSame($expected, $config->provider, "step {$stepKey} provider");
         }
 
         // Planning runs on the strongest Gemini tier with a same-family fallback — the on-demand
@@ -112,6 +117,7 @@ class StoryboardFoundationTest extends TestCase
         $image = $resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
         $this->assertNull($image->inputSchema);
         $this->assertSame('high', $image->imageQuality);
+        $this->assertSame('fal-ai/krea-2/turbo', $image->model);
     }
 
     public function test_storyboard_models_are_global_and_pinned_on_the_allow_list(): void

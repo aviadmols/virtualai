@@ -46,7 +46,7 @@ final class StoryboardFrameGenerator
         $inputs = $this->buildInputs($frame);
 
         try {
-            $result = $this->runner->run($config->provider, $config->model, $prompt, $inputs, $config->estimatedCostMicroUsd);
+            $result = $this->runner->run($config->provider, $config->model, $prompt, $inputs, $config->estimatedCostMicroUsd, $config->aspectRatio);
         } catch (Throwable $e) {
             $frame->update([
                 'status' => StoryboardFrame::STATUS_FAILED,

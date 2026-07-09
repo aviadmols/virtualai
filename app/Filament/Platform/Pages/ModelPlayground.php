@@ -62,18 +62,20 @@ class ModelPlayground extends Page implements HasForms
     private const MAX_INPUT_KB = 5120;
     private const PROMPT_PREVIEW_CHARS = 140;
 
-    // Provider id → display label (image: all; video: byteplus + atlascloud).
+    // Provider id → display label (image: all; video: byteplus + atlascloud + fal).
     private const PROVIDER_LABELS = [
         ImageGenerationProvider::PROVIDER_OPENROUTER => 'OpenRouter',
         ImageGenerationProvider::PROVIDER_BYTEPLUS => 'BytePlus',
         ImageGenerationProvider::PROVIDER_XAI => 'xAI (Grok)',
         ImageGenerationProvider::PROVIDER_ATLASCLOUD => 'AtlasCloud',
+        ImageGenerationProvider::PROVIDER_FAL => 'fal.ai',
     ];
 
     // The async VIDEO-capable providers offered for a video run.
     private const VIDEO_PROVIDER_LABELS = [
         ImageGenerationProvider::PROVIDER_BYTEPLUS => 'BytePlus',
         ImageGenerationProvider::PROVIDER_ATLASCLOUD => 'AtlasCloud',
+        ImageGenerationProvider::PROVIDER_FAL => 'fal.ai',
     ];
 
     // Video resolution + ratio choices (only these knobs are sent to the video provider).
@@ -92,6 +94,11 @@ class ModelPlayground extends Page implements HasForms
         ImageGenerationProvider::PROVIDER_ATLASCLOUD => [
             'bytedance/seedance-2.0/reference-to-video',
             'bytedance/seedance-2.0/image-to-video',
+        ],
+        // fal path-style endpoint ids (verified in the live fal catalog).
+        ImageGenerationProvider::PROVIDER_FAL => [
+            'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
+            'fal-ai/veo3.1/fast/image-to-video',
         ],
     ];
 

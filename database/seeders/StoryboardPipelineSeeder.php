@@ -26,12 +26,21 @@ class StoryboardPipelineSeeder extends Seeder
     private const TEXT_FALLBACK = 'google/gemini-3.5-flash';
     private const TEXT_FALLBACK_LABEL = 'Gemini 3.5 Flash';
 
-    // gemini-3.1-flash-image returns 400 on OpenRouter; gemini-2.5-flash-image is the proven one.
-    // Frame images deliberately stay on the FAST model; the pro image model is catalogued as a
-    // NON-default option the admin can switch to from the pipeline settings.
-    private const IMAGE_MODEL = 'google/gemini-2.5-flash-image';
+    // Frame images run on fal's Krea 2 Turbo (fast, verified in the live fal catalog). NOTE: it is
+    // TEXT-TO-IMAGE only — @reference images and the current frame are not seen by this model; the
+    // self-contained scene-breakdown prompts carry the consistency. The Gemini image models stay
+    // catalogued as NON-default options the admin can switch to from the pipeline settings
+    // (gemini-3.1-flash-image returns 400 on OpenRouter; gemini-2.5-flash-image is the proven one).
+    private const IMAGE_MODEL = 'fal-ai/krea-2/turbo';
+    private const IMAGE_MODEL_LABEL = 'Krea 2 Turbo (fal.ai)';
+    private const IMAGE_PROVIDER = AiModel::PROVIDER_FAL;
+    private const IMAGE_MODEL_GEMINI = 'google/gemini-2.5-flash-image';
     private const IMAGE_MODEL_ALT = 'google/gemini-3-pro-image';
     private const IMAGE_MODEL_ALT_LABEL = 'Gemini 3 Pro Image (Nano Banana Pro)';
+
+    // fal VIDEO options for the clip step (NON-default; ids verified in the live fal catalog).
+    private const CLIP_FAL_KLING = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
+    private const CLIP_FAL_VEO = 'fal-ai/veo3.1/fast/image-to-video';
 
     private const TEXT_PARAMS = ['temperature' => 0.6, 'top_p' => 0.95, 'max_tokens' => 12000];
     private const IMAGE_QUALITY = 'high';
@@ -132,8 +141,9 @@ class StoryboardPipelineSeeder extends Seeder
     }
 
     /** Seed the per-frame VIDEO clip step (image-to-video via BytePlus/Seedance). INACTIVE-ready:
-     *  the model id is volatile so verify it + set a BytePlus key before generating clips. */
-    private function seedClipStep(): void
+     *  the model id is volatile so verify it + set a BytePlus key before generating clips. Public
+     *  so a data migration can re-seed JUST this step. */
+    public function seedClipStep(): void
     {
         $this->clearModelFlags(AiOperation::KEY_STORYBOARD_CLIP);
 
@@ -157,6 +167,9 @@ class StoryboardPipelineSeeder extends Seeder
         // A NON-default AtlasCloud option so an admin can switch the clip step to AtlasCloud from the
         // pipeline settings; BytePlus Seedance stays the default. The model id is volatile — verify it.
         $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, 'bytedance/seedance-2.0/reference-to-video', 'Seedance 2.0 (AtlasCloud)', unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_ATLASCLOUD);
+        // NON-default fal.ai video options (ids verified in the live fal catalog).
+        $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, self::CLIP_FAL_KLING, 'Kling 2.5 Turbo Pro (fal.ai)', unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_FAL);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, self::CLIP_FAL_VEO, 'Veo 3.1 Fast (fal.ai)', unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_FAL);
 
         // Video providers take ONE prompt string (no system message), so everything the clip needs
         // lives in the user template. {{motion}} is the frame's motion_prompt (camera + subject move).
@@ -194,8 +207,9 @@ class StoryboardPipelineSeeder extends Seeder
         $this->seedPrompt($key, $system, $user);
     }
 
-    /** Seed the frame-image generation step (an image operation, like banner/try-on). */
-    private function seedFrameImageStep(): void
+    /** Seed the frame-image generation step (an image operation, like banner/try-on). Public so a
+     *  data migration can re-seed JUST this step without resetting the text steps' admin edits. */
+    public function seedFrameImageStep(): void
     {
         $this->clearModelFlags(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
 
@@ -210,13 +224,14 @@ class StoryboardPipelineSeeder extends Seeder
                 'params' => ['temperature' => 0.7, 'top_p' => 0.95],
                 'input_schema' => null,
                 'retention_days' => null,
-                'estimated_cost_micro_usd' => 60_000,
+                'estimated_cost_micro_usd' => 20_000,
                 'credit_multiplier' => null,
             ],
         );
 
-        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL, 'Gemini 2.5 Flash Image', isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 40_000);
-        // The strongest image tier, catalogued as a NON-default choice (admin switches in settings).
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL, self::IMAGE_MODEL_LABEL, isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 15_000, provider: self::IMAGE_PROVIDER);
+        // The Gemini image models stay catalogued as NON-default choices (admin switches in settings).
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_GEMINI, 'Gemini 2.5 Flash Image', unit: AiModel::UNIT_PER_IMAGE, costHint: 40_000);
         $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_ALT, self::IMAGE_MODEL_ALT_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_ALT_HINT);
 
         // This system prompt IS applied at generation time (prepended to the frame's own

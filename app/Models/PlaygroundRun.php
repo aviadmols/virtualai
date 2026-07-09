@@ -40,10 +40,11 @@ class PlaygroundRun extends Model
     public const PROVIDER_BYTEPLUS = ImageGenerationProvider::PROVIDER_BYTEPLUS;
     public const PROVIDER_XAI = ImageGenerationProvider::PROVIDER_XAI;
     public const PROVIDER_ATLASCLOUD = ImageGenerationProvider::PROVIDER_ATLASCLOUD;
+    public const PROVIDER_FAL = ImageGenerationProvider::PROVIDER_FAL;
 
     // The async VIDEO-capable providers; a video run must use one of these (else it falls back to
     // the BytePlus default so a stale image-provider selection can't mis-route).
-    public const VIDEO_PROVIDERS = [self::PROVIDER_BYTEPLUS, self::PROVIDER_ATLASCLOUD];
+    public const VIDEO_PROVIDERS = [self::PROVIDER_BYTEPLUS, self::PROVIDER_ATLASCLOUD, self::PROVIDER_FAL];
 
     // meta keys — the video request knobs + the resolved region host.
     public const META_RATIO = 'ratio';

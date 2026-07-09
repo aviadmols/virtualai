@@ -39,6 +39,15 @@ class StoryboardClipTest extends TestCase
     private const AC_PREDICTION = self::AC_BASE.'/model/prediction/'.self::AC_TASK;
     private const AC_MODEL = 'bytedance/seedance-2.0/reference-to-video';
 
+    // fal.ai (queue API) endpoints + the seeded non-default clip model. The task id is COMPOSITE
+    // ("{model}|{request_id}") — fal's status/result routes need the model path.
+    private const FAL_MODEL = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
+    private const FAL_SUBMIT = 'https://queue.fal.run/'.self::FAL_MODEL;
+    private const FAL_REQUEST = 'req-fal1';
+    private const FAL_TASK = self::FAL_MODEL.'|'.self::FAL_REQUEST;
+    private const FAL_STATUS = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST.'/status';
+    private const FAL_RESULT = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -157,6 +166,68 @@ class StoryboardClipTest extends TestCase
         Http::assertSent(fn ($req) => str_ends_with($req->url(), '/model/generateVideo')
             && str_starts_with($req->data()['reference_images'][0], 'data:'));
 
+        $this->assertDatabaseCount('credit_ledger', 0);
+    }
+
+    /** Point the clip operation at the (seeded) fal model + configure the provider. */
+    private function useFal(): void
+    {
+        config()->set('services.fal.api_key', 'fal-real-key');
+        config()->set('services.fal.base_url', 'https://queue.fal.run');
+        config()->set('services.fal.catalog_url', 'https://fal.ai/api');
+        config()->set('services.fal.timeout', 30);
+
+        AiOperation::query()
+            ->where('operation_key', AiOperation::KEY_STORYBOARD_CLIP)
+            ->update(['default_model' => self::FAL_MODEL]);
+    }
+
+    public function test_the_generator_routes_to_fal_when_the_clip_op_provider_is_fal(): void
+    {
+        $this->useFal();
+        Bus::fake([PollStoryboardClipJob::class]);
+        Http::fake([
+            self::FAL_SUBMIT => Http::response(['request_id' => self::FAL_REQUEST], 200),
+            '*' => Http::response("\x89PNG\r\n\x1a\nREF", 200), // the frame-image download (signed route)
+        ]);
+
+        $frame = $this->frame();
+        (new GenerateStoryboardClipJob($frame->id))->handle(app(StoryboardClipGenerator::class));
+
+        $frame->refresh();
+        $this->assertSame(StoryboardFrame::VIDEO_GENERATING, $frame->video_status);
+        $this->assertSame(self::FAL_TASK, $frame->video_task_id);
+        $this->assertSame('fal', $frame->video_meta['provider']);
+        Bus::assertDispatched(PollStoryboardClipJob::class);
+
+        // fal must receive the frame image as a base64 data URI (the private disk isn't reachable).
+        Http::assertSent(fn ($req) => $req->url() === self::FAL_SUBMIT
+            && str_starts_with((string) ($req->data()['image_url'] ?? ''), 'data:'));
+
+        $this->assertDatabaseCount('credit_ledger', 0);
+    }
+
+    public function test_the_poller_uses_the_fal_client_and_stores_the_clip(): void
+    {
+        $this->useFal();
+        $mp4 = "\x00\x00\x00\x18ftypmp42CLIP";
+        Http::fake([
+            self::FAL_STATUS => Http::response(['status' => 'COMPLETED'], 200),
+            self::FAL_RESULT => Http::response(['video' => ['url' => self::VIDEO_URL]], 200),
+            self::VIDEO_URL => Http::response($mp4, 200),
+        ]);
+
+        $frame = $this->frame([
+            'video_status' => StoryboardFrame::VIDEO_GENERATING,
+            'video_task_id' => self::FAL_TASK,
+            'video_meta' => ['provider' => 'fal', 'cost' => 200_000],
+        ]);
+        (new PollStoryboardClipJob($frame->id))->handle(app(VideoProviderRouter::class), app(MediaStorage::class));
+
+        $frame->refresh();
+        $this->assertSame(StoryboardFrame::VIDEO_READY, $frame->video_status);
+        $this->assertStringEndsWith('.mp4', (string) $frame->video_path);
+        Storage::disk('public')->assertExists($frame->video_path);
         $this->assertDatabaseCount('credit_ledger', 0);
     }
 

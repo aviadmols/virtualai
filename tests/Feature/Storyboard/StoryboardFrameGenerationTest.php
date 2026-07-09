@@ -17,20 +17,27 @@ use Tests\TestCase;
 /**
  * Per-frame image generation: the frame-image operation + runner produce an image, store it, and
  * record a selected VERSION (history kept). Regenerate adds a version; selecting an older version
- * swaps the frame's image; a locked frame is untouched. Never charges. OpenRouter is faked.
+ * swaps the frame's image; a locked frame is untouched. Never charges. The frame-image step runs
+ * on fal.ai (Krea 2 Turbo) — the fal queue API (submit → status → result → download) is faked.
  */
 class StoryboardFrameGenerationTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const CHAT = 'https://openrouter.ai/api/v1/chat/completions';
+    private const FAL_MODEL = 'fal-ai/krea-2/turbo';
+    private const FAL_SUBMIT = 'https://queue.fal.run/'.self::FAL_MODEL;
+    private const FAL_REQUEST = 'req-sb1';
+    private const FAL_STATUS = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST.'/status';
+    private const FAL_RESULT = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST;
+    private const FAL_IMAGE_URL = 'https://v3.fal.media/files/frame.png';
 
     protected function setUp(): void
     {
         parent::setUp();
-        config()->set('services.openrouter.key', 'sk-or-test');
-        config()->set('services.openrouter.base_url', 'https://openrouter.ai/api/v1');
-        config()->set('services.openrouter.timeout', 30);
+        config()->set('services.fal.api_key', 'fal-test-key');
+        config()->set('services.fal.base_url', 'https://queue.fal.run');
+        config()->set('services.fal.catalog_url', 'https://fal.ai/api');
+        config()->set('services.fal.timeout', 30);
         config()->set('trayon.media.disk', 's3');
         Storage::fake('s3');
         $this->seed(StoryboardPipelineSeeder::class);
@@ -40,13 +47,14 @@ class StoryboardFrameGenerationTest extends TestCase
     private function fakeImage(string $marker = 'FRAME'): void
     {
         $png = "\x89PNG\r\n\x1a\n".$marker;
-        $dataUrl = 'data:image/png;base64,'.base64_encode($png);
 
-        Http::fake([self::CHAT => Http::response([
-            'choices' => [['message' => ['role' => 'assistant', 'content' => '', 'images' => [['type' => 'image_url', 'image_url' => ['url' => $dataUrl]]]]]],
-            'model' => 'google/gemini-3.1-flash-image',
-            'usage' => ['cost' => 0.04],
-        ], 200)]);
+        Http::fake([
+            self::FAL_STATUS => Http::response(['status' => 'COMPLETED'], 200),
+            self::FAL_RESULT => Http::response(['images' => [['url' => self::FAL_IMAGE_URL, 'content_type' => 'image/png']]], 200),
+            self::FAL_SUBMIT => Http::response(['request_id' => self::FAL_REQUEST], 200),
+            self::FAL_IMAGE_URL => Http::response($png, 200),
+            '*' => Http::response($png, 200), // signed input-image fetches (data-URI inlining)
+        ]);
     }
 
     private function frame(array $overrides = []): StoryboardFrame
@@ -73,8 +81,8 @@ class StoryboardFrameGenerationTest extends TestCase
 
         $this->assertSame(1, $frame->versions()->count());
         $this->assertSame(1, $frame->versions()->where('is_selected', true)->count());
-        // Cost recorded from the provider's inline cost (0.04 USD → 40_000 micro).
-        $this->assertSame(40_000, $frame->image_cost_micro_usd);
+        // fal is flat-rate (no inline USD) — the operation's estimate is the recorded cost.
+        $this->assertSame(20_000, $frame->image_cost_micro_usd);
         $this->assertDatabaseCount('credit_ledger', 0);
     }
 

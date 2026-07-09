@@ -16,6 +16,7 @@ final class ProviderRouter
         private readonly OpenRouterClient $openRouter,
         private readonly BytePlusImageClient $bytePlus,
         private readonly XaiImageClient $xai,
+        private readonly FalImageClient $fal,
     ) {}
 
     public function for(string $provider): ImageGenerationProvider
@@ -24,6 +25,7 @@ final class ProviderRouter
             ImageGenerationProvider::PROVIDER_OPENROUTER => $this->openRouter,
             ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->bytePlus,
             ImageGenerationProvider::PROVIDER_XAI => $this->xai,
+            ImageGenerationProvider::PROVIDER_FAL => $this->fal,
             default => throw OpenRouterException::make(
                 OpenRouterException::CODE_BAD_REQUEST,
                 sprintf('Unknown AI provider "%s".', $provider),

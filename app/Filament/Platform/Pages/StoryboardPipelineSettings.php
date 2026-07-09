@@ -2,6 +2,7 @@
 
 namespace App\Filament\Platform\Pages;
 
+use App\Domain\Ai\FalModelCatalog;
 use App\Domain\Ai\OperationConfig;
 use App\Domain\Ai\StoryboardTextCaller;
 use App\Domain\Playground\PlaygroundImageRunner;
@@ -69,15 +70,18 @@ class StoryboardPipelineSettings extends Page implements HasForms
         AiModel::PROVIDER_BYTEPLUS => 'BytePlus',
         AiModel::PROVIDER_XAI => 'xAI (Grok)',
         AiModel::PROVIDER_ATLASCLOUD => 'AtlasCloud',
+        AiModel::PROVIDER_FAL => 'fal.ai',
     ];
 
     // Known model ids per provider — offered in the Model dropdown alongside catalogued models so
-    // the common choices appear even before a model is catalogued.
+    // the common choices appear even before a model is catalogued. For fal the FULL public model
+    // catalog is merged in dynamically (FalModelCatalog); these are just the pinned favorites.
     private const MODEL_SUGGESTIONS = [
         AiModel::PROVIDER_OPENROUTER => ['google/gemini-3.1-pro-preview', 'google/gemini-3.5-flash', 'google/gemini-2.5-flash', 'google/gemini-2.5-flash-image', 'google/gemini-3-pro-image'],
         AiModel::PROVIDER_BYTEPLUS => ['seedream-4-0-250828', 'seedream-5-0-260128', 'seedream-4-5-251128', 'dreamina-seedance-2-0-260128'],
         AiModel::PROVIDER_XAI => ['grok-2-image', 'grok-imagine-image-quality'],
         AiModel::PROVIDER_ATLASCLOUD => ['bytedance/seedance-2.0/reference-to-video', 'bytedance/seedance-2.0/image-to-video'],
+        AiModel::PROVIDER_FAL => ['fal-ai/krea-2/turbo', 'fal-ai/flux/dev', 'fal-ai/nano-banana/edit', 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', 'fal-ai/veo3.1/fast/image-to-video'],
     ];
 
     /** @var array<string,mixed> */
@@ -151,7 +155,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
                     Select::make($key.'.model')
                         ->label(__('platform.storyboard.pipe.model'))
                         ->helperText(__('platform.storyboard.pipe.model_help'))
-                        ->options(fn (Get $get): array => $this->modelOptions((string) $get($key.'.provider'), (string) $get($key.'.model')))
+                        ->options(fn (Get $get): array => $this->modelOptions((string) $get($key.'.provider'), (string) $get($key.'.model'), $key))
                         ->searchable()
                         ->native(false)
                         ->required(),
@@ -353,10 +357,12 @@ class StoryboardPipelineSettings extends Page implements HasForms
     /**
      * The Model dropdown options for a provider: its catalogued models + the known suggestions +
      * the current value (so an existing custom id is never dropped). Reacts to the Provider select.
+     * For fal the FULL public model catalog is merged in (image categories for the frame-image
+     * step, video categories for the clip step) — the "browse every fal model" picker.
      *
      * @return array<string,string>
      */
-    private function modelOptions(string $provider, string $current = ''): array
+    private function modelOptions(string $provider, string $current = '', ?string $stepKey = null): array
     {
         if ($provider === '') {
             $provider = AiModel::PROVIDER_OPENROUTER;
@@ -370,6 +376,16 @@ class StoryboardPipelineSettings extends Page implements HasForms
 
         foreach (self::MODEL_SUGGESTIONS[$provider] ?? [] as $id) {
             $options[$id] ??= $id;
+        }
+
+        if ($provider === AiModel::PROVIDER_FAL) {
+            $categories = $stepKey === AiOperation::KEY_STORYBOARD_CLIP
+                ? FalModelCatalog::VIDEO_CATEGORIES
+                : FalModelCatalog::IMAGE_CATEGORIES;
+
+            foreach (app(FalModelCatalog::class)->options($categories) as $id => $label) {
+                $options[$id] ??= $label;
+            }
         }
 
         if ($current !== '' && ! isset($options[$current])) {

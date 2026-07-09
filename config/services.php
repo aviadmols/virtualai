@@ -83,6 +83,17 @@ return [
         'timeout' => (int) env('ATLASCLOUD_TIMEOUT', 80),
     ],
 
+    // fal.ai — images AND video through one async queue (https://queue.fal.run/{model}). Key is
+    // server-side only (`Authorization: Key ...`, fal's own scheme). catalog_url is the PUBLIC
+    // no-auth model registry that powers the admin model pickers. fal returns no inline USD cost
+    // (flat-rate; the admin per-image/per-clip price applies).
+    'fal' => [
+        'api_key' => env('FAL_API_KEY'),
+        'base_url' => env('FAL_BASE_URL', 'https://queue.fal.run'),
+        'catalog_url' => env('FAL_CATALOG_URL', 'https://fal.ai/api'),
+        'timeout' => (int) env('FAL_TIMEOUT', 80),
+    ],
+
     // PayPlus — the LOCKED credit-purchase rail for v1 (behind CreditPaymentProvider).
     // secret_key is BOTH the request auth header and the webhook-signature HMAC key (the
     // `hash` header = base64(HMAC-SHA256(rawBody, secret_key))). webhook_secret is kept
