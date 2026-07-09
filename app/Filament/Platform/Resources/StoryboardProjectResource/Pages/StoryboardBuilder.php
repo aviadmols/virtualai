@@ -16,6 +16,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
@@ -83,6 +84,17 @@ class StoryboardBuilder extends Page
                     ->icon('heroicon-o-film')
                     ->visible(fn (): bool => $this->record->frames()->whereNotNull('image_path')->exists())
                     ->form([
+                        Select::make('mode')
+                            ->label(__('platform.storyboard.combine_mode'))
+                            ->options([
+                                CombineStoryboardVideoJob::MODE_ANIMATE => __('platform.storyboard.combine_mode_animate'),
+                                CombineStoryboardVideoJob::MODE_SLIDESHOW => __('platform.storyboard.combine_mode_slideshow'),
+                            ])
+                            ->default(CombineStoryboardVideoJob::MODE_ANIMATE)
+                            ->selectablePlaceholder(false)
+                            ->live()
+                            ->helperText(__('platform.storyboard.combine_mode_help'))
+                            ->required(),
                         Select::make('resolution')
                             ->label(__('platform.storyboard.combine_resolution'))
                             ->options(self::RESOLUTIONS)
@@ -96,14 +108,20 @@ class StoryboardBuilder extends Page
                             ->minValue(3)
                             ->maxValue(120)
                             ->default(fn (): int => max(3, ((int) $this->record->duration_seconds) ?: self::DEFAULT_SECONDS))
-                            ->required(),
+                            ->visible(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_SLIDESHOW)
+                            ->required(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_SLIDESHOW),
                     ])
                     ->action(function (array $data): void {
                         $this->record->update([
                             'final_video_status' => StoryboardProject::VIDEO_GENERATING,
                             'final_video_meta' => null,
                         ]);
-                        CombineStoryboardVideoJob::dispatch($this->record->id, (int) $data['seconds'], (string) $data['resolution']);
+                        CombineStoryboardVideoJob::dispatch(
+                            $this->record->id,
+                            (string) $data['mode'],
+                            (string) $data['resolution'],
+                            (int) ($data['seconds'] ?? $this->record->duration_seconds ?: self::DEFAULT_SECONDS),
+                        );
                         Notification::make()->success()->title(__('platform.storyboard.combine_started'))->send();
                     }),
             ])

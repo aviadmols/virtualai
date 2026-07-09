@@ -10,11 +10,15 @@ use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
- * StoryboardVideoComposer — stitch a project's frame images, in order, into ONE MP4 (ffmpeg).
+ * StoryboardVideoComposer — stitch a project into ONE MP4 (ffmpeg). Two modes:
  *
- * Each frame is shown for an equal slice of the requested total length, scaled + letterboxed to
- * the target resolution (derived from the project aspect + the chosen height). Images-only (not
- * the per-frame AI clips) so the output length is exact and deterministic. Admin-only; no charge.
+ * - concatClips(): join the per-frame AI motion clips (Seedance image-to-video), in order, into one
+ *   real animated film. This is the default the admin wants.
+ * - compose(): a quick, free SLIDESHOW of the still frame images (each shown for an equal slice of a
+ *   requested length) — a fast preview, no motion.
+ *
+ * Every clip/image is scaled + letterboxed to the target resolution (project aspect + chosen height).
+ * Admin-only; no charge (the clips themselves are billed at generation, not here).
  */
 final class StoryboardVideoComposer
 {
@@ -24,7 +28,7 @@ final class StoryboardVideoComposer
 
     private const FPS = 30;
     private const MIN_PER_FRAME = 0.4;      // never flash a frame shorter than this
-    private const PROCESS_TIMEOUT = 100;    // seconds — under the media worker timeout
+    private const PROCESS_TIMEOUT = 90;     // seconds — under the media worker + job timeout
 
     // Output height per resolution key; width is derived from the project aspect ratio.
     private const HEIGHTS = ['720p' => 720, '1080p' => 1080];
@@ -33,6 +37,7 @@ final class StoryboardVideoComposer
 
     private const OUTPUT_MIME = 'video/mp4';
     private const DEFAULT_IMAGE_EXT = 'png';
+    private const DEFAULT_VIDEO_EXT = 'mp4';
 
     public function __construct(
         private readonly MediaStorage $media,
@@ -71,6 +76,40 @@ final class StoryboardVideoComposer
             $stored = $this->media->storeStoryboardVideo($project->id, (string) file_get_contents($output));
 
             return $stored->path;
+        } finally {
+            File::deleteDirectory($dir);
+        }
+    }
+
+    /**
+     * Join the per-frame AI motion clips (video_path), in frame order, into ONE real animated MP4.
+     * Skips frames whose clip failed / vanished. @throws RuntimeException when no clips or ffmpeg fails.
+     */
+    public function concatClips(StoryboardProject $project, string $resolution): string
+    {
+        $paths = $project->frames()->whereNotNull('video_path')->pluck('video_path')->all();
+
+        if ($paths === []) {
+            throw new RuntimeException('No generated video clips to combine.');
+        }
+
+        [$width, $height] = $this->dimensions($project->aspect_ratio ?? self::DEFAULT_ASPECT, $resolution);
+
+        $dir = sys_get_temp_dir().'/sbclip_'.$project->id.'_'.Str::random(10);
+        File::ensureDirectoryExists($dir);
+
+        try {
+            $inputs = $this->downloadClips($paths, $dir);
+            $output = $dir.'/final.mp4';
+
+            $result = Process::timeout(self::PROCESS_TIMEOUT)
+                ->run($this->concatCommand($inputs, $width, $height, $output));
+
+            if (! $result->successful() || ! is_file($output)) {
+                throw new RuntimeException($this->trimError($result->errorOutput() ?: $result->output()));
+            }
+
+            return $this->media->storeStoryboardVideo($project->id, (string) file_get_contents($output))->path;
         } finally {
             File::deleteDirectory($dir);
         }
@@ -116,6 +155,66 @@ final class StoryboardVideoComposer
             $args[] = '1';
             $args[] = '-t';
             $args[] = (string) $perFrame;
+            $args[] = '-i';
+            $args[] = $file;
+        }
+
+        $filter = '';
+        $count = count($inputs);
+        for ($i = 0; $i < $count; $i++) {
+            $filter .= "[{$i}:v]scale={$width}:{$height}:force_original_aspect_ratio=decrease,"
+                ."pad={$width}:{$height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=".self::FPS."[v{$i}];";
+        }
+        for ($i = 0; $i < $count; $i++) {
+            $filter .= "[v{$i}]";
+        }
+        $filter .= "concat=n={$count}:v=1:a=0,format=yuv420p[v]";
+
+        return array_merge($args, [
+            '-filter_complex', $filter,
+            '-map', '[v]',
+            '-r', (string) self::FPS,
+            '-movflags', '+faststart',
+            $output,
+        ]);
+    }
+
+    /** Write each source clip to the temp dir; returns the ordered local file paths. */
+    private function downloadClips(array $paths, string $dir): array
+    {
+        $files = [];
+
+        foreach ($paths as $i => $path) {
+            $bytes = $this->media->get($path);
+            if ($bytes === null) {
+                continue; // a clip that vanished from the disk is skipped, not fatal
+            }
+
+            $ext = pathinfo((string) $path, PATHINFO_EXTENSION) ?: self::DEFAULT_VIDEO_EXT;
+            $file = $dir.'/clip_'.str_pad((string) $i, 4, '0', STR_PAD_LEFT).'.'.$ext;
+            File::put($file, $bytes);
+            $files[] = $file;
+        }
+
+        if ($files === []) {
+            throw new RuntimeException('Video clips are not available on the media disk (check MEDIA_DISK persistence).');
+        }
+
+        return $files;
+    }
+
+    /**
+     * The ffmpeg argv to concat N video inputs: each scaled + padded to the target box + normalised
+     * fps, then joined into a single H.264 stream (video only — clips carry no audio).
+     *
+     * @param  array<int,string>  $inputs
+     * @return array<int,string>
+     */
+    private function concatCommand(array $inputs, int $width, int $height, string $output): array
+    {
+        $args = [$this->binary(), '-y'];
+
+        foreach ($inputs as $file) {
             $args[] = '-i';
             $args[] = $file;
         }
