@@ -42,7 +42,7 @@ final class StoryboardFrameGenerator
 
         $config = $this->resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
         $prompt = $this->buildPrompt($frame, $editInstruction);
-        $inputs = $this->referenceImages($frame);
+        $inputs = $this->buildInputs($frame);
 
         try {
             $result = $this->runner->run($config->provider, $config->model, $prompt, $inputs, $config->estimatedCostMicroUsd);
@@ -115,6 +115,27 @@ final class StoryboardFrameGenerator
         }
 
         return $prompt;
+    }
+
+    /**
+     * The model inputs: on a RE-generate, the frame's CURRENT image leads (so the model EDITS it —
+     * keeping the composition, characters and style — and only applies the prompt change, instead of
+     * inventing a brand-new frame), followed by the referenced @tag assets.
+     *
+     * @return array<int,ImagePayload>
+     */
+    private function buildInputs(StoryboardFrame $frame): array
+    {
+        $inputs = $this->referenceImages($frame);
+
+        if ($frame->image_path !== null && $this->media->exists($frame->image_path)) {
+            $current = $this->media->signedUrl($frame->image_path);
+            if ($current !== null) {
+                array_unshift($inputs, ImagePayload::fromUrl($current));
+            }
+        }
+
+        return $inputs;
     }
 
     /** @return array<int,ImagePayload> the referenced assets' signed image urls, capped */

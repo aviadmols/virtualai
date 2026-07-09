@@ -93,6 +93,20 @@ class StoryboardFrameGenerationTest extends TestCase
         $this->assertSame(2, $selected->first()->version_number);
     }
 
+    public function test_regenerate_feeds_the_current_image_so_it_edits_not_reinvents(): void
+    {
+        $this->fakeImage();
+        $frame = $this->frame(); // no @refs in the prompt, so the only image input can be the current one
+        $generator = app(StoryboardFrameGenerator::class);
+
+        $generator->generate($frame);              // first run: text-to-image, no input image
+        $generator->generate($frame->refresh());   // regenerate: the current image must be fed in
+
+        // At least one request (the regenerate) carried an input image, so the model EDITS the
+        // existing frame (keeps composition/characters/style) instead of inventing a new one.
+        Http::assertSent(fn ($request): bool => str_contains((string) json_encode($request->data()), 'image_url'));
+    }
+
     public function test_selecting_an_older_version_swaps_the_frame_image(): void
     {
         $this->fakeImage();
