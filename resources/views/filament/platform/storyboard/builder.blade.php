@@ -22,6 +22,11 @@
                     </span>
                 @endforeach
             </div>
+            @foreach ($steps as $step)
+                @if ($step['status'] === 'failed' && $step['error'])
+                    <p class="to-sb-error">{{ $step['label'] }}: {{ $step['error'] }}</p>
+                @endif
+            @endforeach
         @else
             <x-to.empty-state
                 variant="first-run"

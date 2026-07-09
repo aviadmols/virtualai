@@ -49,6 +49,14 @@
     border-color: var(--to-danger);
 }
 
+.to-sb-error {
+    color: var(--to-danger);
+    font-size: var(--toa-type-caption-size);
+    padding: var(--to-space-2) var(--to-space-3);
+    border-radius: var(--to-r-card);
+    background: var(--to-danger-bg);
+}
+
 /* --- Visual bible --- */
 .to-sb-bible {
     border: var(--to-bw-input) solid var(--toa-border);

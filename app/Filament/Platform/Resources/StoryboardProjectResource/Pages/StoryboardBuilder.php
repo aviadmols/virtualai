@@ -8,8 +8,10 @@ use App\Filament\Platform\Resources\StoryboardProjectResource;
 use App\Jobs\GenerateStoryboardClipJob;
 use App\Jobs\GenerateStoryboardFrameJob;
 use App\Jobs\RunStoryboardPipelineJob;
+use App\Domain\Storyboard\StoryboardStep;
 use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
+use App\Models\StoryboardStepRun;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
@@ -57,8 +59,17 @@ class StoryboardBuilder extends Page
                 ->icon('heroicon-o-play')
                 ->requiresConfirmation()
                 ->action(function (): void {
-                    RunStoryboardPipelineJob::dispatch($this->record->id);
+                    // Pre-create the step rows as pending so the pipeline is visible IMMEDIATELY
+                    // (before a worker picks the job up) — the admin sees it started, not a blank.
+                    foreach (StoryboardStep::TEXT_STEPS as $stepKey) {
+                        $this->record->stepRuns()->updateOrCreate(
+                            ['step_key' => $stepKey],
+                            ['status' => StoryboardStepRun::STATUS_PENDING, 'error' => null, 'output' => null, 'duration_ms' => null],
+                        );
+                    }
+
                     $this->record->update(['status' => StoryboardProject::STATUS_RUNNING]);
+                    RunStoryboardPipelineJob::dispatch($this->record->id);
                     Notification::make()->success()->title(__('platform.storyboard.run_started'))->send();
                 }),
             Action::make('generateAll')
@@ -190,6 +201,7 @@ class StoryboardBuilder extends Page
             ->map(fn ($run): array => [
                 'label' => __('platform.storyboard.step.'.$run->step_key),
                 'status' => $run->status,
+                'error' => $run->error,
                 'duration' => $run->duration_ms !== null ? $this->duration($run->duration_ms) : null,
             ])
             ->all();

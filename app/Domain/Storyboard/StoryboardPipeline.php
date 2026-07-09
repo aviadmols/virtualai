@@ -30,7 +30,6 @@ final class StoryboardPipeline
     public function run(StoryboardProject $project): void
     {
         $project->update(['status' => StoryboardProject::STATUS_RUNNING]);
-        $project->stepRuns()->delete(); // a re-run starts a clean log
 
         foreach (StoryboardStep::TEXT_STEPS as $stepKey) {
             if (! $this->runStep($project, $stepKey)) {
@@ -47,20 +46,20 @@ final class StoryboardPipeline
 
     private function runStep(StoryboardProject $project, string $stepKey): bool
     {
-        $config = $this->resolver->for($stepKey);
-        $vars = $this->vars($project);
-
-        $run = $project->stepRuns()->create([
-            'step_key' => $stepKey,
-            'status' => StoryboardStepRun::STATUS_RUNNING,
-            'input' => $vars,
-            'provider' => $config->provider,
-            'model' => $config->model,
-        ]);
+        // Create/reset the row FIRST (before resolving) so ANY failure — incl. an unseeded
+        // operation — is visible with its reason instead of an invisible crash. updateOrCreate
+        // keeps one row per step across re-runs.
+        $run = $project->stepRuns()->updateOrCreate(
+            ['step_key' => $stepKey],
+            ['status' => StoryboardStepRun::STATUS_RUNNING, 'error' => null, 'output' => null, 'duration_ms' => null],
+        );
 
         $startedAt = hrtime(true);
 
         try {
+            $config = $this->resolver->for($stepKey);
+            $vars = $this->vars($project);
+            $run->update(['input' => $vars, 'provider' => $config->provider, 'model' => $config->model]);
             $result = $this->caller->extract($config, $vars);
         } catch (Throwable $e) {
             $run->update([
