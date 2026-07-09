@@ -5,8 +5,10 @@
     (.to-sb-composer / .to-sb-refs). i18n: platform.storyboard.*
 --}}
 @php
+    // Bind the writable prompt to this field's state; drive the @-picker + gallery LIVE from the
+    // sibling reference-image pool (auto-numbered @image1..@imageN as images are dropped in).
     $statePath = $getStatePath();
-    $assetsPath = \Illuminate\Support\Str::beforeLast($statePath, '.').'.assets';
+    $assetsPath = \Illuminate\Support\Str::beforeLast($statePath, '.').'.reference_uploads';
 @endphp
 
 <x-dynamic-component :component="$getFieldWrapperView()" :field="$field">

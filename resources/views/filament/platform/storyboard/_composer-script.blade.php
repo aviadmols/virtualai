@@ -22,7 +22,6 @@
                 staticTags: (config && config.tags) || [],
                 statePath: (config && config.statePath) || null,
                 assetsPath: (config && config.assetsPath) || null,
-                model: '',
                 assetsState: null,
                 urls: {},
                 show: false,
@@ -30,9 +29,9 @@
                 active: 0,
 
                 init() {
-                    if (this.statePath) {
-                        this.model = this.$wire.$entangle(this.statePath);
-                    }
+                    // assetsPath is a READ-ONLY reactive source (the uploaded reference pool) — entangle
+                    // is fine here. The writable statePath is synced with $wire.set (below), NOT entangle:
+                    // reassigning an entangled property replaces the proxy and silently drops the write.
                     if (this.assetsPath) {
                         this.assetsState = this.$wire.$entangle(this.assetsPath);
                         if (typeof this.$wire.getStoryboardAssetUrls === 'function') {
@@ -45,24 +44,20 @@
                             });
                         }
                     }
-                    this.renderText(this.model || '');
+                    this.renderText(this.statePath ? (this.$wire.get(this.statePath) || '') : '');
                 },
 
-                // The reference tags: LIVE from the assets repeater in form mode, else the static list.
+                // The reference tags: LIVE from the uploaded pool (auto-numbered @image1..@imageN, the
+                // number IS the tag), else the static list passed in (Builder frame editor).
                 get tags() {
                     if (! this.assetsPath) return this.staticTags;
                     const s = this.assetsState;
-                    const rows = Array.isArray(s) ? s : Object.values(s || {});
-                    const out = [];
-                    const seen = {};
-                    rows.forEach((r) => {
-                        const tag = r && r.tag ? String(r.tag).trim() : '';
-                        if (tag && ! seen[tag]) {
-                            seen[tag] = true;
-                            out.push({ tag, url: this.urls[tag] || null });
-                        }
+                    const rows = (Array.isArray(s) ? s : Object.values(s || {})).filter(Boolean);
+
+                    return rows.map((row, i) => {
+                        const tag = 'image' + (i + 1);
+                        return { tag, url: this.urls[tag] || null };
                     });
-                    return out;
                 },
 
                 // --- pill element (thumbnail + @label, contenteditable=false, click to remove) ---
@@ -135,7 +130,11 @@
                 },
 
                 sync() {
-                    if (this.statePath) this.model = this.serialize();
+                    // Deferred set: updates the Livewire property now, sent with the next request
+                    // (Save / Generate) — so validation sees the story text and no round-trip fights the caret.
+                    if (this.statePath) {
+                        this.$wire.set(this.statePath, this.serialize(), false);
+                    }
                 },
 
                 onInput() {
