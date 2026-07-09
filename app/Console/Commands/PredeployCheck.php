@@ -19,6 +19,12 @@ class PredeployCheck extends Command
     protected $description = 'Fail-closed env/config guard run before a deploy takes traffic.';
 
     private const ENV_PRODUCTION = 'production';
+    private const ENV_LOCAL = 'local';
+    private const ENV_TESTING = 'testing';
+
+    // Local-driver disks that live inside the container filesystem (wiped on every deploy).
+    private const DRIVER_LOCAL = 'local';
+    private const EPHEMERAL_DISKS = ['local', 'public'];
 
     // Secrets/URLs that must be present in EVERY environment.
     private const REQUIRED_ALWAYS = [
@@ -94,6 +100,14 @@ class PredeployCheck extends Command
             $failures[] = "media disk '{$diskName}' is refused in production (use the s3/R2 disk).";
         } elseif ($isProduction && blank(config("filesystems.disks.{$diskName}.bucket"))) {
             $failures[] = "media disk '{$diskName}' has no bucket configured (set S3_BUCKET / R2_BUCKET).";
+        } elseif (! $isProduction && ! in_array($env, [self::ENV_LOCAL, self::ENV_TESTING], true)) {
+            // Hosted non-production (e.g. staging): an ephemeral media disk BOOTS fine but is
+            // WIPED on every deploy — the recurring "all my uploads vanished" data loss. Warn
+            // loudly (not fatal, so staging still deploys) until persistent storage is wired.
+            $reason = $this->ephemeralMediaReason($diskName);
+            if ($reason !== null) {
+                $this->warn('predeploy-check WARNING: '.$reason);
+            }
         }
 
         if (! $this->option('skip-disk') && filled($diskName) && empty($failures)) {
@@ -101,6 +115,34 @@ class PredeployCheck extends Command
         }
 
         return $this->report($failures);
+    }
+
+    /**
+     * Why the given media disk would LOSE data across a deploy, or null if it is persistent.
+     * A local-driver disk lives inside the container image; only a mounted Railway Volume
+     * (MEDIA_DISK=volume + MEDIA_VOLUME_PATH pointing at the mount) survives a redeploy.
+     * Object storage (s3/R2) is persistent by nature.
+     */
+    private function ephemeralMediaReason(string $diskName): ?string
+    {
+        $driver = (string) config("filesystems.disks.{$diskName}.driver");
+        if ($driver !== self::DRIVER_LOCAL) {
+            return null;
+        }
+
+        if (in_array($diskName, self::EPHEMERAL_DISKS, true)) {
+            return "media disk '{$diskName}' is EPHEMERAL (container filesystem) — every deploy wipes all uploads + generated media. "
+                .'Mount a Railway Volume and set MEDIA_DISK=volume + MEDIA_VOLUME_PATH=/upload, or set MEDIA_DISK=s3 with R2 credentials.';
+        }
+
+        // The 'volume' disk is persistent ONLY when a real mount path is given; unset defaults
+        // inside the app dir (storage/app/volume-media) and is wiped on deploy like any other.
+        if (blank(env('MEDIA_VOLUME_PATH'))) {
+            return "media disk 'volume' has no MEDIA_VOLUME_PATH — it defaults inside the app and is wiped on every deploy. "
+                .'Mount a Railway Volume (e.g. /upload) and set MEDIA_VOLUME_PATH to that mount path.';
+        }
+
+        return null;
     }
 
     /**
