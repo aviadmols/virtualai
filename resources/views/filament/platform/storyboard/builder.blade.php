@@ -102,6 +102,12 @@
 
                             <p class="to-sb-frame__desc">{{ $frame['description'] }}</p>
 
+                            @if ($frame['failed'] && $frame['error'])
+                                <p class="to-sb-error">{{ $frame['error'] }}</p>
+                            @elseif ($frame['videoError'])
+                                <p class="to-sb-error">{{ $frame['videoError'] }}</p>
+                            @endif
+
                             @if ($editingFrameId === $frame['id'])
                                 {{-- Inline prompt editor --}}
                                 <div class="to-sb-frame__edit">

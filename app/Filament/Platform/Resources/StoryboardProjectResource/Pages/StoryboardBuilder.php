@@ -228,6 +228,8 @@ class StoryboardBuilder extends Page
             'status' => $f->status,
             'generating' => $f->status === StoryboardFrame::STATUS_GENERATING,
             'failed' => $f->status === StoryboardFrame::STATUS_FAILED,
+            'error' => is_array($f->meta) ? ($f->meta['error'] ?? null) : null,
+            'videoError' => is_array($f->video_meta) ? ($f->video_meta['error'] ?? null) : null,
             'approved' => $f->is_approved,
             'locked' => $f->is_locked,
             'imageUrl' => $f->image_path !== null ? $media->signedUrl($f->image_path) : null,
