@@ -18,6 +18,7 @@ use App\Models\StoryboardProject;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Get;
 use Filament\Notifications\Notification;
@@ -43,9 +44,12 @@ class StoryboardBuilder extends Page
     private const MS_SECOND_THRESHOLD = 1000;
 
     // Combined-video options (output height per key; width derived from the project aspect).
-    private const RESOLUTIONS = ['720p' => '720p', '1080p' => '1080p'];
+    private const RESOLUTIONS = ['480p' => '480p', '720p' => '720p', '1080p' => '1080p'];
     private const DEFAULT_RESOLUTION = '1080p';
     private const DEFAULT_SECONDS = 15;
+
+    // Structure (aspect ratio) choices for the AI reference-to-video generation.
+    private const RATIOS = ['16:9' => '16:9', '9:16' => '9:16', '1:1' => '1:1', '4:3' => '4:3', '3:4' => '3:4', 'adaptive' => 'adaptive'];
 
     // Inline frame-prompt editor state (no modal — a per-frame inline form).
     public ?int $editingFrameId = null;
@@ -95,14 +99,28 @@ class StoryboardBuilder extends Page
                         Select::make('mode')
                             ->label(__('platform.storyboard.combine_mode'))
                             ->options([
+                                CombineStoryboardVideoJob::MODE_REFERENCE => __('platform.storyboard.combine_mode_reference'),
                                 CombineStoryboardVideoJob::MODE_ANIMATE => __('platform.storyboard.combine_mode_animate'),
                                 CombineStoryboardVideoJob::MODE_SLIDESHOW => __('platform.storyboard.combine_mode_slideshow'),
                             ])
-                            ->default(CombineStoryboardVideoJob::MODE_ANIMATE)
+                            ->default(CombineStoryboardVideoJob::MODE_REFERENCE)
                             ->selectablePlaceholder(false)
                             ->live()
                             ->helperText(__('platform.storyboard.combine_mode_help'))
                             ->required(),
+                        Textarea::make('prompt')
+                            ->label(__('platform.storyboard.combine_prompt'))
+                            ->helperText(__('platform.storyboard.combine_prompt_help'))
+                            ->rows(4)
+                            ->default(fn (): string => (string) $this->record->story_idea)
+                            ->visible(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_REFERENCE)
+                            ->required(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_REFERENCE),
+                        Select::make('ratio')
+                            ->label(__('platform.storyboard.combine_ratio'))
+                            ->options(self::RATIOS)
+                            ->default(fn (): string => (string) ($this->record->aspect_ratio ?: '16:9'))
+                            ->selectablePlaceholder(false)
+                            ->visible(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_REFERENCE),
                         Select::make('resolution')
                             ->label(__('platform.storyboard.combine_resolution'))
                             ->options(self::RESOLUTIONS)
@@ -116,8 +134,8 @@ class StoryboardBuilder extends Page
                             ->minValue(3)
                             ->maxValue(120)
                             ->default(fn (): int => max(3, ((int) $this->record->duration_seconds) ?: self::DEFAULT_SECONDS))
-                            ->visible(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_SLIDESHOW)
-                            ->required(fn (Get $get): bool => $get('mode') === CombineStoryboardVideoJob::MODE_SLIDESHOW),
+                            ->visible(fn (Get $get): bool => $get('mode') !== CombineStoryboardVideoJob::MODE_ANIMATE)
+                            ->required(fn (Get $get): bool => $get('mode') !== CombineStoryboardVideoJob::MODE_ANIMATE),
                     ])
                     ->action(function (array $data): void {
                         $this->record->update([
@@ -129,6 +147,8 @@ class StoryboardBuilder extends Page
                             (string) $data['mode'],
                             (string) $data['resolution'],
                             (int) ($data['seconds'] ?? $this->record->duration_seconds ?: self::DEFAULT_SECONDS),
+                            $data['prompt'] ?? null,
+                            $data['ratio'] ?? null,
                         );
                         Notification::make()->success()->title(__('platform.storyboard.combine_started'))->send();
                     }),

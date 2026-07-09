@@ -5,10 +5,14 @@ namespace Tests\Feature\Storyboard;
 use App\Domain\Storyboard\StoryboardVideoComposer;
 use App\Jobs\CombineStoryboardVideoJob;
 use App\Jobs\GenerateStoryboardClipJob;
+use App\Models\AiModel;
+use App\Models\AiOperation;
 use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
+use Database\Seeders\StoryboardPipelineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 use Throwable;
@@ -60,6 +64,55 @@ class StoryboardCombineVideoTest extends TestCase
 
         $project->refresh();
         $this->assertSame(StoryboardProject::VIDEO_FAILED, $project->final_video_status);
+        $this->assertDatabaseCount('credit_ledger', 0);
+    }
+
+    public function test_reference_mode_submits_the_story_video_and_reschedules_to_poll(): void
+    {
+        config()->set('services.atlascloud.api_key', 'ac-key');
+        config()->set('services.atlascloud.base_url', 'https://api.atlascloud.ai/api/v1');
+        config()->set('services.atlascloud.timeout', 30);
+        $this->seed(StoryboardPipelineSeeder::class);
+
+        // Point the clip operation at the AtlasCloud reference-to-video model.
+        AiModel::where('operation_key', AiOperation::KEY_STORYBOARD_CLIP)->update(['is_default' => false]);
+        AiModel::where('operation_key', AiOperation::KEY_STORYBOARD_CLIP)
+            ->where('provider', AiModel::PROVIDER_ATLASCLOUD)->update(['is_default' => true]);
+        AiOperation::where('operation_key', AiOperation::KEY_STORYBOARD_CLIP)
+            ->update(['default_model' => 'bytedance/seedance-2.0/reference-to-video']);
+
+        Bus::fake();
+        Http::fake([
+            'https://api.atlascloud.ai/api/v1/model/generateVideo' => Http::response(['data' => ['id' => 'pred-1']], 200),
+            '*' => Http::response('img-bytes', 200), // the reference image the client base64-fetches
+        ]);
+
+        $project = StoryboardProject::factory()->create(['story_idea' => 'A knight @image1 fights a dragon']);
+        $project->assets()->create(['tag' => 'image1', 'type' => 'character', 'file_path' => 'storyboard/inputs/a.png']);
+
+        (new CombineStoryboardVideoJob($project->id, CombineStoryboardVideoJob::MODE_REFERENCE, '720p', 10, 'A knight fights a dragon', '16:9'))
+            ->handle(app(StoryboardVideoComposer::class));
+
+        $project->refresh();
+        $this->assertSame(StoryboardProject::VIDEO_GENERATING, $project->final_video_status);
+        $this->assertSame('pred-1', $project->final_video_meta['prediction_id'] ?? null);
+        $this->assertSame(AiModel::PROVIDER_ATLASCLOUD, $project->final_video_meta['provider'] ?? null);
+        Bus::assertDispatched(CombineStoryboardVideoJob::class); // rescheduled to poll the prediction
+        $this->assertDatabaseCount('credit_ledger', 0);
+    }
+
+    public function test_reference_mode_with_no_reference_images_fails_cleanly(): void
+    {
+        $project = StoryboardProject::factory()->create([
+            'final_video_status' => StoryboardProject::VIDEO_GENERATING,
+        ]);
+
+        (new CombineStoryboardVideoJob($project->id, CombineStoryboardVideoJob::MODE_REFERENCE, '720p', 10, 'Prompt', '16:9'))
+            ->handle(app(StoryboardVideoComposer::class));
+
+        $project->refresh();
+        $this->assertSame(StoryboardProject::VIDEO_FAILED, $project->final_video_status);
+        $this->assertNotEmpty($project->final_video_meta['error'] ?? null);
         $this->assertDatabaseCount('credit_ledger', 0);
     }
 

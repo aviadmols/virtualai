@@ -31,7 +31,7 @@ final class StoryboardVideoComposer
     private const PROCESS_TIMEOUT = 90;     // seconds — under the media worker + job timeout
 
     // Output height per resolution key; width is derived from the project aspect ratio.
-    private const HEIGHTS = ['720p' => 720, '1080p' => 1080];
+    private const HEIGHTS = ['480p' => 480, '720p' => 720, '1080p' => 1080];
     private const DEFAULT_RESOLUTION = '1080p';
     private const DEFAULT_ASPECT = '16:9';
 
