@@ -2,6 +2,7 @@
 
 namespace App\Filament\Platform\Resources\StoryboardProjectResource\Pages;
 
+use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Storyboard\StoryboardFrameGenerator;
 use App\Filament\Platform\Resources\StoryboardProjectResource;
@@ -240,6 +241,16 @@ class StoryboardBuilder extends Page
     public function getVisualBible(): ?array
     {
         return $this->record->pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] ?? null;
+    }
+
+    /** The REAL total cost so far: pipeline steps + frame images + video clips (display only). */
+    public function getTotalCost(): ?string
+    {
+        $total = (int) $this->record->stepRuns()->sum('cost_micro_usd')
+            + (int) $this->record->frames()->sum('image_cost_micro_usd')
+            + (int) $this->record->frames()->sum('video_cost_micro_usd');
+
+        return $total > 0 ? '$'.number_format(CreditMath::microToUsd($total), 4) : null;
     }
 
     public function getProjectStatus(): string

@@ -10,8 +10,13 @@
     @php($steps = $this->getSteps())
     @php($frames = $this->getFrames())
     @php($bible = $this->getVisualBible())
+    @php($totalCost = $this->getTotalCost())
 
     <div class="to-sb" @if (! $editingFrameId) wire:poll.5s @endif>
+        @if ($totalCost)
+            <p class="to-sb-cost">{{ __('platform.storyboard.total_cost') }}: <strong>{{ $totalCost }}</strong></p>
+        @endif
+
         {{-- Pipeline progress --}}
         @if (count($steps) > 0)
             <div class="to-sb-progress">

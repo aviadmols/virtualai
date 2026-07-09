@@ -96,10 +96,13 @@ final class PollStoryboardClipJob implements ShouldQueue
 
         $stored = $media->storeStoryboardFrame($frame->project_id, $frame->id, $bytes, self::VIDEO_MIME);
 
+        $cost = is_array($frame->video_meta) ? ($frame->video_meta['cost'] ?? null) : null;
+
         $frame->update([
             'video_status' => StoryboardFrame::VIDEO_READY,
             'video_path' => $stored->path,
             'video_duration_ms' => $this->renderMs($task),
+            'video_cost_micro_usd' => $cost,
         ]);
     }
 

@@ -47,7 +47,8 @@ final class StoryboardClipGenerator
         $frame->update([
             'video_status' => StoryboardFrame::VIDEO_GENERATING,
             'video_poll_attempts' => 0,
-            'video_meta' => ['base_url' => $baseUrl, 'model' => $config->model],
+            // Video is flat-rate (no inline USD) — carry the per-clip price so the poller records it.
+            'video_meta' => ['base_url' => $baseUrl, 'model' => $config->model, 'cost' => $config->flatRatePriceMicroUsd()],
         ]);
 
         try {

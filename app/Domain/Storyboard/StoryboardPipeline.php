@@ -3,7 +3,7 @@
 namespace App\Domain\Storyboard;
 
 use App\Domain\Ai\AiOperationResolver;
-use App\Domain\Ai\ProductScanCaller;
+use App\Domain\Ai\StoryboardTextCaller;
 use App\Domain\Credits\CreditMath;
 use App\Models\AiOperation;
 use App\Models\StoryboardFrame;
@@ -24,7 +24,7 @@ final class StoryboardPipeline
 {
     public function __construct(
         private readonly AiOperationResolver $resolver,
-        private readonly ProductScanCaller $caller,
+        private readonly StoryboardTextCaller $caller,
     ) {}
 
     public function run(StoryboardProject $project): void

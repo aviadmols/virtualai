@@ -2,9 +2,13 @@
 
 namespace App\Filament\Platform\Pages;
 
+use App\Domain\Ai\OperationConfig;
+use App\Domain\Ai\StoryboardTextCaller;
+use App\Domain\Storyboard\StoryboardStep;
 use App\Models\AiModel;
 use App\Models\AiOperation;
 use App\Models\Prompt;
+use Filament\Forms\Components\Actions\Action as FormAction;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
@@ -15,6 +19,8 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Storyboard Pipeline Settings — one place to control EVERY step of the storyboard engine.
@@ -115,6 +121,12 @@ class StoryboardPipelineSettings extends Page implements HasForms
                 ->collapsible()
                 ->collapsed()
                 ->columns(2)
+                ->headerActions([
+                    FormAction::make('test_'.$key)
+                        ->label(__('platform.storyboard.pipe.test'))
+                        ->icon('heroicon-o-beaker')
+                        ->action(fn () => $this->testStep($key)),
+                ])
                 ->schema([
                     Select::make($key.'.provider')
                         ->label(__('platform.storyboard.pipe.provider'))
@@ -176,6 +188,77 @@ class StoryboardPipelineSettings extends Page implements HasForms
         }
 
         Notification::make()->success()->title(__(self::SAVED))->send();
+    }
+
+    /**
+     * Test a single step with its CURRENT (possibly unsaved) prompt + model against sample inputs,
+     * and report whether it returns valid JSON — the fast way to verify a prompt before running the
+     * whole storyboard. Text steps run the real caller; image/video are tested in the Playground.
+     */
+    public function testStep(string $key): void
+    {
+        $step = data_get($this->data, $key);
+        if (! is_array($step)) {
+            return;
+        }
+
+        if (! StoryboardStep::isTextStep($key)) {
+            Notification::make()->info()
+                ->title(__('platform.storyboard.pipe.test'))
+                ->body(__('platform.storyboard.pipe.test_media_hint'))
+                ->send();
+
+            return;
+        }
+
+        $op = AiOperation::query()->where('operation_key', $key)->first();
+
+        $config = new OperationConfig(
+            operationKey: $key,
+            model: (string) ($step['model'] ?? ''),
+            fallbackModel: filled($step['fallback_model'] ?? null) ? $step['fallback_model'] : null,
+            systemPrompt: $step['system_prompt'] ?? null,
+            userPrompt: (string) ($step['user_prompt'] ?? ''),
+            imageQuality: null,
+            aspectRatio: null,
+            params: is_array($step['params'] ?? null) ? $step['params'] : [],
+            creditMultiplier: null,
+            promptVersion: 1,
+            estimatedCostMicroUsd: $op?->estimated_cost_micro_usd,
+            inputSchema: $op?->input_schema,
+            provider: (string) ($step['provider'] ?? AiModel::PROVIDER_OPENROUTER),
+        );
+
+        try {
+            $result = app(StoryboardTextCaller::class)->extract($config, $this->sampleVars());
+            Notification::make()->success()
+                ->title(__('platform.storyboard.pipe.test_ok'))
+                ->body(__('platform.storyboard.pipe.test_ok_body', ['keys' => implode(', ', array_keys($result->json))]))
+                ->send();
+        } catch (Throwable $e) {
+            Notification::make()->danger()->persistent()
+                ->title(__('platform.storyboard.pipe.test_fail'))
+                ->body(Str::limit($e->getMessage(), 500))
+                ->send();
+        }
+    }
+
+    /** Canned placeholders so any single step can run standalone in a test. @return array<string,string> */
+    private function sampleVars(): array
+    {
+        return [
+            'story_idea' => 'A cinematic comedy trailer: a chaotic pool party with @hero at @location_pool.',
+            'genre' => 'cinematic comedy trailer',
+            'duration' => '15',
+            'frame_interval' => '3',
+            'frame_count' => '5',
+            'aspect_ratio' => '16:9',
+            'reference_tags' => '@hero, @location_pool',
+            'clean_story' => '{"clean_story_summary":"A chaotic pool party trailer","main_intent":"entertain","creative_direction":"comedy trailer"}',
+            'genre_profile' => '{"genre":"comedy trailer","emotional_tone":"fun"}',
+            'characters' => '{"characters":[{"name":"Hero","description":"the party host"}]}',
+            'visual_bible' => '{"global_style":"realistic cinematic","negative_prompt":"no cartoon"}',
+        ];
     }
 
     /** Upsert the ai_models row so the resolver knows the model's provider + that it's allowed. */

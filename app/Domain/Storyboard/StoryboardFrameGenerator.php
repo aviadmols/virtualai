@@ -4,6 +4,7 @@ namespace App\Domain\Storyboard;
 
 use App\Domain\Ai\ImagePayload;
 use App\Domain\Ai\AiOperationResolver;
+use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Playground\PlaygroundImageRunner;
 use App\Models\AiOperation;
@@ -58,7 +59,15 @@ final class StoryboardFrameGenerator
 
         $this->recordVersion($frame, $stored->path, $prompt, $editInstruction, $config->provider, $result->modelUsed);
 
-        $frame->update(['image_path' => $stored->path, 'status' => StoryboardFrame::STATUS_READY]);
+        $cost = $result->cost->available && $result->cost->costUsd !== null
+            ? CreditMath::usdToMicro($result->cost->costUsd)
+            : $config->flatRatePriceMicroUsd();
+
+        $frame->update([
+            'image_path' => $stored->path,
+            'status' => StoryboardFrame::STATUS_READY,
+            'image_cost_micro_usd' => $cost,
+        ]);
     }
 
     /** Make a previously generated version the frame's shown image. */

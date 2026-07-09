@@ -9,6 +9,8 @@ use App\Models\User;
 use Database\Seeders\StoryboardPipelineSeeder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -67,5 +69,23 @@ class StoryboardPipelineSettingsTest extends TestCase
             ->first();
         $this->assertSame('NEW SYSTEM', $prompt->system_prompt);
         $this->assertStringContainsString('{{story_idea}}', $prompt->user_prompt);
+    }
+
+    public function test_testing_a_step_reports_success_when_it_returns_json(): void
+    {
+        config()->set('services.openrouter.key', 'sk-or-test');
+        config()->set('services.openrouter.base_url', 'https://openrouter.ai/api/v1');
+        config()->set('services.openrouter.timeout', 30);
+        Sleep::fake();
+
+        Http::fake(['https://openrouter.ai/api/v1/chat/completions' => Http::response([
+            'choices' => [['message' => ['content' => '{"genre":"comedy","emotional_tone":"fun"}']]],
+            'model' => 'google/gemini-2.5-flash',
+            'usage' => ['cost' => 0.001],
+        ], 200)]);
+
+        Livewire::test(StoryboardPipelineSettings::class)
+            ->call('testStep', AiOperation::KEY_STORYBOARD_GENRE)
+            ->assertNotified();
     }
 }

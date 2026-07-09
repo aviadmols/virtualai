@@ -52,6 +52,8 @@ class StoryboardFrame extends Model
         'video_duration_ms',
         'video_poll_attempts',
         'video_meta',
+        'image_cost_micro_usd',
+        'video_cost_micro_usd',
         'status',
         'is_approved',
         'is_locked',
@@ -70,6 +72,8 @@ class StoryboardFrame extends Model
             'end_second' => 'integer',
             'video_duration_ms' => 'integer',
             'video_poll_attempts' => 'integer',
+            'image_cost_micro_usd' => 'integer',
+            'video_cost_micro_usd' => 'integer',
             'is_approved' => 'boolean',
             'is_locked' => 'boolean',
         ];

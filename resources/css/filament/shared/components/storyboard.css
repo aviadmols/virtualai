@@ -57,6 +57,21 @@
     background: var(--to-danger-bg);
 }
 
+.to-sb-cost {
+    align-self: flex-start;
+    padding: var(--to-space-2) var(--to-space-4);
+    border-radius: var(--to-r-card);
+    border: var(--to-bw-input) solid var(--toa-border);
+    background: var(--toa-surface);
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    font-variant-numeric: tabular-nums;
+}
+
+.to-sb-cost strong {
+    color: var(--to-ink);
+}
+
 /* --- Visual bible --- */
 .to-sb-bible {
     border: var(--to-bw-input) solid var(--toa-border);

@@ -72,6 +72,8 @@ class StoryboardFrameGenerationTest extends TestCase
 
         $this->assertSame(1, $frame->versions()->count());
         $this->assertSame(1, $frame->versions()->where('is_selected', true)->count());
+        // Cost recorded from the provider's inline cost (0.04 USD → 40_000 micro).
+        $this->assertSame(40_000, $frame->image_cost_micro_usd);
         $this->assertDatabaseCount('credit_ledger', 0);
     }
 
