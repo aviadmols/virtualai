@@ -85,6 +85,18 @@ class StoryboardTextCallerTest extends TestCase
         $this->assertSame('drama', $result->json['genre']);
     }
 
+    public function test_it_recovers_json_with_unescaped_newlines_inside_strings(): void
+    {
+        // gemini writing a multi-line value emits a REAL newline inside the string — invalid JSON
+        // that json_decode rejects; the sanitizer escapes it. This is the Visual-bible failure.
+        $this->fakeContent("{\n  \"global_style\": \"A classic hero's journey\nwith clear lighting\",\n  \"negative_prompt\": \"no cartoon\"\n}");
+
+        $result = app(StoryboardTextCaller::class)->extract($this->config());
+
+        $this->assertStringContainsString('hero', $result->json['global_style']);
+        $this->assertStringContainsString("\n", $result->json['global_style']); // the newline is preserved
+    }
+
     public function test_it_throws_with_the_raw_output_when_no_json_is_recoverable(): void
     {
         $this->fakeContent('I cannot produce that output.');

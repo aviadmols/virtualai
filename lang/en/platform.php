@@ -171,6 +171,7 @@ return [
         'visual_bible' => 'Visual bible',
         'negative' => 'Avoid',
         'total_cost' => 'Total cost so far',
+        'process_log' => 'Process log — every step\'s output',
         'generating' => 'Generating…',
         'no_image' => 'Not generated',
         'generate' => 'Generate',

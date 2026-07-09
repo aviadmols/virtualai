@@ -170,6 +170,7 @@ return [
         'visual_bible' => 'Visual bible',
         'negative' => 'להימנע',
         'total_cost' => 'עלות כוללת עד כה',
+        'process_log' => 'לוג התהליך — הפלט של כל שלב',
         'generating' => 'מייצר…',
         'no_image' => 'לא נוצר',
         'generate' => 'צור',

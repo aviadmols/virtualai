@@ -18,7 +18,8 @@ final class StoryboardTextCaller
     private const SCHEMA_NAME = 'storyboard_step';
     private const MAX_REPAIRS = 2;
     private const DEFAULT_MAX_TOKENS = 4096;
-    private const RAW_SNIPPET = 600;
+    private const RAW_SNIPPET = 1500;
+    private const CTRL_CHAR_MAX = 0x20;
     private const JSON_ONLY = 'Return ONLY a single valid JSON object with the described fields. No prose, no explanation, no markdown code fences — just the JSON object itself.';
 
     public function __construct(
@@ -137,9 +138,10 @@ final class StoryboardTextCaller
     }
 
     /**
-     * Decode to a JSON object, tolerating: markdown fences, and JSON embedded in surrounding prose
-     * (extract the outermost {...}). Returns null when no JSON object can be recovered — never
-     * coerces.
+     * Decode to a JSON object, tolerating: markdown fences, JSON embedded in surrounding prose
+     * (the outermost {...}), and UNESCAPED control characters inside string values (real newlines/
+     * tabs — the #1 way a creative model emits invalid JSON). Returns null when nothing parses —
+     * never coerces.
      *
      * @return array<string,mixed>|null
      */
@@ -154,21 +156,83 @@ final class StoryboardTextCaller
             $trimmed = trim((string) preg_replace('/```[a-zA-Z]*\s*|\s*```/', '', $trimmed));
         }
 
-        $decoded = json_decode($trimmed, true);
-        if (is_array($decoded)) {
-            return $decoded;
-        }
-
-        // Prose-wrapped: recover the outermost JSON object.
+        // Candidate = the outermost {...} if present (strips leading/trailing prose), else the whole.
         $start = strpos($trimmed, '{');
         $end = strrpos($trimmed, '}');
-        if ($start !== false && $end !== false && $end > $start) {
-            $decoded = json_decode(substr($trimmed, $start, $end - $start + 1), true);
+        $candidate = ($start !== false && $end !== false && $end > $start)
+            ? substr($trimmed, $start, $end - $start + 1)
+            : $trimmed;
+
+        // Try as-is, then with control chars inside strings escaped.
+        foreach ([$candidate, $this->escapeControlCharsInStrings($candidate)] as $attempt) {
+            $decoded = json_decode($attempt, true);
             if (is_array($decoded)) {
                 return $decoded;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Escape raw control characters (newline/tab/…) that appear INSIDE string literals, which make
+     * JSON invalid. Walks the bytes tracking string/escape state so structural whitespace between
+     * tokens is untouched; multibyte UTF-8 (bytes >= 0x80) passes through unchanged.
+     */
+    private function escapeControlCharsInStrings(string $json): string
+    {
+        $out = '';
+        $inString = false;
+        $escaped = false;
+        $length = strlen($json);
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $json[$i];
+
+            if (! $inString) {
+                if ($char === '"') {
+                    $inString = true;
+                }
+                $out .= $char;
+
+                continue;
+            }
+
+            if ($escaped) {
+                $out .= $char;
+                $escaped = false;
+
+                continue;
+            }
+
+            if ($char === '\\') {
+                $out .= $char;
+                $escaped = true;
+
+                continue;
+            }
+
+            if ($char === '"') {
+                $out .= $char;
+                $inString = false;
+
+                continue;
+            }
+
+            if (ord($char) < self::CTRL_CHAR_MAX) {
+                $out .= match ($char) {
+                    "\n" => '\\n',
+                    "\r" => '\\r',
+                    "\t" => '\\t',
+                    default => sprintf('\\u%04x', ord($char)),
+                };
+
+                continue;
+            }
+
+            $out .= $char;
+        }
+
+        return $out;
     }
 }

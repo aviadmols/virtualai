@@ -204,6 +204,11 @@ class StoryboardBuilder extends Page
                 'status' => $run->status,
                 'error' => $run->error,
                 'duration' => $run->duration_ms !== null ? $this->duration($run->duration_ms) : null,
+                'model' => $run->model,
+                'cost' => $run->cost_micro_usd !== null ? '$'.number_format(CreditMath::microToUsd($run->cost_micro_usd), 4) : null,
+                'output' => is_array($run->output)
+                    ? json_encode($run->output, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                    : null,
             ])
             ->all();
     }

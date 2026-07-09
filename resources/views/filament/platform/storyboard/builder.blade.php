@@ -32,6 +32,27 @@
                     <p class="to-sb-error">{{ $step['label'] }}: {{ $step['error'] }}</p>
                 @endif
             @endforeach
+
+            <details class="to-sb-log">
+                <summary>{{ __('platform.storyboard.process_log') }}</summary>
+                @foreach ($steps as $step)
+                    <div class="to-sb-log__step">
+                        <div class="to-sb-log__head">
+                            <span class="to-sb-step to-sb-step--{{ $step['status'] }}">{{ $step['label'] }}</span>
+                            <span class="to-sb-log__meta" dir="ltr">
+                                @if ($step['model']) {{ $step['model'] }} @endif
+                                @if ($step['duration']) · {{ $step['duration'] }} @endif
+                                @if ($step['cost']) · {{ $step['cost'] }} @endif
+                            </span>
+                        </div>
+                        @if ($step['error'])
+                            <pre class="to-sb-log__pre to-sb-log__pre--error" dir="ltr">{{ $step['error'] }}</pre>
+                        @elseif ($step['output'])
+                            <pre class="to-sb-log__pre" dir="ltr">{{ $step['output'] }}</pre>
+                        @endif
+                    </div>
+                @endforeach
+            </details>
         @else
             <x-to.empty-state
                 variant="first-run"

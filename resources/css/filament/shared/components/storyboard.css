@@ -72,6 +72,59 @@
     color: var(--to-ink);
 }
 
+/* --- Process log (full per-step output / error) --- */
+.to-sb-log {
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-card);
+    background: var(--toa-surface);
+    padding: var(--to-space-4);
+}
+
+.to-sb-log summary {
+    color: var(--to-ink);
+    font-weight: var(--to-fw-semibold);
+    cursor: pointer;
+}
+
+.to-sb-log__step {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+    margin-block-start: var(--to-space-4);
+}
+
+.to-sb-log__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--to-space-3);
+}
+
+.to-sb-log__meta {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    font-variant-numeric: tabular-nums;
+}
+
+.to-sb-log__pre {
+    margin: 0;
+    max-block-size: var(--to-space-32);
+    overflow: auto;
+    padding: var(--to-space-3);
+    border-radius: var(--to-r-card);
+    background: var(--toa-surface-alt);
+    color: var(--to-ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: var(--toa-type-caption-size);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.to-sb-log__pre--error {
+    background: var(--to-danger-bg);
+    color: var(--to-danger);
+}
+
 /* --- Visual bible --- */
 .to-sb-bible {
     border: var(--to-bw-input) solid var(--toa-border);
