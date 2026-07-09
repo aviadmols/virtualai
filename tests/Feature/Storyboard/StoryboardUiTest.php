@@ -12,9 +12,11 @@ use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
 use App\Models\StoryboardStepRun;
 use App\Models\User;
+use Database\Seeders\StoryboardPipelineSeeder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -167,6 +169,37 @@ class StoryboardUiTest extends TestCase
         $this->assertSame(StoryboardFrame::STATUS_PENDING, $foreign->refresh()->status);
         $this->assertFalse($foreign->refresh()->is_approved);
         Bus::assertNotDispatched(GenerateStoryboardFrameJob::class);
+    }
+
+    public function test_improve_prompt_rewrites_the_frame_prompt_via_the_llm(): void
+    {
+        config()->set('services.openrouter.key', 'sk-or-test');
+        config()->set('services.openrouter.base_url', 'https://openrouter.ai/api/v1');
+        config()->set('services.openrouter.timeout', 30);
+        $this->seed(StoryboardPipelineSeeder::class);
+
+        Http::fake(['https://openrouter.ai/api/v1/chat/completions' => Http::response([
+            'choices' => [['message' => ['role' => 'assistant', 'content' => json_encode([
+                'improved_prompt' => 'A valiant knight with WHITE HAIR on horseback, @location',
+            ])]]],
+            'model' => 'google/gemini-2.5-flash',
+            'usage' => ['cost' => 0.001],
+        ], 200)]);
+
+        $project = StoryboardProject::factory()->create();
+        $frame = StoryboardFrame::factory()->create([
+            'project_id' => $project->id,
+            'image_prompt' => 'A valiant knight on horseback, @location',
+        ]);
+
+        Livewire::test(StoryboardBuilder::class, ['record' => $project->getRouteKey()])
+            ->call('startImprove', $frame->id)
+            ->set('improveInstruction', 'give the knight white hair')
+            ->call('applyImprove', false);
+
+        $this->assertSame('A valiant knight with WHITE HAIR on horseback, @location', $frame->refresh()->image_prompt);
+        $this->assertNull($frame->refresh()->image_path); // no regenerate requested
+        $this->assertDatabaseCount('credit_ledger', 0);
     }
 
     public function test_approve_and_lock_toggle(): void

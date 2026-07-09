@@ -14,7 +14,7 @@
     @php($assetTags = $this->getAssetTags())
     @php($finalVideo = $this->getFinalVideo())
 
-    <div class="to-sb" @if (! $editingFrameId) wire:poll.5s @endif>
+    <div class="to-sb" @if (! $editingFrameId && ! $improvingFrameId) wire:poll.5s @endif>
         @if ($totalCost)
             <p class="to-sb-cost">{{ __('platform.storyboard.total_cost') }}: <strong>{{ $totalCost }}</strong></p>
         @endif
@@ -211,6 +211,25 @@
                                     </div>
                                 @endif
 
+                                {{-- AI improve-prompt: type an instruction, an LLM rewrites this frame's prompt --}}
+                                @if ($improvingFrameId === $frame['id'])
+                                    <div class="to-sb-frame__edit">
+                                        <textarea class="to-sb-input" wire:model="improveInstruction" rows="2"
+                                            placeholder="{{ __('platform.storyboard.improve_placeholder') }}"></textarea>
+                                        <div class="to-sb-frame__actions">
+                                            <x-filament::button size="sm" wire:click="applyImprove(true)" icon="heroicon-o-sparkles">
+                                                {{ __('platform.storyboard.improve_apply_regenerate') }}
+                                            </x-filament::button>
+                                            <x-filament::button size="sm" color="gray" wire:click="applyImprove(false)">
+                                                {{ __('platform.storyboard.improve_apply') }}
+                                            </x-filament::button>
+                                            <x-filament::button size="sm" color="gray" wire:click="cancelImprove">
+                                                {{ __('platform.storyboard.cancel') }}
+                                            </x-filament::button>
+                                        </div>
+                                    </div>
+                                @endif
+
                                 @unless ($frame['locked'])
                                     <div class="to-sb-frame__actions">
                                         <x-filament::button size="sm" wire:click="generateFrame({{ $frame['id'] }})" icon="heroicon-o-sparkles">
@@ -218,6 +237,9 @@
                                         </x-filament::button>
                                         <x-filament::button size="sm" color="gray" wire:click="startEdit({{ $frame['id'] }})" icon="heroicon-o-pencil">
                                             {{ __('platform.storyboard.edit') }}
+                                        </x-filament::button>
+                                        <x-filament::button size="sm" color="gray" wire:click="startImprove({{ $frame['id'] }})" icon="heroicon-o-light-bulb">
+                                            {{ __('platform.storyboard.improve') }}
                                         </x-filament::button>
                                         <x-filament::button size="sm" :color="$frame['approved'] ? 'success' : 'gray'" wire:click="approveFrame({{ $frame['id'] }})">
                                             {{ __('platform.storyboard.approve') }}

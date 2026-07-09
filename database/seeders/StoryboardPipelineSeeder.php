@@ -72,6 +72,45 @@ class StoryboardPipelineSeeder extends Seeder
 
         $this->seedFrameImageStep();
         $this->seedClipStep();
+        $this->seedImprovePromptStep();
+    }
+
+    /**
+     * Seed the on-demand "improve prompt" operation: an LLM rewrites a single frame's image_prompt
+     * from a plain instruction ("give the king white hair"). Public so a data migration can seed it
+     * onto existing installs WITHOUT re-running the whole pipeline seed (which would reset admin edits).
+     */
+    public function seedImprovePromptStep(): void
+    {
+        AiOperation::updateOrCreate(
+            ['operation_key' => AiOperation::KEY_STORYBOARD_IMPROVE_PROMPT],
+            [
+                'label' => 'Storyboard · Improve Prompt',
+                'default_model' => self::TEXT_MODEL,
+                'fallback_model' => self::TEXT_FALLBACK,
+                'image_quality' => null,
+                'aspect_ratio' => null,
+                'params' => ['temperature' => 0.5, 'top_p' => 0.95, 'max_tokens' => 1500],
+                'input_schema' => [
+                    'type' => 'object',
+                    'additionalProperties' => false,
+                    'properties' => ['improved_prompt' => ['type' => 'string']],
+                    'required' => ['improved_prompt'],
+                ],
+                'retention_days' => null,
+                'estimated_cost_micro_usd' => 2_000,
+                'credit_multiplier' => null,
+            ],
+        );
+
+        $this->seedModel(AiOperation::KEY_STORYBOARD_IMPROVE_PROMPT, self::TEXT_MODEL, 'Gemini 2.5 Flash', isDefault: true, unit: AiModel::UNIT_PER_1K_TOKENS, costHint: 3_000);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_IMPROVE_PROMPT, self::TEXT_FALLBACK, 'GPT-4o mini', isFallback: true, unit: AiModel::UNIT_PER_1K_TOKENS, costHint: 2_000);
+
+        $this->seedPrompt(
+            AiOperation::KEY_STORYBOARD_IMPROVE_PROMPT,
+            'You are a prompt engineer for a cinematic image generator. Rewrite the ORIGINAL image prompt to apply the user\'s requested change while keeping everything else intact — subject, style, composition, lighting, and any @reference tags. Preserve @reference tags EXACTLY as written. Keep it a single vivid image prompt. Return ONLY JSON: {"improved_prompt": "..."}.',
+            "Original image prompt:\n{{original}}\n\nRequested change:\n{{instruction}}\n\nReturn strict JSON with the improved prompt.",
+        );
     }
 
     /** Seed the per-frame VIDEO clip step (image-to-video via BytePlus/Seedance). INACTIVE-ready:

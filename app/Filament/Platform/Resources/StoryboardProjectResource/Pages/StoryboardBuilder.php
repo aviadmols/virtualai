@@ -2,10 +2,13 @@
 
 namespace App\Filament\Platform\Resources\StoryboardProjectResource\Pages;
 
+use App\Domain\Ai\AiOperationResolver;
+use App\Domain\Ai\StoryboardTextCaller;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Storyboard\StoryboardFrameGenerator;
 use App\Filament\Platform\Resources\StoryboardProjectResource;
+use App\Models\AiOperation;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\Concerns\StartsStoryboardPipeline;
 use App\Jobs\CombineStoryboardVideoJob;
 use App\Jobs\GenerateStoryboardClipJob;
@@ -50,6 +53,11 @@ class StoryboardBuilder extends Page
     public string $editPrompt = '';
 
     public string $editNegative = '';
+
+    // Inline AI "improve prompt" state (an instruction the LLM applies to the frame's prompt).
+    public ?int $improvingFrameId = null;
+
+    public string $improveInstruction = '';
 
     public function mount(int|string $record): void
     {
@@ -228,6 +236,67 @@ class StoryboardBuilder extends Page
 
         $frame->update(['image_prompt' => $this->editPrompt, 'negative_prompt' => $this->editNegative]);
         $this->cancelEdit();
+
+        if ($regenerate && ! $frame->is_locked) {
+            $frame->update(['status' => StoryboardFrame::STATUS_GENERATING]);
+            GenerateStoryboardFrameJob::dispatch($frame->id);
+        }
+    }
+
+    public function startImprove(int $frameId): void
+    {
+        $frame = $this->frame($frameId);
+        if ($frame === null) {
+            return;
+        }
+
+        $this->improvingFrameId = $frame->id;
+        $this->improveInstruction = '';
+        $this->cancelEdit(); // only one inline editor open at a time
+    }
+
+    public function cancelImprove(): void
+    {
+        $this->improvingFrameId = null;
+        $this->improveInstruction = '';
+    }
+
+    /**
+     * AI-rewrite the frame's image_prompt from a plain instruction ("give the king white hair"),
+     * via the DB-configured storyboard_improve_prompt operation. Runs inline (a few seconds), then
+     * optionally regenerates the image. Never charges.
+     */
+    public function applyImprove(bool $regenerate = false): void
+    {
+        $frame = $this->frame((int) $this->improvingFrameId);
+        $instruction = trim($this->improveInstruction);
+
+        if ($frame === null || $instruction === '') {
+            return;
+        }
+
+        try {
+            $config = app(AiOperationResolver::class)->for(AiOperation::KEY_STORYBOARD_IMPROVE_PROMPT);
+            $result = app(StoryboardTextCaller::class)->extract($config, [
+                'original' => (string) $frame->image_prompt,
+                'instruction' => $instruction,
+            ]);
+            $improved = trim((string) ($result->json['improved_prompt'] ?? ''));
+        } catch (\Throwable $e) {
+            Notification::make()->danger()->title(__('platform.storyboard.improve_failed'))->body($e->getMessage())->send();
+
+            return;
+        }
+
+        if ($improved === '') {
+            Notification::make()->danger()->title(__('platform.storyboard.improve_failed'))->send();
+
+            return;
+        }
+
+        $frame->update(['image_prompt' => $improved]);
+        $this->cancelImprove();
+        Notification::make()->success()->title(__('platform.storyboard.improve_done'))->send();
 
         if ($regenerate && ! $frame->is_locked) {
             $frame->update(['status' => StoryboardFrame::STATUS_GENERATING]);
