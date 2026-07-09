@@ -99,12 +99,18 @@
                                 <video src="{{ $frame['videoUrl'] }}" controls preload="metadata" loop muted></video>
                             @elseif ($frame['imageUrl'])
                                 <img src="{{ $frame['imageUrl'] }}" alt="Frame {{ $frame['number'] }}" loading="lazy" />
-                            @elseif ($frame['generating'])
-                                <span class="to-sb-frame__placeholder">{{ __('platform.storyboard.generating') }}</span>
                             @elseif ($frame['failed'])
                                 <span class="to-sb-frame__placeholder to-sb-frame__placeholder--fail">{{ __('platform.storyboard.status.failed') }}</span>
-                            @else
+                            @elseif (! $frame['generating'])
                                 <span class="to-sb-frame__placeholder">{{ __('platform.storyboard.no_image') }}</span>
+                            @endif
+
+                            {{-- Generating overlay: shows over an existing image too, so a click is obvious. --}}
+                            @if ($frame['generating'])
+                                <div class="to-sb-frame__loading">
+                                    <span class="to-sb-spinner"></span>
+                                    <span>{{ __('platform.storyboard.generating') }}</span>
+                                </div>
                             @endif
                         </div>
 
@@ -232,8 +238,10 @@
 
                                 @unless ($frame['locked'])
                                     <div class="to-sb-frame__actions">
-                                        <x-filament::button size="sm" wire:click="generateFrame({{ $frame['id'] }})" icon="heroicon-o-sparkles">
-                                            {{ $frame['imageUrl'] ? __('platform.storyboard.regenerate') : __('platform.storyboard.generate') }}
+                                        <x-filament::button size="sm" wire:click="generateFrame({{ $frame['id'] }})" icon="heroicon-o-sparkles"
+                                            :disabled="$frame['generating']"
+                                            wire:target="generateFrame({{ $frame['id'] }})" wire:loading.attr="disabled">
+                                            {{ $frame['generating'] ? __('platform.storyboard.generating') : ($frame['imageUrl'] ? __('platform.storyboard.regenerate') : __('platform.storyboard.generate')) }}
                                         </x-filament::button>
                                         <x-filament::button size="sm" color="gray" wire:click="startEdit({{ $frame['id'] }})" icon="heroicon-o-pencil">
                                             {{ __('platform.storyboard.edit') }}
