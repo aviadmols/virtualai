@@ -134,6 +134,13 @@ final class StoryboardFrameGenerator
 
         $inputs = [];
         foreach ($assets as $asset) {
+            // Skip a reference whose file is missing on the disk — otherwise the provider gets a
+            // 404 download and the whole generation fails; proceeding without it still produces an
+            // image (just without that reference).
+            if (! $this->media->exists($asset->file_path)) {
+                continue;
+            }
+
             $signed = $this->media->signedUrl($asset->file_path);
             if ($signed !== null) {
                 $inputs[] = ImagePayload::fromUrl($signed);

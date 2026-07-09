@@ -239,7 +239,9 @@ return [
             'test_ok' => 'Step returned valid JSON ✓',
             'test_ok_body' => 'Fields: :keys',
             'test_fail' => 'Step test failed',
-            'test_media_hint' => 'Test image / video models in the Model Playground.',
+            'test_image_ok' => 'Image model works ✓ (returned :kb KB)',
+            'test_text_needs_openrouter' => 'Text steps return structured JSON — set the provider to OpenRouter (BytePlus/xAI are image/video only).',
+            'test_media_hint' => 'Test video models in the Model Playground.',
         ],
         'asset' => [
             'section' => 'Reference images',

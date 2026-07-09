@@ -238,7 +238,9 @@ return [
             'test_ok' => 'השלב החזיר JSON תקין ✓',
             'test_ok_body' => 'שדות: :keys',
             'test_fail' => 'בדיקת השלב נכשלה',
-            'test_media_hint' => 'בדקו מודלי תמונה/וידאו ב-Model Playground.',
+            'test_image_ok' => 'מודל התמונה עובד ✓ (החזיר :kb KB)',
+            'test_text_needs_openrouter' => 'שלבי טקסט מחזירים JSON מובנה — הגדירו את הספק ל-OpenRouter (BytePlus/xAI הם לתמונה/וידאו בלבד).',
+            'test_media_hint' => 'בדקו מודלי וידאו ב-Model Playground.',
         ],
         'asset' => [
             'section' => 'תמונות רפרנס',

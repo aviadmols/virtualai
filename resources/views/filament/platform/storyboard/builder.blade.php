@@ -33,8 +33,8 @@
                 @endif
             @endforeach
 
-            <details class="to-sb-log">
-                <summary>{{ __('platform.storyboard.process_log') }}</summary>
+            <details class="to-sb-log" x-data="{ open: false }" :open="open">
+                <summary @click.prevent="open = ! open">{{ __('platform.storyboard.process_log') }}</summary>
                 @foreach ($steps as $step)
                     <div class="to-sb-log__step">
                         <div class="to-sb-log__head">
@@ -63,8 +63,8 @@
 
         {{-- Visual bible summary --}}
         @if ($bible)
-            <details class="to-sb-bible">
-                <summary>{{ __('platform.storyboard.visual_bible') }}</summary>
+            <details class="to-sb-bible" x-data="{ open: false }" :open="open">
+                <summary @click.prevent="open = ! open">{{ __('platform.storyboard.visual_bible') }}</summary>
                 <p>{{ $bible['global_style'] ?? '' }}</p>
                 @if (! empty($bible['negative_prompt']))
                     <p class="to-sb-bible__neg">{{ __('platform.storyboard.negative') }}: {{ $bible['negative_prompt'] }}</p>

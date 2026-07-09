@@ -4,6 +4,7 @@ namespace App\Filament\Platform\Pages;
 
 use App\Domain\Ai\OperationConfig;
 use App\Domain\Ai\StoryboardTextCaller;
+use App\Domain\Playground\PlaygroundImageRunner;
 use App\Domain\Storyboard\StoryboardStep;
 use App\Models\AiModel;
 use App\Models\AiOperation;
@@ -47,6 +48,9 @@ class StoryboardPipelineSettings extends Page implements HasForms
     private const NAV_LABEL = 'platform.storyboard.pipeline_nav';
     private const TITLE = 'platform.storyboard.pipeline_title';
     private const SAVED = 'platform.storyboard.pipeline_saved';
+
+    // A tiny neutral prompt for the image-step Test (a real generation).
+    private const SAMPLE_IMAGE_PROMPT = 'a single red apple on a wooden table, soft cinematic lighting';
 
     // The steps this page controls (in pipeline order).
     private const STEPS = [
@@ -202,10 +206,36 @@ class StoryboardPipelineSettings extends Page implements HasForms
             return;
         }
 
-        if (! StoryboardStep::isTextStep($key)) {
-            Notification::make()->info()
+        $provider = (string) ($step['provider'] ?? AiModel::PROVIDER_OPENROUTER);
+        $model = (string) ($step['model'] ?? '');
+
+        if (StoryboardStep::isTextStep($key)) {
+            $this->testTextStep($key, $step, $provider, $model);
+
+            return;
+        }
+
+        if ($key === AiOperation::KEY_STORYBOARD_FRAME_IMAGE) {
+            $this->testImageStep($provider, $model);
+
+            return;
+        }
+
+        // Video clip step — a real submit+poll is async/spendy; point to the Playground.
+        Notification::make()->info()
+            ->title(__('platform.storyboard.pipe.test'))
+            ->body(__('platform.storyboard.pipe.test_media_hint'))
+            ->send();
+    }
+
+    /** @param array<string,mixed> $step */
+    private function testTextStep(string $key, array $step, string $provider, string $model): void
+    {
+        // Text steps return structured JSON — only OpenRouter serves them.
+        if ($provider !== AiModel::PROVIDER_OPENROUTER) {
+            Notification::make()->warning()
                 ->title(__('platform.storyboard.pipe.test'))
-                ->body(__('platform.storyboard.pipe.test_media_hint'))
+                ->body(__('platform.storyboard.pipe.test_text_needs_openrouter'))
                 ->send();
 
             return;
@@ -215,7 +245,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
 
         $config = new OperationConfig(
             operationKey: $key,
-            model: (string) ($step['model'] ?? ''),
+            model: $model,
             fallbackModel: filled($step['fallback_model'] ?? null) ? $step['fallback_model'] : null,
             systemPrompt: $step['system_prompt'] ?? null,
             userPrompt: (string) ($step['user_prompt'] ?? ''),
@@ -226,7 +256,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
             promptVersion: 1,
             estimatedCostMicroUsd: $op?->estimated_cost_micro_usd,
             inputSchema: $op?->input_schema,
-            provider: (string) ($step['provider'] ?? AiModel::PROVIDER_OPENROUTER),
+            provider: $provider,
         );
 
         try {
@@ -234,6 +264,25 @@ class StoryboardPipelineSettings extends Page implements HasForms
             Notification::make()->success()
                 ->title(__('platform.storyboard.pipe.test_ok'))
                 ->body(__('platform.storyboard.pipe.test_ok_body', ['keys' => implode(', ', array_keys($result->json))]))
+                ->send();
+        } catch (Throwable $e) {
+            Notification::make()->danger()->persistent()
+                ->title(__('platform.storyboard.pipe.test_fail'))
+                ->body(Str::limit($e->getMessage(), 500))
+                ->send();
+        }
+    }
+
+    /** A REAL image generation with the step's provider + model (works for OpenRouter/BytePlus/xAI). */
+    private function testImageStep(string $provider, string $model): void
+    {
+        $op = AiOperation::query()->where('operation_key', AiOperation::KEY_STORYBOARD_FRAME_IMAGE)->first();
+
+        try {
+            $result = app(PlaygroundImageRunner::class)->run($provider, $model, self::SAMPLE_IMAGE_PROMPT, [], $op?->estimated_cost_micro_usd);
+            Notification::make()->success()
+                ->title(__('platform.storyboard.pipe.test_ok'))
+                ->body(__('platform.storyboard.pipe.test_image_ok', ['kb' => (int) round(strlen($result->imageBytes) / 1024)]))
                 ->send();
         } catch (Throwable $e) {
             Notification::make()->danger()->persistent()
