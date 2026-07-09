@@ -47,7 +47,9 @@
                 @foreach ($frames as $frame)
                     <div @class(['to-sb-frame', 'to-sb-frame--approved' => $frame['approved'], 'to-sb-frame--locked' => $frame['locked']])>
                         <div class="to-sb-frame__media">
-                            @if ($frame['imageUrl'])
+                            @if ($frame['videoUrl'])
+                                <video src="{{ $frame['videoUrl'] }}" controls preload="metadata" loop muted></video>
+                            @elseif ($frame['imageUrl'])
                                 <img src="{{ $frame['imageUrl'] }}" alt="Frame {{ $frame['number'] }}" loading="lazy" />
                             @elseif ($frame['generating'])
                                 <span class="to-sb-frame__placeholder">{{ __('platform.storyboard.generating') }}</span>
@@ -121,6 +123,13 @@
                                         <x-filament::button size="sm" color="gray" wire:click="toggleLock({{ $frame['id'] }})">
                                             {{ __('platform.storyboard.lock') }}
                                         </x-filament::button>
+                                        @if ($frame['imageUrl'] && ! $frame['videoGenerating'])
+                                            <x-filament::button size="sm" color="gray" wire:click="generateClip({{ $frame['id'] }})" icon="heroicon-o-video-camera">
+                                                {{ $frame['videoUrl'] ? __('platform.storyboard.regenerate_clip') : __('platform.storyboard.generate_clip') }}
+                                            </x-filament::button>
+                                        @elseif ($frame['videoGenerating'])
+                                            <span class="to-sb-frame__clip-note">{{ __('platform.storyboard.clip_generating') }}</span>
+                                        @endif
                                     </div>
                                 @else
                                     <div class="to-sb-frame__actions">

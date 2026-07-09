@@ -34,6 +34,7 @@ class AiOperation extends Model
     public const KEY_STORYBOARD_VISUAL_BIBLE = 'storyboard_visual_bible';
     public const KEY_STORYBOARD_SCENE_BREAKDOWN = 'storyboard_scene_breakdown';
     public const KEY_STORYBOARD_FRAME_IMAGE = 'storyboard_frame_image';
+    public const KEY_STORYBOARD_CLIP = 'storyboard_clip';
 
     public const KEYS = [
         self::KEY_PRODUCT_SCAN,
@@ -45,6 +46,7 @@ class AiOperation extends Model
         self::KEY_STORYBOARD_VISUAL_BIBLE,
         self::KEY_STORYBOARD_SCENE_BREAKDOWN,
         self::KEY_STORYBOARD_FRAME_IMAGE,
+        self::KEY_STORYBOARD_CLIP,
     ];
 
     protected $fillable = [

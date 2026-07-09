@@ -5,6 +5,7 @@ namespace App\Filament\Platform\Resources\StoryboardProjectResource\Pages;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Storyboard\StoryboardFrameGenerator;
 use App\Filament\Platform\Resources\StoryboardProjectResource;
+use App\Jobs\GenerateStoryboardClipJob;
 use App\Jobs\GenerateStoryboardFrameJob;
 use App\Jobs\RunStoryboardPipelineJob;
 use App\Models\StoryboardFrame;
@@ -66,6 +67,13 @@ class StoryboardBuilder extends Page
                 ->color('gray')
                 ->visible(fn (): bool => $this->record->frames()->exists())
                 ->action(fn () => $this->generateAllFrames()),
+            Action::make('generateAllClips')
+                ->label(__('platform.storyboard.generate_all_clips'))
+                ->icon('heroicon-o-video-camera')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->visible(fn (): bool => $this->record->frames()->whereNotNull('image_path')->exists())
+                ->action(fn () => $this->generateAllClips()),
         ];
     }
 
@@ -90,6 +98,30 @@ class StoryboardBuilder extends Page
 
         $frame->update(['status' => StoryboardFrame::STATUS_GENERATING]);
         GenerateStoryboardFrameJob::dispatch($frame->id);
+    }
+
+    /** Animate a frame's image into a video clip (image-to-video). Needs a generated image. */
+    public function generateClip(int $frameId): void
+    {
+        $frame = $this->frame($frameId);
+        if ($frame === null || $frame->image_path === null) {
+            return;
+        }
+
+        $frame->update(['video_status' => StoryboardFrame::VIDEO_GENERATING, 'video_poll_attempts' => 0]);
+        GenerateStoryboardClipJob::dispatch($frame->id);
+    }
+
+    public function generateAllClips(): void
+    {
+        $frames = $this->record->frames()->whereNotNull('image_path')->where('is_locked', false)->get();
+
+        foreach ($frames as $frame) {
+            $frame->update(['video_status' => StoryboardFrame::VIDEO_GENERATING, 'video_poll_attempts' => 0]);
+            GenerateStoryboardClipJob::dispatch($frame->id);
+        }
+
+        Notification::make()->success()->title(__('platform.storyboard.generating_clips', ['count' => $frames->count()]))->send();
     }
 
     public function approveFrame(int $frameId): void
@@ -181,6 +213,9 @@ class StoryboardBuilder extends Page
             'approved' => $f->is_approved,
             'locked' => $f->is_locked,
             'imageUrl' => $f->image_path !== null ? $media->signedUrl($f->image_path) : null,
+            'videoUrl' => $f->video_path !== null ? $media->signedUrl($f->video_path) : null,
+            'videoGenerating' => $f->video_status === StoryboardFrame::VIDEO_GENERATING,
+            'videoFailed' => $f->video_status === StoryboardFrame::VIDEO_FAILED,
             'versions' => $f->versions->map(fn ($v): array => [
                 'id' => $v->id,
                 'number' => $v->version_number,

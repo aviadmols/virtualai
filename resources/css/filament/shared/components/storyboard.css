@@ -107,10 +107,17 @@
     overflow: hidden;
 }
 
-.to-sb-frame__media img {
+.to-sb-frame__media img,
+.to-sb-frame__media video {
     inline-size: 100%;
     block-size: 100%;
     object-fit: cover;
+}
+
+.to-sb-frame__clip-note {
+    align-self: center;
+    font-size: var(--toa-type-caption-size);
+    color: var(--to-ink-muted);
 }
 
 .to-sb-frame__placeholder {

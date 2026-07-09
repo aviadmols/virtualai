@@ -25,6 +25,11 @@ class StoryboardFrame extends Model
     public const STATUS_READY = 'ready';
     public const STATUS_FAILED = 'failed';
 
+    // Per-frame video clip status (null = no clip requested yet).
+    public const VIDEO_GENERATING = 'generating';
+    public const VIDEO_READY = 'ready';
+    public const VIDEO_FAILED = 'failed';
+
     protected $fillable = [
         'project_id',
         'frame_number',
@@ -39,7 +44,14 @@ class StoryboardFrame extends Model
         'text_overlay',
         'image_prompt',
         'negative_prompt',
+        'motion_prompt',
         'image_path',
+        'video_path',
+        'video_status',
+        'video_task_id',
+        'video_duration_ms',
+        'video_poll_attempts',
+        'video_meta',
         'status',
         'is_approved',
         'is_locked',
@@ -52,9 +64,12 @@ class StoryboardFrame extends Model
             'characters' => 'array',
             'reference_tags' => 'array',
             'meta' => 'array',
+            'video_meta' => 'array',
             'frame_number' => 'integer',
             'start_second' => 'integer',
             'end_second' => 'integer',
+            'video_duration_ms' => 'integer',
+            'video_poll_attempts' => 'integer',
             'is_approved' => 'boolean',
             'is_locked' => 'boolean',
         ];

@@ -71,6 +71,36 @@ class StoryboardPipelineSeeder extends Seeder
         );
 
         $this->seedFrameImageStep();
+        $this->seedClipStep();
+    }
+
+    /** Seed the per-frame VIDEO clip step (image-to-video via BytePlus/Seedance). INACTIVE-ready:
+     *  the model id is volatile so verify it + set a BytePlus key before generating clips. */
+    private function seedClipStep(): void
+    {
+        AiOperation::updateOrCreate(
+            ['operation_key' => AiOperation::KEY_STORYBOARD_CLIP],
+            [
+                'label' => 'Storyboard · Video Clip',
+                'default_model' => 'dreamina-seedance-2-0-260128',
+                'fallback_model' => null,
+                'image_quality' => null,
+                'aspect_ratio' => null,
+                'params' => ['resolution' => '720p', 'duration_seconds' => 3, 'ratio' => 'adaptive'],
+                'input_schema' => null,
+                'retention_days' => null,
+                'estimated_cost_micro_usd' => 200_000,
+                'credit_multiplier' => null,
+            ],
+        );
+
+        $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, 'dreamina-seedance-2-0-260128', 'Seedance 2.0 (BytePlus)', isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_BYTEPLUS);
+
+        $this->seedPrompt(
+            AiOperation::KEY_STORYBOARD_CLIP,
+            'Animate the storyboard frame into a short, smooth cinematic video clip. Keep the subject, style and composition; add natural, subtle motion and a gentle camera move consistent with the shot.',
+            '{{image_prompt}} {{motion}}',
+        );
     }
 
     /** Seed one text step: the operation, its allow-listed models, and its global prompt. */
@@ -127,12 +157,12 @@ class StoryboardPipelineSeeder extends Seeder
         );
     }
 
-    private function seedModel(string $key, string $modelId, string $label, bool $isDefault = false, bool $isFallback = false, ?string $unit = null, ?int $costHint = null): void
+    private function seedModel(string $key, string $modelId, string $label, bool $isDefault = false, bool $isFallback = false, ?string $unit = null, ?int $costHint = null, string $provider = AiModel::PROVIDER_OPENROUTER): void
     {
         AiModel::updateOrCreate(
             ['operation_key' => $key, 'model_id' => $modelId],
             [
-                'provider' => AiModel::PROVIDER_OPENROUTER,
+                'provider' => $provider,
                 'label' => $label,
                 'is_default' => $isDefault,
                 'is_fallback' => $isFallback,
