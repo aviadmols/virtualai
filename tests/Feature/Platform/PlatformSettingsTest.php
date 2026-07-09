@@ -7,6 +7,7 @@ use App\Exceptions\PlatformAccessRequiredException;
 use App\Models\Account;
 use App\Models\PlatformSetting;
 use App\Models\User;
+use App\Support\TenantCredentialsCipher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -82,6 +83,34 @@ class PlatformSettingsTest extends TestCase
 
         // The cast decrypts it back transparently.
         $this->assertSame('sk-or-super-secret', PlatformSetting::query()->where('key', self::KEY)->first()->value);
+    }
+
+    public function test_a_saved_secret_survives_a_fresh_read(): void
+    {
+        $this->asSuperAdmin();
+        $this->settings()->put(self::KEY, 'sk-or-persist');
+
+        // A brand-new request (fresh cipher + resolver instance) still reads the saved secret.
+        TenantCredentialsCipher::flush();
+        $this->assertSame('sk-or-persist', app(PlatformSettings::class)->resolve(self::KEY));
+    }
+
+    public function test_a_rotated_credentials_key_degrades_to_env_not_a_crash(): void
+    {
+        config()->set('trayon.credentials_key', 'base64:'.base64_encode(random_bytes(32)));
+        TenantCredentialsCipher::flush();
+        $this->asSuperAdmin();
+        $this->settings()->put(self::KEY, 'sk-or-db');
+        $this->assertSame('sk-or-db', $this->settings()->resolve(self::KEY));
+
+        // The env key rotates across a deploy — the old ciphertext can no longer be decrypted.
+        config()->set(self::CONFIG_KEY, 'env-fallback-key');
+        config()->set('trayon.credentials_key', 'base64:'.base64_encode(random_bytes(32)));
+        TenantCredentialsCipher::flush();
+
+        // No 500: the un-decryptable DB value degrades to null and resolve() falls back to the env
+        // var — so keys set as env vars are NEVER lost even if the credentials key rotates.
+        $this->assertSame('env-fallback-key', $this->settings()->resolve(self::KEY));
     }
 
     public function test_a_non_super_admin_cannot_write_and_persists_nothing(): void
