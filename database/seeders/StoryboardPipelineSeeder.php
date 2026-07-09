@@ -24,7 +24,7 @@ class StoryboardPipelineSeeder extends Seeder
     // gemini-3.1-flash-image returns 400 on OpenRouter; gemini-2.5-flash-image is the proven one.
     private const IMAGE_MODEL = 'google/gemini-2.5-flash-image';
 
-    private const TEXT_PARAMS = ['temperature' => 0.6, 'top_p' => 0.95, 'max_tokens' => 4096];
+    private const TEXT_PARAMS = ['temperature' => 0.6, 'top_p' => 0.95, 'max_tokens' => 8000];
     private const IMAGE_QUALITY = 'high';
     private const IMAGE_ASPECT = '16:9';
 
@@ -57,7 +57,7 @@ class StoryboardPipelineSeeder extends Seeder
         $this->seedTextStep(
             AiOperation::KEY_STORYBOARD_VISUAL_BIBLE,
             'Storyboard · Visual Bible',
-            'You are the film\'s visual-bible author. Produce the single global visual style that EVERY frame must follow: global_style, camera, lighting, color_palette, mood, typography, continuity_rules, and a reusable negative_prompt. Keep it concrete so all frames look like the same film. Return ONLY JSON matching the schema.',
+            'You are the film\'s visual-bible author. Produce the single global visual style that EVERY frame must follow: global_style, camera, lighting, color_palette, mood, typography, continuity_rules, and a reusable negative_prompt. Keep EVERY field concise — one or two sentences; the negative_prompt must be a SHORT comma-separated list of at most 12 distinct terms, never an exhaustive or repeated list. Return ONLY JSON matching the schema.',
             "Clean story: {{clean_story}}.\nGenre profile: {{genre_profile}}.\nCharacters: {{characters}}.\nReturn strict JSON for the schema.",
             $this->visualBibleSchema(),
         );
@@ -65,7 +65,7 @@ class StoryboardPipelineSeeder extends Seeder
         $this->seedTextStep(
             AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN,
             'Storyboard · Scene Breakdown',
-            'You are a storyboard director. Break the story into EXACTLY {{frame_count}} frames, one per {{frame_interval}} seconds, covering 0..{{duration}}s. For each frame give the timing, description, camera angle, composition, action, which characters and @reference tags appear, any on-screen text, and a COMPLETE image_prompt that already embeds the visual bible so every frame looks like the same film — plus a per-frame negative_prompt. Use @reference tags verbatim. Return ONLY JSON matching the schema.',
+            'You are a storyboard director. Break the story into EXACTLY {{frame_count}} frames, one per {{frame_interval}} seconds, covering 0..{{duration}}s. For each frame give the timing, description, camera angle, composition, action, which characters and @reference tags appear, any on-screen text, and a COMPLETE image_prompt that already embeds the visual bible so every frame looks like the same film — plus a per-frame negative_prompt (a SHORT list of at most 10 distinct terms, never repeated). Use @reference tags verbatim. Return ONLY JSON matching the schema.',
             "Duration: {{duration}}s, one frame per {{frame_interval}}s => {{frame_count}} frames. Aspect ratio {{aspect_ratio}}.\nClean story: {{clean_story}}.\nGenre profile: {{genre_profile}}.\nCharacters: {{characters}}.\nVisual bible: {{visual_bible}}.\nReference tags available: {{reference_tags}}.\nReturn strict JSON for the schema with exactly {{frame_count}} frames.",
             $this->sceneBreakdownSchema(),
         );

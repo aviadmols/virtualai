@@ -97,6 +97,18 @@ class StoryboardTextCallerTest extends TestCase
         $this->assertStringContainsString("\n", $result->json['global_style']); // the newline is preserved
     }
 
+    public function test_it_recovers_truncated_json(): void
+    {
+        // The model hit max_tokens mid-value: an unclosed string and no closing brace (the Visual
+        // bible failure). We salvage the fields that came through.
+        $this->fakeContent('{ "global_style": "vibrant teen drama", "negative_prompt": "dark, moody, natural disas');
+
+        $result = app(StoryboardTextCaller::class)->extract($this->config());
+
+        $this->assertSame('vibrant teen drama', $result->json['global_style']);
+        $this->assertStringContainsString('dark', $result->json['negative_prompt']);
+    }
+
     public function test_it_coerces_string_params_to_numbers(): void
     {
         // The admin KeyValue editor yields string params; a string temperature is a 400.

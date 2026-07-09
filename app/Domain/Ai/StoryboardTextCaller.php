@@ -168,9 +168,17 @@ final class StoryboardTextCaller
         $candidate = ($start !== false && $end !== false && $end > $start)
             ? substr($trimmed, $start, $end - $start + 1)
             : $trimmed;
+        $fromBrace = $start !== false ? substr($trimmed, $start) : $trimmed;
 
-        // Try as-is, then with control chars inside strings escaped.
-        foreach ([$candidate, $this->escapeControlCharsInStrings($candidate)] as $attempt) {
+        // Try, in order: as-is · control chars escaped · truncation completed (the model hit
+        // max_tokens mid-value) then escaped. The last salvages the fields that came through.
+        $attempts = [
+            $candidate,
+            $this->escapeControlCharsInStrings($candidate),
+            $this->escapeControlCharsInStrings($this->completeTruncatedJson($fromBrace)),
+        ];
+
+        foreach ($attempts as $attempt) {
             $decoded = json_decode($attempt, true);
             if (is_array($decoded)) {
                 return $decoded;
@@ -178,6 +186,56 @@ final class StoryboardTextCaller
         }
 
         return null;
+    }
+
+    /**
+     * Complete a JSON object that was TRUNCATED (the model hit max_tokens): close an open string,
+     * drop a dangling comma, and close every still-open { / [ — so the fields already emitted are
+     * recovered instead of the whole step failing. Walks the bytes tracking string/escape state.
+     */
+    private function completeTruncatedJson(string $json): string
+    {
+        $stack = [];
+        $inString = false;
+        $escaped = false;
+        $length = strlen($json);
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $json[$i];
+
+            if ($inString) {
+                if ($escaped) {
+                    $escaped = false;
+                } elseif ($char === '\\') {
+                    $escaped = true;
+                } elseif ($char === '"') {
+                    $inString = false;
+                }
+
+                continue;
+            }
+
+            if ($char === '"') {
+                $inString = true;
+            } elseif ($char === '{' || $char === '[') {
+                $stack[] = $char;
+            } elseif ($char === '}' || $char === ']') {
+                array_pop($stack);
+            }
+        }
+
+        $repaired = $json;
+        if ($inString) {
+            $repaired .= '"'; // truncated mid-string value — close it
+        }
+
+        $repaired = rtrim(rtrim($repaired), ',');
+
+        for ($i = count($stack) - 1; $i >= 0; $i--) {
+            $repaired .= $stack[$i] === '{' ? '}' : ']';
+        }
+
+        return $repaired;
     }
 
     /**
