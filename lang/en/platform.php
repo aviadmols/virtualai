@@ -184,7 +184,11 @@ return [
         'save' => 'Save',
         'save_regenerate' => 'Save & regenerate',
         'cancel' => 'Cancel',
-        'form' => ['brief' => 'Brief'],
+        'form' => [
+            'brief' => 'Idea',
+            'advanced' => 'Advanced settings',
+            'advanced_help' => 'Genre, duration, frame interval, aspect ratio, resolution. Optional — sensible defaults are used.',
+        ],
         'field' => [
             'title' => 'Title',
             'story_idea' => 'Story idea',

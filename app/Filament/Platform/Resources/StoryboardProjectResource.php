@@ -67,51 +67,16 @@ class StoryboardProjectResource extends Resource
     {
         return $form->schema([
             Section::make(__('platform.storyboard.form.brief'))
-                ->columns(2)
                 ->schema([
                     TextInput::make('title')
                         ->label(__('platform.storyboard.field.title'))
                         ->required()
-                        ->maxLength(255)
-                        ->columnSpanFull(),
+                        ->maxLength(255),
                     Textarea::make('story_idea')
                         ->label(__('platform.storyboard.field.story_idea'))
                         ->helperText(__('platform.storyboard.field.story_idea_help'))
                         ->rows(5)
-                        ->required()
-                        ->columnSpanFull(),
-                    TextInput::make('genre')
-                        ->label(__('platform.storyboard.field.genre'))
-                        ->placeholder(__('platform.storyboard.field.genre_placeholder')),
-                    Select::make('aspect_ratio')
-                        ->label(__('platform.storyboard.field.aspect'))
-                        ->options(array_combine(self::ASPECTS, self::ASPECTS))
-                        ->default('16:9')
-                        ->selectablePlaceholder(false),
-                    TextInput::make('duration_seconds')
-                        ->label(__('platform.storyboard.field.duration'))
-                        ->numeric()
-                        ->minValue(3)
-                        ->maxValue(600)
-                        ->default(15)
                         ->required(),
-                    TextInput::make('frame_interval_seconds')
-                        ->label(__('platform.storyboard.field.interval'))
-                        ->helperText(__('platform.storyboard.field.interval_help'))
-                        ->numeric()
-                        ->minValue(1)
-                        ->maxValue(30)
-                        ->default(3)
-                        ->required(),
-                    TextInput::make('resolution')
-                        ->label(__('platform.storyboard.field.resolution'))
-                        ->placeholder('1080p'),
-                    TextInput::make('platform_target')
-                        ->label(__('platform.storyboard.field.platform')),
-                    Textarea::make('visual_style')
-                        ->label(__('platform.storyboard.field.visual_style'))
-                        ->rows(2)
-                        ->columnSpanFull(),
                 ]),
             Section::make(__('platform.storyboard.asset.section'))
                 ->description(__('platform.storyboard.asset.section_help'))
@@ -144,6 +109,45 @@ class StoryboardProjectResource extends Resource
                         ->addActionLabel(__('platform.storyboard.asset.add'))
                         ->collapsible()
                         ->itemLabel(static fn (array $state): ?string => filled($state['tag'] ?? null) ? '@'.$state['tag'] : null),
+                ]),
+            Section::make(__('platform.storyboard.form.advanced'))
+                ->description(__('platform.storyboard.form.advanced_help'))
+                ->collapsible()
+                ->collapsed()
+                ->columns(2)
+                ->schema([
+                    TextInput::make('genre')
+                        ->label(__('platform.storyboard.field.genre'))
+                        ->placeholder(__('platform.storyboard.field.genre_placeholder')),
+                    Select::make('aspect_ratio')
+                        ->label(__('platform.storyboard.field.aspect'))
+                        ->options(array_combine(self::ASPECTS, self::ASPECTS))
+                        ->default('16:9')
+                        ->selectablePlaceholder(false),
+                    TextInput::make('duration_seconds')
+                        ->label(__('platform.storyboard.field.duration'))
+                        ->numeric()
+                        ->minValue(3)
+                        ->maxValue(600)
+                        ->default(15)
+                        ->required(),
+                    TextInput::make('frame_interval_seconds')
+                        ->label(__('platform.storyboard.field.interval'))
+                        ->helperText(__('platform.storyboard.field.interval_help'))
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(30)
+                        ->default(3)
+                        ->required(),
+                    TextInput::make('resolution')
+                        ->label(__('platform.storyboard.field.resolution'))
+                        ->placeholder('1080p'),
+                    TextInput::make('platform_target')
+                        ->label(__('platform.storyboard.field.platform')),
+                    Textarea::make('visual_style')
+                        ->label(__('platform.storyboard.field.visual_style'))
+                        ->rows(2)
+                        ->columnSpanFull(),
                 ]),
         ]);
     }
