@@ -5,6 +5,7 @@ namespace Tests\Feature\Storyboard;
 use App\Domain\Ai\AiOperationResolver;
 use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Domain\Storyboard\StoryboardStep;
+use App\Models\AiModel;
 use App\Models\AiOperation;
 use App\Models\StoryboardAsset;
 use App\Models\StoryboardFrame;
@@ -66,6 +67,30 @@ class StoryboardFoundationTest extends TestCase
             $this->assertNotNull($config->userPrompt, "step {$stepKey} has a user prompt");
             $this->assertSame(ImageGenerationProvider::PROVIDER_OPENROUTER, $config->provider);
         }
+
+        // Planning runs on the strongest Gemini tier with a same-family fallback — the on-demand
+        // improve-prompt helper included.
+        foreach ([...StoryboardStep::TEXT_STEPS, AiOperation::KEY_STORYBOARD_IMPROVE_PROMPT] as $stepKey) {
+            $config = $resolver->for($stepKey);
+
+            $this->assertSame('google/gemini-3.1-pro-preview', $config->model);
+            $this->assertSame('google/gemini-3.5-flash', $config->fallbackModel);
+        }
+    }
+
+    public function test_reseeding_clears_stale_default_and_fallback_model_flags(): void
+    {
+        // Simulate a pre-upgrade install: the superseded models still carry the flags.
+        AiModel::create(['operation_key' => AiOperation::KEY_STORYBOARD_READ_IDEA, 'provider' => AiModel::PROVIDER_OPENROUTER, 'model_id' => 'google/gemini-2.5-flash', 'label' => 'Old default', 'is_default' => true, 'is_active' => true]);
+        AiModel::create(['operation_key' => AiOperation::KEY_STORYBOARD_READ_IDEA, 'provider' => AiModel::PROVIDER_OPENROUTER, 'model_id' => 'openai/gpt-4o-mini', 'label' => 'Old fallback', 'is_fallback' => true, 'is_active' => true]);
+
+        $this->seed(StoryboardPipelineSeeder::class);
+
+        $models = AiModel::query()->where('operation_key', AiOperation::KEY_STORYBOARD_READ_IDEA)->get();
+        $this->assertSame(['google/gemini-3.1-pro-preview'], $models->where('is_default', true)->pluck('model_id')->all());
+        $this->assertSame(['google/gemini-3.5-flash'], $models->where('is_fallback', true)->pluck('model_id')->all());
+        // The superseded rows survive as plain catalog entries (still selectable, never auto-picked).
+        $this->assertTrue($models->pluck('model_id')->contains('google/gemini-2.5-flash'));
     }
 
     public function test_text_steps_enforce_a_json_schema_and_the_scene_breakdown_returns_frames(): void
@@ -81,6 +106,8 @@ class StoryboardFoundationTest extends TestCase
 
         $scene = $resolver->for(AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN);
         $this->assertArrayHasKey('frames', $scene->inputSchema['properties']);
+        // Each frame plans its own motion phrase (feeds the video clip step's {{motion}}).
+        $this->assertArrayHasKey('motion', $scene->inputSchema['properties']['frames']['items']['properties']);
 
         $image = $resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
         $this->assertNull($image->inputSchema);

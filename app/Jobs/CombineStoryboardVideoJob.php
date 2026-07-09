@@ -53,9 +53,14 @@ final class CombineStoryboardVideoJob implements ShouldQueue
     private const MAX_REFERENCE_IMAGES = 8; // cap the frames/refs sent inline to the provider
 
     // The default directive when the admin leaves the prompt empty — the video must FOLLOW the
-    // storyboard (same characters, plot, structure). The story + per-frame scenes are appended as data.
-    private const AUTO_DIRECTIVE = 'Create ONE continuous cinematic video that follows this storyboard exactly, in order. '
-        .'Keep the SAME characters, appearance, wardrobe and visual style shown in the reference images, and preserve the plot and the film\'s structure across the whole video.';
+    // storyboard (same characters, plot, structure). The story, visual bible, character bible and
+    // per-frame scenes are appended as DATA by autoPrompt(), not as creative instructions.
+    private const AUTO_DIRECTIVE = 'Create ONE continuous cinematic film that follows this storyboard EXACTLY, scene by scene, in order. '
+        .'The reference images ARE the storyboard frames: match their characters (faces, hair, wardrobe), locations, lighting, palette and art style precisely — do not restyle or reinterpret them. '
+        .'Preserve the plot and the film\'s structure across the whole video, with smooth, motivated transitions between scenes; keep all motion natural and physically plausible; no morphing, no flicker, no new characters, no on-screen text.';
+
+    // Cap the character-continuity lines appended to the auto prompt.
+    private const MAX_PROMPT_CHARACTERS = 5;
 
     public function __construct(
         public readonly int $projectId,
@@ -271,7 +276,8 @@ final class CombineStoryboardVideoJob implements ShouldQueue
     /**
      * Auto-build the video prompt from the storyboard when the admin leaves it empty: a fixed
      * directive to FOLLOW the storyboard (same characters, plot, structure) + the story idea +
-     * every frame's description, in order. The variable parts are DATA, not a creative prompt.
+     * the pipeline's visual bible and character bible (the continuity contract) + every frame's
+     * description, in order. The variable parts are DATA, not a creative prompt.
      */
     private function autoPrompt(StoryboardProject $project): string
     {
@@ -289,11 +295,48 @@ final class CombineStoryboardVideoJob implements ShouldQueue
             $parts[] = 'Story: '.$story;
         }
 
+        $pipeline = is_array($project->pipeline) ? $project->pipeline : [];
+        $bible = $pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] ?? null;
+        $bible = is_array($bible) ? $bible : [];
+
+        if (($style = trim((string) ($bible['global_style'] ?? ''))) !== '') {
+            $parts[] = 'Visual style: '.$style;
+        }
+
+        if (($rules = trim((string) ($bible['continuity_rules'] ?? ''))) !== '') {
+            $parts[] = 'Continuity rules: '.$rules;
+        }
+
+        if (($characters = $this->characterLine($pipeline)) !== '') {
+            $parts[] = 'Characters (keep identical throughout): '.$characters;
+        }
+
         if ($scenes !== []) {
             $parts[] = 'Scenes in order: '.implode(' | ', $scenes);
         }
 
         return implode("\n", $parts);
+    }
+
+    /** "Name — description; …" for the pipeline's characters, capped. Empty when none exist. */
+    private function characterLine(array $pipeline): string
+    {
+        $characters = data_get($pipeline, StoryboardProject::PIPE_CHARACTERS.'.characters');
+
+        if (! is_array($characters)) {
+            return '';
+        }
+
+        return collect($characters)
+            ->take(self::MAX_PROMPT_CHARACTERS)
+            ->map(static function ($character): ?string {
+                $name = is_array($character) ? trim((string) ($character['name'] ?? '')) : '';
+                $description = is_array($character) ? trim((string) ($character['description'] ?? '')) : '';
+
+                return $name !== '' ? trim($name.($description !== '' ? ' — '.$description : '')) : null;
+            })
+            ->filter()
+            ->implode('; ');
     }
 
     /** Aggregate each frame's clip-failure reason (video_meta.error) for the log + on-screen error. */

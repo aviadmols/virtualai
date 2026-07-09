@@ -101,6 +101,55 @@ class StoryboardCombineVideoTest extends TestCase
         $this->assertDatabaseCount('credit_ledger', 0);
     }
 
+    public function test_reference_mode_auto_prompt_carries_the_visual_bible_and_characters(): void
+    {
+        config()->set('services.atlascloud.api_key', 'ac-key');
+        config()->set('services.atlascloud.base_url', 'https://api.atlascloud.ai/api/v1');
+        config()->set('services.atlascloud.timeout', 30);
+        $this->seed(StoryboardPipelineSeeder::class);
+
+        AiModel::where('operation_key', AiOperation::KEY_STORYBOARD_CLIP)->update(['is_default' => false]);
+        AiModel::where('operation_key', AiOperation::KEY_STORYBOARD_CLIP)
+            ->where('provider', AiModel::PROVIDER_ATLASCLOUD)->update(['is_default' => true]);
+        AiOperation::where('operation_key', AiOperation::KEY_STORYBOARD_CLIP)
+            ->update(['default_model' => 'bytedance/seedance-2.0/reference-to-video']);
+
+        Bus::fake();
+        Http::fake([
+            'https://api.atlascloud.ai/api/v1/model/generateVideo' => Http::response(['data' => ['id' => 'pred-2']], 200),
+            '*' => Http::response('img-bytes', 200),
+        ]);
+
+        $project = StoryboardProject::factory()->create([
+            'story_idea' => 'A knight defends the STORY-MARKER kingdom',
+            'pipeline' => [
+                StoryboardProject::PIPE_VISUAL_BIBLE => ['global_style' => 'STYLE-MARKER', 'continuity_rules' => 'RULES-MARKER'],
+                StoryboardProject::PIPE_CHARACTERS => ['characters' => [['name' => 'HERO-MARKER', 'description' => 'a tall knight']]],
+            ],
+        ]);
+        $project->assets()->create(['tag' => 'image1', 'type' => 'character', 'file_path' => 'storyboard/inputs/a.png']);
+        StoryboardFrame::factory()->create(['project_id' => $project->id, 'description' => 'SCENE-MARKER opening shot']);
+
+        // Empty prompt -> the auto prompt must embed the story, visual bible, characters and scenes.
+        (new CombineStoryboardVideoJob($project->id, CombineStoryboardVideoJob::MODE_REFERENCE, '720p', 10, null, '16:9'))
+            ->handle(app(StoryboardVideoComposer::class));
+
+        Http::assertSent(function ($req): bool {
+            if (! str_ends_with($req->url(), '/model/generateVideo')) {
+                return false;
+            }
+
+            $body = (string) json_encode($req->data());
+
+            return str_contains($body, 'STORY-MARKER')
+                && str_contains($body, 'STYLE-MARKER')
+                && str_contains($body, 'RULES-MARKER')
+                && str_contains($body, 'HERO-MARKER')
+                && str_contains($body, 'SCENE-MARKER');
+        });
+        $this->assertDatabaseCount('credit_ledger', 0);
+    }
+
     public function test_reference_mode_with_no_reference_images_fails_cleanly(): void
     {
         $project = StoryboardProject::factory()->create([

@@ -4,6 +4,7 @@ namespace App\Domain\Storyboard;
 
 use App\Domain\Ai\ImagePayload;
 use App\Domain\Ai\AiOperationResolver;
+use App\Domain\Ai\OperationConfig;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Playground\PlaygroundImageRunner;
@@ -41,7 +42,7 @@ final class StoryboardFrameGenerator
         $frame->update(['status' => StoryboardFrame::STATUS_GENERATING]);
 
         $config = $this->resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
-        $prompt = $this->buildPrompt($frame, $editInstruction);
+        $prompt = $this->buildPrompt($config, $frame, $editInstruction);
         $inputs = $this->buildInputs($frame);
 
         try {
@@ -102,9 +103,17 @@ final class StoryboardFrameGenerator
         ]);
     }
 
-    private function buildPrompt(StoryboardFrame $frame, ?string $edit): string
+    private function buildPrompt(OperationConfig $config, StoryboardFrame $frame, ?string $edit): string
     {
+        // The operation's admin-editable system prompt LEADS the prompt (image chat calls carry a
+        // single user message, so it is prepended). Substituted with no vars — it must stay
+        // placeholder-free. The frame's own image_prompt (written by the scene breakdown) follows.
+        $system = trim((string) $config->substituteSystem([]));
         $prompt = (string) $frame->image_prompt;
+
+        if ($system !== '') {
+            $prompt = $system."\n\n".$prompt;
+        }
 
         if ($edit !== null && $edit !== '') {
             $prompt .= "\n\nEdit: ".$edit;

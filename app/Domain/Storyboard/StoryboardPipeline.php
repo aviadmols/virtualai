@@ -115,6 +115,7 @@ final class StoryboardPipeline
                 'characters' => is_array($f['characters'] ?? null) ? $f['characters'] : [],
                 'reference_tags' => is_array($f['reference_tags'] ?? null) ? $f['reference_tags'] : [],
                 'text_overlay' => $f['text_overlay'] ?? null,
+                'motion_prompt' => is_string($f['motion'] ?? null) ? $f['motion'] : null,
                 'image_prompt' => $f['image_prompt'] ?? null,
                 'negative_prompt' => $f['negative_prompt'] ?? null,
                 'status' => StoryboardFrame::STATUS_PENDING,

@@ -4,6 +4,7 @@ namespace Tests\Feature\Storyboard;
 
 use App\Domain\Storyboard\StoryboardFrameGenerator;
 use App\Jobs\GenerateStoryboardFrameJob;
+use App\Models\Prompt;
 use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
 use Database\Seeders\StoryboardPipelineSeeder;
@@ -91,6 +92,25 @@ class StoryboardFrameGenerationTest extends TestCase
         $selected = $frame->versions()->where('is_selected', true)->get();
         $this->assertCount(1, $selected);
         $this->assertSame(2, $selected->first()->version_number);
+    }
+
+    public function test_the_generation_prompt_is_led_by_the_operations_system_prompt(): void
+    {
+        $this->fakeImage();
+        $frame = $this->frame();
+
+        app(StoryboardFrameGenerator::class)->generate($frame);
+
+        // The admin-editable frame-image system prompt is LIVE config: it leads the effective
+        // prompt, followed by the frame's own image_prompt.
+        $system = (string) Prompt::query()
+            ->where('operation_key', 'storyboard_frame_image')
+            ->value('system_prompt');
+
+        $recorded = (string) $frame->refresh()->versions()->first()->prompt;
+        $this->assertNotSame('', trim($system));
+        $this->assertStringStartsWith($system, $recorded);
+        $this->assertStringContainsString('Cinematic pool party, bright daylight', $recorded);
     }
 
     public function test_regenerate_feeds_the_current_image_so_it_edits_not_reinvents(): void

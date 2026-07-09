@@ -54,6 +54,7 @@ class StoryboardPipelineTest extends TestCase
                 'start_second' => ($i - 1) * 3,
                 'end_second' => $i * 3,
                 'description' => "Frame {$i} description",
+                'motion' => "slow push-in {$i}",
                 'image_prompt' => "Cinematic frame {$i}, bright daylight, @location_pool",
                 'reference_tags' => ['@location_pool'],
             ];
@@ -90,6 +91,7 @@ class StoryboardPipelineTest extends TestCase
         $first = $project->frames()->first();
         $this->assertSame(1, $first->frame_number);
         $this->assertStringContainsString('Cinematic frame 1', (string) $first->image_prompt);
+        $this->assertSame('slow push-in 1', (string) $first->motion_prompt);
         $this->assertSame(StoryboardFrame::STATUS_PENDING, $first->status);
 
         // Every step is logged succeeded with a model + duration.

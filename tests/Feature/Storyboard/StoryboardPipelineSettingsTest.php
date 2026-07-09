@@ -35,7 +35,7 @@ class StoryboardPipelineSettingsTest extends TestCase
     {
         Livewire::test(StoryboardPipelineSettings::class)
             ->assertOk()
-            ->assertFormSet(fn (array $state): bool => ($state['storyboard_read_idea']['model'] ?? null) === 'google/gemini-2.5-flash');
+            ->assertFormSet(fn (array $state): bool => ($state['storyboard_read_idea']['model'] ?? null) === 'google/gemini-3.1-pro-preview');
     }
 
     public function test_saving_updates_the_operation_prompt_and_model(): void
