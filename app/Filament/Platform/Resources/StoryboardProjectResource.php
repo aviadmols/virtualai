@@ -6,9 +6,11 @@ use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\CreateStoryb
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\EditStoryboardProject;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\ListStoryboardProjects;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\StoryboardBuilder;
-use App\Filament\Platform\Resources\StoryboardProjectResource\RelationManagers\AssetsRelationManager;
 use App\Jobs\RunStoryboardPipelineJob;
+use App\Models\StoryboardAsset;
 use App\Models\StoryboardProject;
+use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -111,6 +113,38 @@ class StoryboardProjectResource extends Resource
                         ->rows(2)
                         ->columnSpanFull(),
                 ]),
+            Section::make(__('platform.storyboard.asset.section'))
+                ->description(__('platform.storyboard.asset.section_help'))
+                ->schema([
+                    Repeater::make('assets')
+                        ->relationship()
+                        ->hiddenLabel()
+                        ->schema([
+                            TextInput::make('tag')
+                                ->label(__('platform.storyboard.asset.tag'))
+                                ->helperText(__('platform.storyboard.asset.tag_help'))
+                                ->prefix('@')
+                                ->required()
+                                ->maxLength(64),
+                            Select::make('type')
+                                ->label(__('platform.storyboard.asset.type'))
+                                ->options(array_combine(StoryboardAsset::TYPES, StoryboardAsset::TYPES))
+                                ->default(StoryboardAsset::TYPE_CHARACTER)
+                                ->required(),
+                            FileUpload::make('file_path')
+                                ->label(__('platform.storyboard.asset.image'))
+                                ->image()
+                                ->maxSize(5120)
+                                ->disk((string) config('trayon.media.disk'))
+                                ->directory('storyboard/inputs')
+                                ->visibility('private')
+                                ->columnSpanFull(),
+                        ])
+                        ->columns(2)
+                        ->addActionLabel(__('platform.storyboard.asset.add'))
+                        ->collapsible()
+                        ->itemLabel(static fn (array $state): ?string => filled($state['tag'] ?? null) ? '@'.$state['tag'] : null),
+                ]),
         ]);
     }
 
@@ -166,9 +200,9 @@ class StoryboardProjectResource extends Resource
 
     public static function getRelations(): array
     {
-        return [
-            AssetsRelationManager::class,
-        ];
+        // References are managed inline on the form (upload + tag alongside the story), so no
+        // separate relation manager is needed.
+        return [];
     }
 
     public static function getPages(): array

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Storyboard;
 
+use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\CreateStoryboardProject;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\ListStoryboardProjects;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\StoryboardBuilder;
 use App\Jobs\GenerateStoryboardFrameJob;
@@ -34,6 +35,29 @@ class StoryboardUiTest extends TestCase
     {
         StoryboardProject::factory()->create();
         Livewire::test(ListStoryboardProjects::class)->assertOk();
+    }
+
+    public function test_creating_a_project_saves_inline_tagged_references(): void
+    {
+        Livewire::test(CreateStoryboardProject::class)
+            ->fillForm([
+                'title' => 'Pool Party',
+                'story_idea' => 'A trailer featuring @hero at @location_pool',
+                'duration_seconds' => 9,
+                'frame_interval_seconds' => 3,
+                'aspect_ratio' => '16:9',
+                'assets' => [
+                    ['tag' => 'hero', 'type' => 'character'],
+                    ['tag' => 'location_pool', 'type' => 'location'],
+                ],
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $project = StoryboardProject::query()->firstOrFail();
+        $this->assertSame(2, $project->assets()->count());
+        $this->assertEqualsCanonicalizing(['hero', 'location_pool'], $project->assets()->pluck('tag')->all());
+        $this->assertSame(auth()->id(), $project->created_by);
     }
 
     public function test_the_builder_page_renders(): void
