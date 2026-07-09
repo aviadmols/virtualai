@@ -3,6 +3,7 @@
 namespace Tests\Feature\Storyboard;
 
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\CreateStoryboardProject;
+use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\EditStoryboardProject;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\ListStoryboardProjects;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\StoryboardBuilder;
 use App\Jobs\GenerateStoryboardFrameJob;
@@ -12,6 +13,7 @@ use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -66,6 +68,29 @@ class StoryboardUiTest extends TestCase
         StoryboardFrame::factory()->create(['project_id' => $project->id]);
 
         Livewire::test(StoryboardBuilder::class, ['record' => $project->getRouteKey()])->assertOk();
+    }
+
+    public function test_the_edit_page_renders_the_story_composer(): void
+    {
+        $project = StoryboardProject::factory()->create();
+
+        Livewire::test(EditStoryboardProject::class, ['record' => $project->getRouteKey()])->assertOk();
+    }
+
+    public function test_edit_page_exposes_saved_reference_thumbnails_by_tag(): void
+    {
+        config()->set('trayon.media.disk', 'public');
+        Storage::fake('public');
+
+        $project = StoryboardProject::factory()->create();
+        $project->assets()->create(['tag' => 'hero', 'type' => 'character', 'file_path' => 'storyboard/inputs/hero.png']);
+        $project->assets()->create(['tag' => 'no_image', 'type' => 'prop', 'file_path' => null]);
+
+        Livewire::test(EditStoryboardProject::class, ['record' => $project->getRouteKey()])
+            ->call('getStoryboardAssetUrls')
+            ->assertReturned(fn ($map): bool => is_array($map)
+                && array_key_exists('hero', $map)
+                && ! array_key_exists('no_image', $map));
     }
 
     public function test_generate_frame_dispatches_a_job_and_marks_the_frame_generating(): void

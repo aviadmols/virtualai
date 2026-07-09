@@ -3,10 +3,13 @@
 namespace App\Filament\Platform\Resources\StoryboardProjectResource\Pages;
 
 use App\Filament\Platform\Resources\StoryboardProjectResource;
+use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\Concerns\ResolvesStoryboardAssetUrls;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateStoryboardProject extends CreateRecord
 {
+    use ResolvesStoryboardAssetUrls;
+
     protected static string $resource = StoryboardProjectResource::class;
 
     /** Stamp the creating admin (created_by). */

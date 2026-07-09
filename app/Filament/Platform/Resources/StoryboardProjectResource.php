@@ -15,6 +15,7 @@ use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ViewField;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -72,10 +73,10 @@ class StoryboardProjectResource extends Resource
                         ->label(__('platform.storyboard.field.title'))
                         ->required()
                         ->maxLength(255),
-                    Textarea::make('story_idea')
+                    ViewField::make('story_idea')
                         ->label(__('platform.storyboard.field.story_idea'))
                         ->helperText(__('platform.storyboard.field.story_idea_help'))
-                        ->rows(5)
+                        ->view('filament.platform.storyboard.story-composer')
                         ->required(),
                 ]),
             Section::make(__('platform.storyboard.asset.section'))
