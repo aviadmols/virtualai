@@ -31,6 +31,12 @@ final class GlobalModels
         'App\\Models\\Prompt',               // global/product_type-scoped prompts (ai-openrouter).
         'App\\Models\\PlatformSetting',      // platform-wide settings (control plane).
         'App\\Models\\PlaygroundRun',        // Super-Admin model-test runs (no tenant; never charges).
+        // Storyboard (admin AI pre-production builder) — admin-owned, no tenant, never charges.
+        'App\\Models\\StoryboardProject',
+        'App\\Models\\StoryboardAsset',
+        'App\\Models\\StoryboardFrame',
+        'App\\Models\\StoryboardFrameVersion',
+        'App\\Models\\StoryboardStepRun',
     ];
 
     /** True if $class is on the global (non-tenant) allow-list. */

@@ -244,6 +244,11 @@ class ProductScanIsolationSpotCheckTest extends TestCase
             'App\\Models\\Prompt',
             'App\\Models\\PlatformSetting',
             'App\\Models\\PlaygroundRun',
+            'App\\Models\\StoryboardProject',
+            'App\\Models\\StoryboardAsset',
+            'App\\Models\\StoryboardFrame',
+            'App\\Models\\StoryboardFrameVersion',
+            'App\\Models\\StoryboardStepRun',
         ], GlobalModels::ALLOW_LIST);
     }
 
