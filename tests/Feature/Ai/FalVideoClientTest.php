@@ -27,6 +27,9 @@ class FalVideoClientTest extends TestCase
     private const RESULT = self::SUBMIT.'/requests/'.self::REQUEST.'/response';
     private const FRAME_URL = 'https://media.test/frame.png';
     private const VIDEO_URL = 'https://cdn.fal/clip.mp4';
+    // The endpoint's public OpenAPI document (drives the schema-shaped body). Unavailable (500)
+    // in the legacy-shape tests so the body degrades to prompt + images.
+    private const OPENAPI = 'https://fal.ai/api/openapi/queue/openapi.json*';
 
     protected function setUp(): void
     {
@@ -42,9 +45,31 @@ class FalVideoClientTest extends TestCase
         return app(FalVideoClient::class);
     }
 
+    /** A happy-horse-shaped OpenAPI document: enum knobs + prompt/image caps. */
+    private function openApiDoc(): array
+    {
+        return [
+            'paths' => ['/' => ['post' => ['requestBody' => ['content' => ['application/json' => [
+                'schema' => ['$ref' => '#/components/schemas/VideoInput'],
+            ]]]]]],
+            'components' => ['schemas' => ['VideoInput' => [
+                'type' => 'object',
+                'properties' => [
+                    'prompt' => ['type' => 'string', 'maxLength' => 30],
+                    'image_urls' => ['type' => 'array', 'maxItems' => 2],
+                    'duration' => ['type' => 'integer', 'enum' => [3, 5, 10, 15], 'default' => 5],
+                    'resolution' => ['type' => 'string', 'enum' => ['720p', '1080p']],
+                    'aspect_ratio' => ['type' => 'string', 'enum' => ['16:9', '9:16', '1:1']],
+                ],
+                'required' => ['prompt', 'image_urls'],
+            ]]],
+        ];
+    }
+
     public function test_submit_returns_a_composite_task_id_and_sends_a_data_uri_with_key_auth(): void
     {
         Http::fake([
+            self::OPENAPI => Http::response([], 500),
             self::SUBMIT => Http::response(['request_id' => self::REQUEST], 200),
             self::FRAME_URL => Http::response("\x89PNG\r\n\x1a\nREF", 200),
         ]);
@@ -62,6 +87,7 @@ class FalVideoClientTest extends TestCase
         // fal routes nested model ids off a shorter base app — the reply's status_url is the truth.
         $app = 'fal-ai/kling-video';
         Http::fake([
+            self::OPENAPI => Http::response([], 500),
             self::SUBMIT => Http::response([
                 'request_id' => self::REQUEST,
                 'status_url' => 'https://queue.fal.run/'.$app.'/requests/'.self::REQUEST.'/status',
@@ -78,9 +104,41 @@ class FalVideoClientTest extends TestCase
         Http::assertSent(fn ($req) => $req->url() === 'https://queue.fal.run/'.$app.'/requests/'.self::REQUEST.'/status');
     }
 
+    public function test_submit_maps_duration_resolution_and_ratio_onto_the_endpoints_own_schema(): void
+    {
+        Http::fake([
+            self::OPENAPI => Http::response($this->openApiDoc(), 200),
+            self::SUBMIT => Http::response(['request_id' => self::REQUEST], 200),
+            self::FRAME_URL => Http::response("\x89PNG\r\n\x1a\nREF", 200),
+        ]);
+
+        $this->client()->submitTask(self::MODEL, str_repeat('p', 40), [self::FRAME_URL, self::FRAME_URL, self::FRAME_URL], [
+            'resolution' => '480p',        // not offered → nearest allowed (720p), never a 422
+            'duration_seconds' => 120,     // above the enum → the model's max (15, as an INT)
+            'ratio' => '16:9',             // exact enum match → sent as aspect_ratio
+        ]);
+
+        Http::assertSent(function ($req): bool {
+            if ($req->url() !== self::SUBMIT) {
+                return false;
+            }
+            $data = $req->data();
+
+            return $data['duration'] === 15
+                && $data['resolution'] === '720p'
+                && $data['aspect_ratio'] === '16:9'
+                && count($data['image_urls']) === 2          // trimmed to the schema's maxItems
+                && ! array_key_exists('image_url', $data)    // the schema declares image_urls only
+                && mb_strlen((string) $data['prompt']) === 30; // truncated to the schema's maxLength
+        });
+    }
+
     public function test_submit_error_throws_a_classified_exception(): void
     {
-        Http::fake([self::SUBMIT => Http::response(['detail' => 'invalid input'], 422)]);
+        Http::fake([
+            self::OPENAPI => Http::response([], 500),
+            self::SUBMIT => Http::response(['detail' => 'invalid input'], 422),
+        ]);
 
         $this->expectException(OpenRouterException::class);
         $this->client()->submitTask(self::MODEL, 'prompt', []);

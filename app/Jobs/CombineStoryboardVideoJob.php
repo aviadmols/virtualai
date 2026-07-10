@@ -5,9 +5,12 @@ namespace App\Jobs;
 use App\Domain\Ai\AiOperationResolver;
 use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Domain\Ai\Contracts\VideoGenerationProvider;
+use App\Domain\Ai\FalEndpointSchema;
+use App\Domain\Ai\OperationConfig;
 use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Storyboard\StoryboardVideoComposer;
+use App\Domain\Storyboard\StoryboardVideoDirector;
 use App\Models\AiOperation;
 use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
@@ -17,6 +20,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -50,18 +54,22 @@ final class CombineStoryboardVideoJob implements ShouldQueue
     private const MAX_POLL_ATTEMPTS = 60;   // 60 × 15s ≈ 15 min for the render(s) to finish
     private const POLL_DELAY = 15;
     private const DEFAULT_RATIO = 'adaptive';
-    private const MAX_REFERENCE_IMAGES = 8; // cap the frames/refs sent inline to the provider
+    private const MAX_REFERENCE_IMAGES = 9; // fal's largest reference cap (happy-horse); lower-cap models are trimmed by the endpoint schema
 
-    // The default directive when the admin leaves the prompt empty — the video must FOLLOW the
-    // storyboard (same characters, plot, structure). The story, visual bible, character bible and
-    // per-frame scenes are appended as DATA by autoPrompt(), not as creative instructions.
-    private const AUTO_DIRECTIVE = 'Create ONE continuous cinematic film that follows this storyboard EXACTLY, scene by scene, in order. '
-        .'The reference images ARE the storyboard frames: match their characters (faces, hair, wardrobe), locations, lighting, palette and art style precisely — do not restyle or reinterpret them. '
-        .'Preserve the plot and the film\'s structure across the whole video, with smooth, motivated transitions between scenes; keep all motion natural and physically plausible; no morphing, no flicker, no new characters, no on-screen text. '
-        .'Every quoted line of dialogue must be SPOKEN aloud by its character in its own scene, clearly and lip-synced, at that scene\'s timing.';
+    // Where the submitted reference prompt came from — surfaced in final_video_meta.
+    private const PROMPT_MANUAL = 'manual';
+    private const PROMPT_DIRECTOR = 'director';
+    private const PROMPT_AUTO = 'auto';
+    private const PROMPT_PREVIEW_CHARS = 500;
 
-    // Cap the character-continuity lines appended to the auto prompt.
-    private const MAX_PROMPT_CHARACTERS = 5;
+    // The FALLBACK directive when the admin leaves the prompt empty AND the director pass fails —
+    // the video must FOLLOW the storyboard (same characters, plot, structure, timing). The story,
+    // visual bible, character bible and the timed shot list are appended as DATA by autoPrompt().
+    private const AUTO_DIRECTIVE = 'Create ONE continuous cinematic film that follows this storyboard EXACTLY, shot by shot, in order, hitting each shot\'s stated time window. '
+        .'The reference images ARE the storyboard frames in shot order: match their characters (faces, hair, wardrobe), locations, lighting, palette and art style precisely — do not restyle or reinterpret them. '
+        .'Maintain spatial continuity and consistent screen direction across cuts — characters keep their positions and facing between consecutive shots unless a shot shows them move; every shot change is an explicit, motivated camera transition (cut on action, match cut, push-in), never an unexplained jump. '
+        .'Keep all motion natural and physically plausible; no morphing, no flicker, no new characters, no on-screen text. '
+        .'Every quoted line of dialogue must be SPOKEN aloud by its character within its own shot\'s time window, clearly and lip-synced.';
 
     public function __construct(
         public readonly int $projectId,
@@ -120,13 +128,27 @@ final class CombineStoryboardVideoJob implements ShouldQueue
 
         $config = app(AiOperationResolver::class)->for(AiOperation::KEY_STORYBOARD_CLIP);
         $client = $router->for($config->provider);
-        // No prompt entered → auto-build one from the storyboard (keeps characters, plot, structure).
-        $prompt = ($this->prompt !== null && $this->prompt !== '') ? $this->prompt : $this->autoPrompt($project);
+        $ratio = ($this->ratio !== null && $this->ratio !== '') ? $this->ratio : ($project->aspect_ratio ?? self::DEFAULT_RATIO);
+        // The seconds the model will ACTUALLY render (fal models clamp to a per-model enum) — the
+        // prompt's shot timings are built against this so its clock matches the output.
+        $effectiveSeconds = $this->effectiveSeconds($config);
+
+        // Prompt precedence: the admin's manual prompt verbatim → the DIRECTOR pass (a multimodal
+        // model composes a timed shot list from the frame images + storyboard) → the deterministic
+        // auto prompt (the director must never block a video).
+        $source = self::PROMPT_MANUAL;
+        $prompt = ($this->prompt !== null && $this->prompt !== '') ? $this->prompt : null;
+
+        if ($prompt === null) {
+            $prompt = app(StoryboardVideoDirector::class)->compose($project, $refUrls, $effectiveSeconds, $this->resolution, $ratio);
+            $source = $prompt !== null ? self::PROMPT_DIRECTOR : self::PROMPT_AUTO;
+            $prompt ??= $this->autoPrompt($project, $effectiveSeconds);
+        }
 
         $taskId = $client->submitTask($config->model, $prompt, $refUrls, [
             'resolution' => $this->resolution,
             'duration_seconds' => $this->seconds,
-            'ratio' => ($this->ratio !== null && $this->ratio !== '') ? $this->ratio : ($project->aspect_ratio ?? self::DEFAULT_RATIO),
+            'ratio' => $ratio,
         ]);
 
         $project->update([
@@ -137,6 +159,10 @@ final class CombineStoryboardVideoJob implements ShouldQueue
                 'model' => $config->model,
                 'prediction_id' => $taskId,
                 'resolution' => $this->resolution,
+                'requested_seconds' => $this->seconds,
+                'effective_seconds' => $effectiveSeconds,
+                'prompt_source' => $source,
+                'prompt_preview' => Str::limit($prompt, self::PROMPT_PREVIEW_CHARS),
                 // Live progress for the builder card: the admin SEES it was sent + where it stands.
                 'submitted_at' => now()->toIso8601String(),
                 'last_status' => 'submitted',
@@ -145,6 +171,21 @@ final class CombineStoryboardVideoJob implements ShouldQueue
         ]);
 
         $this->reschedule();
+    }
+
+    /**
+     * The duration the resolved video model will actually render: fal models clamp the request to
+     * a per-model enum (read from the endpoint's own schema); other providers take it as-is.
+     */
+    private function effectiveSeconds(OperationConfig $config): int
+    {
+        if ($config->provider !== ImageGenerationProvider::PROVIDER_FAL) {
+            return $this->seconds;
+        }
+
+        $schema = app(FalEndpointSchema::class);
+
+        return $schema->effectiveDuration($schema->inputSchema($config->model), $this->seconds) ?? $this->seconds;
     }
 
     /** Poll the in-flight reference-to-video prediction; on success download + store the final video. */
@@ -290,33 +331,16 @@ final class CombineStoryboardVideoJob implements ShouldQueue
     }
 
     /**
-     * Auto-build the video prompt from the storyboard when the admin leaves it empty: a fixed
-     * directive to FOLLOW the storyboard (same characters, plot, structure) + the story idea +
-     * the pipeline's visual bible and character bible (the continuity contract) + every frame's
-     * description, in order. The variable parts are DATA, not a creative prompt.
+     * The deterministic FALLBACK video prompt (the director pass failed or is unseeded): the
+     * directive to FOLLOW the storyboard + the story idea + the pipeline's visual bible and
+     * character bible (the continuity contract) + the NUMBERED, TIMED shot list (timings rescaled
+     * to the seconds the model will actually render). The variable parts are DATA, not creative
+     * instructions.
      */
-    private function autoPrompt(StoryboardProject $project): string
+    private function autoPrompt(StoryboardProject $project, int $totalSeconds): string
     {
-        // Each scene = its description + (when set) the frame's SPOKEN line, so the one-video
-        // generation voices the dialogue at the right beat.
-        $scenes = $project->frames()
-            ->orderBy('frame_number')
-            ->get()
-            ->map(static function (StoryboardFrame $frame): string {
-                $scene = trim((string) $frame->description);
-                $dialogue = trim((string) $frame->dialogue);
-
-                if ($scene === '' && $dialogue === '') {
-                    return '';
-                }
-
-                return $dialogue !== '' ? trim($scene.' — the character says: "'.$dialogue.'"') : $scene;
-            })
-            ->filter()
-            ->values()
-            ->all();
-
         $parts = [self::AUTO_DIRECTIVE];
+        $parts[] = 'Total duration: '.$totalSeconds.'s — follow the shot timings below exactly.';
 
         if (($story = trim((string) $project->story_idea)) !== '') {
             $parts[] = 'Story: '.$story;
@@ -334,55 +358,23 @@ final class CombineStoryboardVideoJob implements ShouldQueue
             $parts[] = 'Continuity rules: '.$rules;
         }
 
-        if (($characters = $this->characterLine($pipeline)) !== '') {
+        if (($characters = StoryboardVideoDirector::characterLine($pipeline)) !== '') {
             $parts[] = 'Characters (keep identical throughout): '.$characters;
         }
 
         // The VISION ground truth of the tagged uploads — the strongest character-fidelity signal
         // (it describes the ACTUAL reference images the video must match).
-        if (($analyses = $this->referenceAnalysesLine($project)) !== '') {
+        if (($analyses = StoryboardVideoDirector::referenceAnalysesLine($project)) !== '') {
             $parts[] = 'Reference image analyses (ground truth): '.$analyses;
         }
 
-        if ($scenes !== []) {
-            $parts[] = 'Scenes in order: '.implode(' | ', $scenes);
+        // Numbered, timed shot lines (description, camera, action, motion, dialogue) — the same
+        // formatter the director sees, so both paths speak the identical shot vocabulary.
+        if (($shots = StoryboardVideoDirector::shotLines($project, $totalSeconds)) !== []) {
+            $parts[] = "Shots in order:\n".implode("\n", $shots);
         }
 
         return implode("\n", $parts);
-    }
-
-    /** "@tag (type): description; …" for the analyzed reference uploads, capped. Empty when none. */
-    private function referenceAnalysesLine(StoryboardProject $project): string
-    {
-        return $project->assets()
-            ->whereNotNull('description')
-            ->where('description', '!=', '')
-            ->orderBy('id')
-            ->limit(self::MAX_PROMPT_CHARACTERS)
-            ->get()
-            ->map(static fn ($asset): string => '@'.$asset->tag.' ('.$asset->type.'): '.trim((string) $asset->description))
-            ->implode('; ');
-    }
-
-    /** "Name — description; …" for the pipeline's characters, capped. Empty when none exist. */
-    private function characterLine(array $pipeline): string
-    {
-        $characters = data_get($pipeline, StoryboardProject::PIPE_CHARACTERS.'.characters');
-
-        if (! is_array($characters)) {
-            return '';
-        }
-
-        return collect($characters)
-            ->take(self::MAX_PROMPT_CHARACTERS)
-            ->map(static function ($character): ?string {
-                $name = is_array($character) ? trim((string) ($character['name'] ?? '')) : '';
-                $description = is_array($character) ? trim((string) ($character['description'] ?? '')) : '';
-
-                return $name !== '' ? trim($name.($description !== '' ? ' — '.$description : '')) : null;
-            })
-            ->filter()
-            ->implode('; ');
     }
 
     /** Aggregate each frame's clip-failure reason (video_meta.error) for the log + on-screen error. */

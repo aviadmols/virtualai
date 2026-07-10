@@ -24,10 +24,11 @@ use Illuminate\Support\Facades\Log;
  *     already read for BytePlus/AtlasCloud (status/content.video_url/error.message).
  *
  * Input frames are inlined as base64 data URIs (fal documents data-URI inputs) because the media
- * disk may not be publicly reachable. Only prompt + image url(s) are sent — per-model knobs
- * (duration/resolution enums) differ across fal's catalog, and an unknown value is a 422, so the
- * model's own defaults apply. NO USD cost is returned (video is flat-rate) — the caller applies
- * the admin per-clip price. Storyboard clips NEVER charge.
+ * disk may not be publicly reachable. Generation knobs (duration/resolution/ratio) are per-model
+ * enums on fal, so the body is shaped by FalEndpointSchema against the endpoint's OWN OpenAPI
+ * schema — requested values are clamped to what the model accepts; with no schema the body
+ * degrades to prompt + images (the model's defaults). NO USD cost is returned (video is
+ * flat-rate) — the caller applies the admin per-clip price. Storyboard clips NEVER charge.
  */
 final class FalVideoClient implements VideoGenerationProvider
 {
@@ -67,29 +68,27 @@ final class FalVideoClient implements VideoGenerationProvider
 
     public function __construct(
         private readonly HttpFactory $http,
+        private readonly FalEndpointSchema $schema,
     ) {}
 
     /**
      * Submit a video generation; returns the composite task id "{app}|{request_id}", where {app}
      * is the queue app path taken from the submit reply's OWN status_url (fal may route a nested
      * model id off a shorter base app — constructing from the model path can 404/405 and leave the
-     * poll spinning forever). The first input frame is sent as image_url (+ image_urls when more
-     * exist) — both inlined as data URIs.
+     * poll spinning forever). Input frames are inlined as data URIs and the body is shaped to the
+     * endpoint's own schema (duration/resolution/ratio clamped to its allowed values).
      *
      * @param  array<int,string>  $imageUrls
-     * @param  array<string,mixed>  $params  ignored — fal knobs are per-model enums (see docblock)
+     * @param  array<string,mixed>  $params  resolution / duration_seconds / ratio
      */
     public function submitTask(string $model, string $prompt, array $imageUrls, array $params = [], ?string $baseUrl = null): string
     {
-        $body = ['prompt' => $prompt];
-
-        $inlined = $this->asDataUris($imageUrls);
-        if ($inlined !== []) {
-            $body['image_url'] = $inlined[0];
-            if (count($inlined) > 1) {
-                $body['image_urls'] = $inlined;
-            }
-        }
+        $body = $this->schema->shapeBody(
+            $this->schema->inputSchema($model),
+            $prompt,
+            $this->asDataUris($imageUrls),
+            $params,
+        );
 
         try {
             $response = $this->request($baseUrl)->post('/'.$model, $body);

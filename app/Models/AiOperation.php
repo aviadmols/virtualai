@@ -40,6 +40,9 @@ class AiOperation extends Model
     // On-demand (not a pipeline step): VISION analysis of one reference upload → a ground-truth
     // physical description + subject type, injected into the planning steps for character fidelity.
     public const KEY_STORYBOARD_ASSET_ANALYSIS = 'storyboard_asset_analysis';
+    // On-demand (not a pipeline step): the DIRECTOR pass — a multimodal model receives the
+    // generated frame images + storyboard data and composes the final one-call video prompt.
+    public const KEY_STORYBOARD_VIDEO_DIRECTOR = 'storyboard_video_director';
 
     public const KEYS = [
         self::KEY_PRODUCT_SCAN,
@@ -54,6 +57,7 @@ class AiOperation extends Model
         self::KEY_STORYBOARD_CLIP,
         self::KEY_STORYBOARD_IMPROVE_PROMPT,
         self::KEY_STORYBOARD_ASSET_ANALYSIS,
+        self::KEY_STORYBOARD_VIDEO_DIRECTOR,
     ];
 
     protected $fillable = [

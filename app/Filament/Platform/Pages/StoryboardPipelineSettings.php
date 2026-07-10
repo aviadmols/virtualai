@@ -64,6 +64,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
         AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN,
         AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
         AiOperation::KEY_STORYBOARD_CLIP,
+        AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR,
     ];
 
     private const PROVIDERS = [
@@ -230,7 +231,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
         $provider = (string) ($step['provider'] ?? AiModel::PROVIDER_OPENROUTER);
         $model = (string) ($step['model'] ?? '');
 
-        if (StoryboardStep::isTextStep($key)) {
+        if (StoryboardStep::isTextLike($key)) {
             $this->testTextStep($key, $step, $provider, $model);
 
             return;
@@ -328,6 +329,19 @@ class StoryboardPipelineSettings extends Page implements HasForms
             'genre_profile' => '{"genre":"comedy trailer","emotional_tone":"fun"}',
             'characters' => '{"characters":[{"name":"Hero","description":"the party host"}]}',
             'visual_bible' => '{"global_style":"realistic cinematic","negative_prompt":"no cartoon"}',
+            // Asset-analysis vars.
+            'tag' => 'hero',
+            'declared_type' => 'character',
+            // Video-director vars.
+            'story' => 'A chaotic pool party where @hero saves the day.',
+            'total_seconds' => '15',
+            'shot_count' => '5',
+            'shot_list' => "Shot 1 [00:00-00:03] — @hero surveys the pool | camera: wide establishing\nShot 2 [00:03-00:06] — a float capsizes | action: guests scramble",
+            'global_style' => 'realistic cinematic',
+            'continuity_rules' => 'keep wardrobe and lighting identical across shots',
+            'reference_analyses' => '@hero (character): the party host in a red shirt',
+            'resolution' => '1080p',
+            'max_chars' => '2300',
         ];
     }
 

@@ -106,6 +106,48 @@ class StoryboardPipelineSeeder extends Seeder
         $this->seedClipStep();
         $this->seedImprovePromptStep();
         $this->seedAssetAnalysisStep();
+        $this->seedVideoDirectorStep();
+    }
+
+    /**
+     * Seed the DIRECTOR operation: before a one-call ("reference") video generation, a multimodal
+     * model receives the generated frame images IN SHOT ORDER plus the storyboard data and
+     * composes the final film prompt — a bracketed timed shot list with motivated transitions and
+     * locked spatial continuity. Public so a data migration can seed JUST this step.
+     */
+    public function seedVideoDirectorStep(): void
+    {
+        $this->clearModelFlags(AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR);
+
+        AiOperation::updateOrCreate(
+            ['operation_key' => AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR],
+            [
+                'label' => 'Storyboard · Film Director',
+                'default_model' => self::TEXT_MODEL,
+                'fallback_model' => self::TEXT_FALLBACK,
+                'image_quality' => null,
+                'aspect_ratio' => null,
+                'params' => ['temperature' => 0.4, 'top_p' => 0.9, 'max_tokens' => 3000],
+                'input_schema' => [
+                    'type' => 'object',
+                    'additionalProperties' => false,
+                    'properties' => ['video_prompt' => ['type' => 'string']],
+                    'required' => ['video_prompt'],
+                ],
+                'retention_days' => null,
+                'estimated_cost_micro_usd' => self::TEXT_STEP_EST,
+                'credit_multiplier' => null,
+            ],
+        );
+
+        $this->seedModel(AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR, self::TEXT_MODEL, self::TEXT_MODEL_LABEL, isDefault: true, unit: AiModel::UNIT_PER_1K_TOKENS, costHint: self::TEXT_MODEL_HINT);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR, self::TEXT_FALLBACK, self::TEXT_FALLBACK_LABEL, isFallback: true, unit: AiModel::UNIT_PER_1K_TOKENS, costHint: self::TEXT_FALLBACK_HINT);
+
+        $this->seedPrompt(
+            AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR,
+            'You are the film\'s DIRECTOR, composing the single prompt a one-call multi-shot AI video model will follow to render the ENTIRE film. The attached images ARE the storyboard frames, in shot order — image 1 is shot 1\'s visual ground truth, image 2 is shot 2\'s, and so on. STUDY them before writing: who stands where, which way each character faces, screen direction, lighting and palette — your prompt must keep all of it consistent from shot to shot. Write ONE cinematic prompt that: (1) opens with a one-line film summary and the total duration; (2) lists EVERY shot as a bracketed timed line in the form [00:00-00:03], covering 0 to {{total_seconds}} seconds with no gaps, one line per storyboard shot in order, restating in each line the characters present (identity and wardrobe), the location, the key action and the camera (shot size, angle, movement); (3) names an explicit, MOTIVATED camera transition into every shot (cut on action, match cut, whip pan to — never an unexplained jump); (4) keeps spatial continuity and consistent screen direction across cuts — characters never teleport or swap sides between shots unless a shot shows the move; (5) places each quoted dialogue line inside its own shot\'s time window, spoken aloud and lip-synced; (6) where the target video model documents reference tokens (character1..characterN bound to the attached images in order), uses them to name the people; (7) is written in clear cinematic English and stays UNDER {{max_chars}} characters in total. Return ONLY JSON: {"video_prompt": "..."}.',
+            "Film: {{story}}\nTotal duration: {{total_seconds}} seconds across {{shot_count}} shots. Aspect ratio {{aspect_ratio}}, resolution {{resolution}}.\nVisual style: {{global_style}}\nContinuity rules: {{continuity_rules}}\nCharacters (keep identical throughout): {{characters}}\nReference image analyses (ground truth): {{reference_analyses}}\nStoryboard shots (in order, with target timings):\n{{shot_list}}\n\nCompose the final video prompt now. Return strict JSON with video_prompt (under {{max_chars}} characters).",
+        );
     }
 
     /**

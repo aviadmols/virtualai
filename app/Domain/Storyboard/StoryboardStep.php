@@ -29,6 +29,14 @@ final class StoryboardStep
 
     public const ALL = [...self::TEXT_STEPS, self::IMAGE_STEP];
 
+    // On-demand TEXT operations (not pipeline steps — they run outside StoryboardPipeline) that
+    // still go through the text caller; the settings page's Test button treats them as text.
+    public const ON_DEMAND_TEXT = [
+        AiOperation::KEY_STORYBOARD_IMPROVE_PROMPT,
+        AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS,
+        AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR,
+    ];
+
     // Which project.pipeline key each single-object text step stores its output under. The
     // scene-breakdown step is materialised into storyboard_frames instead, so it has no bag key.
     public const PIPELINE_KEY = [
@@ -41,5 +49,11 @@ final class StoryboardStep
     public static function isTextStep(string $stepKey): bool
     {
         return in_array($stepKey, self::TEXT_STEPS, true);
+    }
+
+    /** Pipeline text steps + the on-demand text operations — everything the TEXT caller serves. */
+    public static function isTextLike(string $stepKey): bool
+    {
+        return self::isTextStep($stepKey) || in_array($stepKey, self::ON_DEMAND_TEXT, true);
     }
 }

@@ -74,6 +74,27 @@ class StoryboardPipelineSettingsTest extends TestCase
         $this->assertStringContainsString('{{story_idea}}', $prompt->user_prompt);
     }
 
+    public function test_the_director_step_renders_and_its_test_runs_the_text_caller(): void
+    {
+        config()->set('services.openrouter.key', 'sk-or-test');
+        config()->set('services.openrouter.base_url', 'https://openrouter.ai/api/v1');
+        config()->set('services.openrouter.timeout', 30);
+        Sleep::fake();
+
+        Http::fake(['https://openrouter.ai/api/v1/chat/completions' => Http::response([
+            'choices' => [['message' => ['content' => '{"video_prompt":"[00:00-00:03] wide shot"}']]],
+            'model' => 'google/gemini-3.1-pro-preview',
+            'usage' => ['cost' => 0.001],
+        ], 200)]);
+
+        // The director is an ON-DEMAND text op (not a pipeline step) — the Test button must still
+        // run the real text caller instead of pointing to the Playground.
+        Livewire::test(StoryboardPipelineSettings::class)
+            ->assertFormSet(fn (array $state): bool => ($state['storyboard_video_director']['model'] ?? null) === 'google/gemini-3.1-pro-preview')
+            ->call('testStep', AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR)
+            ->assertNotified();
+    }
+
     public function test_testing_a_step_reports_success_when_it_returns_json(): void
     {
         config()->set('services.openrouter.key', 'sk-or-test');
