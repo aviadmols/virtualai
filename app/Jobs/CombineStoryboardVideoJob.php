@@ -137,6 +137,10 @@ final class CombineStoryboardVideoJob implements ShouldQueue
                 'model' => $config->model,
                 'prediction_id' => $taskId,
                 'resolution' => $this->resolution,
+                // Live progress for the builder card: the admin SEES it was sent + where it stands.
+                'submitted_at' => now()->toIso8601String(),
+                'last_status' => 'submitted',
+                'polls' => 0,
             ],
         ]);
 
@@ -151,6 +155,11 @@ final class CombineStoryboardVideoJob implements ShouldQueue
         try {
             $task = $client->pollTask((string) $meta['prediction_id']);
         } catch (Throwable $e) {
+            // Surface the live state on the builder card even while retrying.
+            $project->update(['final_video_meta' => array_merge($meta, [
+                'last_status' => 'poll_error: '.$e->getMessage(),
+                'polls' => $this->attempt,
+            ])]);
             $this->rescheduleOrFail($project, 'Video generation poll failed: '.$e->getMessage());
 
             return;
@@ -181,6 +190,12 @@ final class CombineStoryboardVideoJob implements ShouldQueue
 
             return;
         }
+
+        // Still rendering — record the provider's live status for the builder card.
+        $project->update(['final_video_meta' => array_merge($meta, [
+            'last_status' => (string) ($task['status'] ?? 'unknown'),
+            'polls' => $this->attempt,
+        ])]);
 
         $this->rescheduleOrFail($project, 'Video generation timed out.');
     }

@@ -70,8 +70,11 @@ final class FalVideoClient implements VideoGenerationProvider
     ) {}
 
     /**
-     * Submit a video generation; returns the composite task id "{model}|{request_id}". The first
-     * input frame is sent as image_url (+ image_urls when more exist) — both inlined as data URIs.
+     * Submit a video generation; returns the composite task id "{app}|{request_id}", where {app}
+     * is the queue app path taken from the submit reply's OWN status_url (fal may route a nested
+     * model id off a shorter base app — constructing from the model path can 404/405 and leave the
+     * poll spinning forever). The first input frame is sent as image_url (+ image_urls when more
+     * exist) — both inlined as data URIs.
      *
      * @param  array<int,string>  $imageUrls
      * @param  array<string,mixed>  $params  ignored — fal knobs are per-model enums (see docblock)
@@ -121,7 +124,24 @@ final class FalVideoClient implements VideoGenerationProvider
 
         $this->log($model, 'submitted', $response->status());
 
-        return $model.self::TASK_ID_SEPARATOR.$id;
+        return $this->queueApp((string) $response->json('status_url'), $model).self::TASK_ID_SEPARATOR.$id;
+    }
+
+    /**
+     * The queue app path fal ACTUALLY routed this request under: the segment of the submit reply's
+     * status_url between the host and '/requests/'. Falls back to the model path when the reply
+     * carries no usable status_url.
+     */
+    private function queueApp(string $statusUrl, string $model): string
+    {
+        $path = (string) parse_url($statusUrl, PHP_URL_PATH);
+        $requests = strpos($path, self::REQUESTS_SEGMENT);
+
+        if ($requests === false || $requests === 0) {
+            return $model;
+        }
+
+        return ltrim(substr($path, 0, $requests), '/');
     }
 
     /**

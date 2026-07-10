@@ -28,8 +28,16 @@
                     <a class="to-sb-final__dl" href="{{ $finalVideo['url'] }}" download>{{ __('platform.storyboard.download') }}</a>
                 @elseif ($finalVideo['failed'])
                     <p class="to-sb-error">{{ __('platform.storyboard.final_video_failed') }}@if ($finalVideo['error']): {{ $finalVideo['error'] }}@endif</p>
+                    @if ($finalVideo['provider'])
+                        <p class="to-sb-frame__clip-note">{{ __('platform.storyboard.final_video_status', ['provider' => $finalVideo['provider'], 'model' => $finalVideo['model'] ?? '—', 'status' => $finalVideo['lastStatus'] ?? '—', 'polls' => $finalVideo['polls'] ?? 0]) }}</p>
+                    @endif
                 @else
                     <p class="to-sb-frame__clip-note">{{ __('platform.storyboard.final_video_generating') }}</p>
+                    @if ($finalVideo['submitted'])
+                        <p class="to-sb-frame__clip-note">{{ __('platform.storyboard.final_video_status', ['provider' => $finalVideo['provider'] ?? '—', 'model' => $finalVideo['model'] ?? '—', 'status' => $finalVideo['lastStatus'] ?? '—', 'polls' => $finalVideo['polls'] ?? 0]) }}</p>
+                    @else
+                        <p class="to-sb-frame__clip-note">{{ __('platform.storyboard.final_video_not_submitted') }}</p>
+                    @endif
                 @endif
             </div>
         @endif
@@ -290,7 +298,7 @@
                                                 {{ $frame['videoUrl'] ? __('platform.storyboard.regenerate_clip') : __('platform.storyboard.generate_clip') }}
                                             </x-filament::button>
                                         @elseif ($frame['videoGenerating'])
-                                            <span class="to-sb-frame__clip-note">{{ __('platform.storyboard.clip_generating') }}</span>
+                                            <span class="to-sb-frame__clip-note">{{ __('platform.storyboard.clip_status', ['provider' => $frame['videoProvider'] ?? '—', 'polls' => $frame['videoPolls'] ?? 0]) }}</span>
                                         @endif
                                     </div>
                                 @else

@@ -431,6 +431,8 @@ class StoryboardBuilder extends Page
             'videoUrl' => $f->video_path !== null ? $media->signedUrl($f->video_path) : null,
             'videoGenerating' => $f->video_status === StoryboardFrame::VIDEO_GENERATING,
             'videoFailed' => $f->video_status === StoryboardFrame::VIDEO_FAILED,
+            'videoProvider' => is_array($f->video_meta) ? ($f->video_meta['provider'] ?? null) : null,
+            'videoPolls' => $f->video_poll_attempts,
             'versions' => $f->versions->map(fn ($v): array => [
                 'id' => $v->id,
                 'number' => $v->version_number,
@@ -454,13 +456,20 @@ class StoryboardBuilder extends Page
         }
 
         $media = app(MediaStorage::class);
+        $meta = is_array($this->record->final_video_meta) ? $this->record->final_video_meta : [];
 
         return [
             'generating' => $status === StoryboardProject::VIDEO_GENERATING,
             'ready' => $status === StoryboardProject::VIDEO_READY,
             'failed' => $status === StoryboardProject::VIDEO_FAILED,
             'url' => $this->record->final_video_path !== null ? $media->signedUrl($this->record->final_video_path) : null,
-            'error' => is_array($this->record->final_video_meta) ? ($this->record->final_video_meta['error'] ?? null) : null,
+            'error' => $meta['error'] ?? null,
+            // Live progress: WAS it sent, to which provider/model, and where does it stand.
+            'provider' => $meta['provider'] ?? null,
+            'model' => $meta['model'] ?? null,
+            'submitted' => filled($meta['prediction_id'] ?? null),
+            'lastStatus' => $meta['last_status'] ?? null,
+            'polls' => $meta['polls'] ?? null,
         ];
     }
 

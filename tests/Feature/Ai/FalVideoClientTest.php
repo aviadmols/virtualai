@@ -57,6 +57,27 @@ class FalVideoClientTest extends TestCase
             && str_starts_with((string) ($req->data()['image_url'] ?? ''), 'data:image/'));
     }
 
+    public function test_the_task_id_uses_the_queue_app_from_the_submit_replys_status_url(): void
+    {
+        // fal routes nested model ids off a shorter base app — the reply's status_url is the truth.
+        $app = 'fal-ai/kling-video';
+        Http::fake([
+            self::SUBMIT => Http::response([
+                'request_id' => self::REQUEST,
+                'status_url' => 'https://queue.fal.run/'.$app.'/requests/'.self::REQUEST.'/status',
+            ], 200),
+            'https://queue.fal.run/'.$app.'/requests/'.self::REQUEST.'/status' => Http::response(['status' => 'IN_PROGRESS'], 200),
+        ]);
+
+        $taskId = $this->client()->submitTask(self::MODEL, 'prompt', []);
+        $this->assertSame($app.'|'.self::REQUEST, $taskId);
+
+        // The poll then hits the app fal ACTUALLY routed the request under (no 404/405 spin).
+        $task = $this->client()->pollTask($taskId);
+        $this->assertSame('processing', $task['status']);
+        Http::assertSent(fn ($req) => $req->url() === 'https://queue.fal.run/'.$app.'/requests/'.self::REQUEST.'/status');
+    }
+
     public function test_submit_error_throws_a_classified_exception(): void
     {
         Http::fake([self::SUBMIT => Http::response(['detail' => 'invalid input'], 422)]);
