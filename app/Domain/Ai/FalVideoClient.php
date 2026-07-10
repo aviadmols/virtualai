@@ -36,6 +36,10 @@ final class FalVideoClient implements VideoGenerationProvider
     // === CONSTANTS ===
     private const REQUESTS_SEGMENT = '/requests/';
     private const STATUS_SUFFIX = '/status';
+    // The result lives at .../requests/{id}/response (the submit reply's response_url shape); some
+    // deployments still serve the bare .../requests/{id}, kept as a one-shot fallback.
+    private const RESULT_SUFFIX = '/response';
+    private const ROUTE_MISMATCH_STATUSES = [404, 405];
     private const TASK_ID_SEPARATOR = '|';
 
     private const CFG_BASE_URL = 'services.fal.base_url';
@@ -195,15 +199,12 @@ final class FalVideoClient implements VideoGenerationProvider
     /** COMPLETED → fetch the result body and map video.url / error onto the normalized shape. @return array<string,mixed> */
     private function fetchResult(string $model, string $requestId, ?string $baseUrl): array
     {
-        try {
-            $response = $this->request($baseUrl, self::POLL_TIMEOUT)
-                ->get('/'.$model.self::REQUESTS_SEGMENT.$requestId);
-        } catch (ConnectionException $e) {
-            throw OpenRouterException::make(
-                OpenRouterException::CODE_MODEL_TIMEOUT,
-                'fal video result fetch timed out.',
-                previous: $e,
-            );
+        $requestBase = '/'.$model.self::REQUESTS_SEGMENT.$requestId;
+        $response = $this->getResult($requestBase.self::RESULT_SUFFIX, $baseUrl);
+
+        // A 404/405 route mismatch retries ONCE on the bare request url.
+        if (in_array($response->status(), self::ROUTE_MISMATCH_STATUSES, true)) {
+            $response = $this->getResult($requestBase, $baseUrl);
         }
 
         $decoded = is_array($response->json()) ? $response->json() : [];
@@ -214,6 +215,19 @@ final class FalVideoClient implements VideoGenerationProvider
         }
 
         return $this->normalized(self::STATUS_FAILED, null, $this->errorMessage($response) ?: 'fal returned no video url.');
+    }
+
+    private function getResult(string $path, ?string $baseUrl): Response
+    {
+        try {
+            return $this->request($baseUrl, self::POLL_TIMEOUT)->get($path);
+        } catch (ConnectionException $e) {
+            throw OpenRouterException::make(
+                OpenRouterException::CODE_MODEL_TIMEOUT,
+                'fal video result fetch timed out.',
+                previous: $e,
+            );
+        }
     }
 
     /** @return array<string,mixed> */

@@ -46,7 +46,7 @@ class StoryboardClipTest extends TestCase
     private const FAL_REQUEST = 'req-fal1';
     private const FAL_TASK = self::FAL_MODEL.'|'.self::FAL_REQUEST;
     private const FAL_STATUS = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST.'/status';
-    private const FAL_RESULT = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST;
+    private const FAL_RESULT = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST.'/response';
 
     protected function setUp(): void
     {

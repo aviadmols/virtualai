@@ -28,7 +28,7 @@ class StoryboardFrameGenerationTest extends TestCase
     private const FAL_SUBMIT = 'https://queue.fal.run/'.self::FAL_MODEL;
     private const FAL_REQUEST = 'req-sb1';
     private const FAL_STATUS = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST.'/status';
-    private const FAL_RESULT = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST;
+    private const FAL_RESULT = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST.'/response';
     private const FAL_IMAGE_URL = 'https://v3.fal.media/files/frame.png';
 
     protected function setUp(): void

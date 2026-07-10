@@ -22,8 +22,9 @@ class FalImageClientTest extends TestCase
     private const MODEL = 'fal-ai/krea-2/turbo';
     private const SUBMIT = 'https://queue.fal.run/'.self::MODEL;
     private const REQUEST = 'req-img1';
-    private const STATUS = self::SUBMIT.'/requests/'.self::REQUEST.'/status';
-    private const RESULT = self::SUBMIT.'/requests/'.self::REQUEST;
+    private const REQUEST_BASE = self::SUBMIT.'/requests/'.self::REQUEST;
+    private const STATUS = self::REQUEST_BASE.'/status';
+    private const RESULT = self::REQUEST_BASE.'/response';
     private const IMAGE_URL = 'https://v3.fal.media/files/out.png';
     private const INPUT_URL = 'https://media.test/input.png';
 
@@ -65,6 +66,54 @@ class FalImageClientTest extends TestCase
             && $req->hasHeader('Authorization', 'Key fal-test-key')
             && $req->data()['prompt'] === 'a red apple'
             && ! isset($req->data()['model']));
+    }
+
+    public function test_the_submit_replys_status_and_response_urls_are_authoritative(): void
+    {
+        // fal may route a request off the literal model path (e.g. a shared base app) — the urls
+        // it returns on submit win over anything we would construct.
+        $statusUrl = 'https://queue.fal.run/fal-ai/krea-2/requests/'.self::REQUEST.'/status';
+        $resultUrl = 'https://queue.fal.run/fal-ai/krea-2/requests/'.self::REQUEST.'/response';
+
+        Http::fake([
+            $statusUrl => Http::response(['status' => 'COMPLETED'], 200),
+            $resultUrl => Http::response(['images' => [['url' => self::IMAGE_URL]]], 200),
+            self::SUBMIT => Http::response(['request_id' => self::REQUEST, 'status_url' => $statusUrl, 'response_url' => $resultUrl], 200),
+        ]);
+
+        $response = $this->client()->callWithFallback('op', self::MODEL, null, fn (string $m): array => ['model' => $m, 'prompt' => 'x']);
+
+        $this->assertSame(self::IMAGE_URL, $response['images'][0]['url']);
+        Http::assertSent(fn ($req) => $req->url() === $resultUrl);
+    }
+
+    public function test_a_route_mismatch_on_the_result_falls_back_to_the_bare_request_url(): void
+    {
+        Http::fake([
+            self::STATUS => Http::response(['status' => 'COMPLETED'], 200),
+            self::RESULT => Http::response(['detail' => 'Method Not Allowed'], 405),
+            self::REQUEST_BASE => Http::response(['images' => [['url' => self::IMAGE_URL]]], 200),
+            self::SUBMIT => Http::response(['request_id' => self::REQUEST], 200),
+        ]);
+
+        $response = $this->client()->callWithFallback('op', self::MODEL, null, fn (string $m): array => ['model' => $m, 'prompt' => 'x']);
+
+        $this->assertSame(self::IMAGE_URL, $response['images'][0]['url']);
+    }
+
+    public function test_a_broken_status_route_is_a_classified_error_not_a_silent_terminal(): void
+    {
+        Http::fake([
+            self::STATUS => Http::response(['detail' => 'Method Not Allowed'], 405),
+            self::SUBMIT => Http::response(['request_id' => self::REQUEST], 200),
+        ]);
+
+        try {
+            $this->client()->callWithFallback('op', self::MODEL, null, fn (string $m): array => ['model' => $m, 'prompt' => 'x']);
+            $this->fail('Expected an OpenRouterException.');
+        } catch (OpenRouterException $e) {
+            $this->assertStringContainsString('status poll error (405)', $e->getMessage());
+        }
     }
 
     public function test_input_images_are_inlined_as_data_uris(): void

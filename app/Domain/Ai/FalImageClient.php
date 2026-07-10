@@ -9,6 +9,7 @@ use App\Domain\Platform\PlatformSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
 
@@ -38,6 +39,10 @@ final class FalImageClient implements ImageGenerationProvider
     // === CONSTANTS ===
     private const REQUESTS_SEGMENT = '/requests/';
     private const STATUS_SUFFIX = '/status';
+    // The result lives at .../requests/{id}/response (the submit reply's response_url shape); some
+    // deployments still serve the bare .../requests/{id}, kept as a one-shot fallback.
+    private const RESULT_SUFFIX = '/response';
+    private const ROUTE_MISMATCH_STATUSES = [404, 405];
 
     private const CFG_KEY = 'services.fal.api_key';
     private const CFG_BASE_URL = 'services.fal.base_url';
@@ -129,10 +134,22 @@ final class FalImageClient implements ImageGenerationProvider
         $model = (string) ($body['model'] ?? '');
         unset($body['model']);
 
-        $requestId = $this->submit($model, $this->inlineInputImages($body, $model), $operationKey);
-        $this->awaitCompletion($model, $requestId, $operationKey);
+        $submitted = $this->submit($model, $this->inlineInputImages($body, $model), $operationKey);
+        $requestId = (string) $submitted['request_id'];
 
-        $result = $this->fetchResult($model, $requestId, $operationKey);
+        // The submit reply's status_url/response_url are AUTHORITATIVE (fal's own routing for this
+        // request); constructed paths are only the fallback when they are absent.
+        $requestBase = '/'.$model.self::REQUESTS_SEGMENT.$requestId;
+        $statusUrl = is_string($submitted['status_url'] ?? null) && $submitted['status_url'] !== ''
+            ? $submitted['status_url']
+            : $requestBase.self::STATUS_SUFFIX;
+        $resultUrl = is_string($submitted['response_url'] ?? null) && $submitted['response_url'] !== ''
+            ? $submitted['response_url']
+            : $requestBase.self::RESULT_SUFFIX;
+
+        $this->awaitCompletion($statusUrl, $model, $operationKey);
+
+        $result = $this->fetchResult($resultUrl, $requestBase, $model, $operationKey);
         $result['request_id'] ??= $requestId;
 
         $this->logOutcome($operationKey, $model, 'ok', 200);
@@ -140,7 +157,8 @@ final class FalImageClient implements ImageGenerationProvider
         return $result;
     }
 
-    private function submit(string $model, array $body, string $operationKey): string
+    /** @return array<string,mixed> the submit reply (request_id + status_url/response_url when given) */
+    private function submit(string $model, array $body, string $operationKey): array
     {
         try {
             $response = $this->request()->post('/'.$model, $body);
@@ -167,7 +185,8 @@ final class FalImageClient implements ImageGenerationProvider
             );
         }
 
-        $id = $response->json('request_id');
+        $decoded = is_array($response->json()) ? $response->json() : [];
+        $id = $decoded['request_id'] ?? null;
         if (! is_string($id) || $id === '') {
             throw OpenRouterException::make(
                 OpenRouterException::CODE_BAD_REQUEST,
@@ -176,23 +195,34 @@ final class FalImageClient implements ImageGenerationProvider
             );
         }
 
-        return $id;
+        return $decoded;
     }
 
-    /** Poll the queue status until COMPLETED, bounded. */
-    private function awaitCompletion(string $model, string $requestId, string $operationKey): void
+    /** Poll the queue status url until COMPLETED, bounded. */
+    private function awaitCompletion(string $statusUrl, string $model, string $operationKey): void
     {
         for ($poll = 0; $poll < self::MAX_POLLS; $poll++) {
             try {
-                $response = $this->request()
-                    ->timeout(self::POLL_HTTP_TIMEOUT)
-                    ->get('/'.$model.self::REQUESTS_SEGMENT.$requestId.self::STATUS_SUFFIX);
+                $response = $this->request()->timeout(self::POLL_HTTP_TIMEOUT)->get($statusUrl);
             } catch (ConnectionException $e) {
                 throw OpenRouterException::make(
                     OpenRouterException::CODE_MODEL_TIMEOUT,
                     sprintf('fal status poll timed out for model %s.', $model),
                     modelUsed: $model,
                     previous: $e,
+                );
+            }
+
+            // A broken status route must be a CLASSIFIED error, never mistaken for terminal.
+            if (! $response->successful()) {
+                $code = $this->classifyStatus($response->status());
+                $this->logOutcome($operationKey, $model, 'status_'.$code, $response->status());
+
+                throw OpenRouterException::make(
+                    $code,
+                    sprintf('fal status poll error (%d) for model %s.', $response->status(), $model),
+                    modelUsed: $model,
+                    providerStatus: $response->status(),
                 );
             }
 
@@ -219,18 +249,18 @@ final class FalImageClient implements ImageGenerationProvider
         );
     }
 
-    /** @return array<string,mixed> */
-    private function fetchResult(string $model, string $requestId, string $operationKey): array
+    /**
+     * Fetch the result from the response url; a 404/405 route mismatch retries ONCE on the bare
+     * request url (older deployments serve the result there).
+     *
+     * @return array<string,mixed>
+     */
+    private function fetchResult(string $resultUrl, string $fallbackUrl, string $model, string $operationKey): array
     {
-        try {
-            $response = $this->request()->get('/'.$model.self::REQUESTS_SEGMENT.$requestId);
-        } catch (ConnectionException $e) {
-            throw OpenRouterException::make(
-                OpenRouterException::CODE_MODEL_TIMEOUT,
-                sprintf('fal result fetch timed out for model %s.', $model),
-                modelUsed: $model,
-                previous: $e,
-            );
+        $response = $this->getResult($resultUrl, $model);
+
+        if (in_array($response->status(), self::ROUTE_MISMATCH_STATUSES, true) && $fallbackUrl !== $resultUrl) {
+            $response = $this->getResult($fallbackUrl, $model);
         }
 
         $decoded = is_array($response->json()) ? $response->json() : [];
@@ -248,6 +278,20 @@ final class FalImageClient implements ImageGenerationProvider
         }
 
         return $decoded;
+    }
+
+    private function getResult(string $url, string $model): Response
+    {
+        try {
+            return $this->request()->get($url);
+        } catch (ConnectionException $e) {
+            throw OpenRouterException::make(
+                OpenRouterException::CODE_MODEL_TIMEOUT,
+                sprintf('fal result fetch timed out for model %s.', $model),
+                modelUsed: $model,
+                previous: $e,
+            );
+        }
     }
 
     public function extractModelUsed(array $response, string $requested): string

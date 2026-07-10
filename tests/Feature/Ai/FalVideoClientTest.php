@@ -24,7 +24,7 @@ class FalVideoClientTest extends TestCase
     private const REQUEST = 'req-1';
     private const TASK = self::MODEL.'|'.self::REQUEST;
     private const STATUS = self::SUBMIT.'/requests/'.self::REQUEST.'/status';
-    private const RESULT = self::SUBMIT.'/requests/'.self::REQUEST;
+    private const RESULT = self::SUBMIT.'/requests/'.self::REQUEST.'/response';
     private const FRAME_URL = 'https://media.test/frame.png';
     private const VIDEO_URL = 'https://cdn.fal/clip.mp4';
 
