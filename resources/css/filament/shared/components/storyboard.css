@@ -308,6 +308,13 @@
     font-size: var(--toa-type-caption-size);
 }
 
+/* The frame's spoken line (dialogue) — distinct from the prompt so it reads as speech. */
+.to-sb-frame__dialogue {
+    color: var(--to-ink);
+    font-size: var(--toa-type-caption-size);
+    font-style: italic;
+}
+
 .to-sb-frame__actions {
     display: flex;
     flex-wrap: wrap;

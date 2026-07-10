@@ -36,6 +36,16 @@ final class TryOnGenerationCaller
     private const XAI_RESPONSE_FORMAT = 'b64_json';
     private const XAI_IMAGE_COUNT = 1;
 
+    // fal has no free-form ratio: the aspect maps onto its image_size enum (and the raw ratio is
+    // also sent as aspect_ratio for the models that declare that field; extras are ignored).
+    private const FAL_IMAGE_SIZES = [
+        '16:9' => 'landscape_16_9',
+        '9:16' => 'portrait_16_9',
+        '4:3' => 'landscape_4_3',
+        '3:4' => 'portrait_4_3',
+        '1:1' => 'square_hd',
+    ];
+
     public function __construct(
         private readonly ProviderRouter $router,
     ) {}
@@ -107,6 +117,7 @@ final class TryOnGenerationCaller
             fn (string $model): array => match ($providerId) {
                 ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->buildBytePlusBody($config, $model, $shopperImage, $variantImage, $vars),
                 ImageGenerationProvider::PROVIDER_XAI => $this->buildXaiBody($config, $model, $vars),
+                ImageGenerationProvider::PROVIDER_FAL => $this->buildFalBody($config, $model, $shopperImage, $variantImage, $vars),
                 default => $this->buildOpenRouterBody($config, $model, $shopperImage, $variantImage, $vars),
             },
         );
@@ -235,6 +246,51 @@ final class TryOnGenerationCaller
             'response_format' => self::XAI_RESPONSE_FORMAT,
             'n' => self::XAI_IMAGE_COUNT,
         ];
+    }
+
+    /**
+     * fal queue body (the model id is the URL path; the Fal client pops 'model' and inlines the
+     * image urls as data URIs): a single prompt (system prepended) + BOTH input images (shopper +
+     * product — fal edit models see them via image_url/image_urls) + the aspect mapping. A
+     * text-to-image fal model ignores the image fields (the client strips them via the catalog).
+     *
+     * @param  array<string,string|int|float|null>  $vars
+     * @return array<string,mixed>
+     */
+    private function buildFalBody(
+        OperationConfig $config,
+        string $model,
+        ImagePayload $shopperImage,
+        ImagePayload $variantImage,
+        array $vars,
+    ): array {
+        $prompt = $config->substituteUser($vars);
+        $system = $config->substituteSystem($vars);
+
+        if ($system !== null && $system !== '') {
+            $prompt = $system."\n\n".$prompt;
+        }
+
+        $body = [
+            'model' => $model,
+            'prompt' => $prompt,
+            'image_url' => $shopperImage->url,
+            'image_urls' => [$shopperImage->url, $variantImage->url],
+        ];
+
+        if ($config->aspectRatio !== null) {
+            $body['aspect_ratio'] = $config->aspectRatio;
+            $size = self::FAL_IMAGE_SIZES[$config->aspectRatio] ?? null;
+            if ($size !== null) {
+                $body['image_size'] = $size;
+            }
+        }
+
+        if (array_key_exists('seed', $config->params)) {
+            $body['seed'] = $config->params['seed'];
+        }
+
+        return $body;
     }
 
     /**

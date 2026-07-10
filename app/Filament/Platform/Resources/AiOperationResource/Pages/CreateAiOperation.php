@@ -22,4 +22,10 @@ class CreateAiOperation extends CreateRecord
     {
         return $this->foldEstimatedCost($data);
     }
+
+    /** A fal-catalog model picked from the full registry is auto-catalogued with its provider. */
+    protected function afterCreate(): void
+    {
+        AiOperationResource::ensureModelsCatalogued($this->record);
+    }
 }

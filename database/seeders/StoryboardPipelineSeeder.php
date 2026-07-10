@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\AiModel;
 use App\Models\AiOperation;
 use App\Models\Prompt;
+use App\Models\StoryboardAsset;
 use Illuminate\Database\Seeder;
 
 /**
@@ -42,6 +43,12 @@ class StoryboardPipelineSeeder extends Seeder
     private const CLIP_FAL_KLING = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
     private const CLIP_FAL_VEO = 'fal-ai/veo3.1/fast/image-to-video';
 
+    // The EDIT-capable model used when a frame carries reference images (Krea is text-to-image
+    // and cannot see them). Admin-editable via the frame-image op's `reference_model` param.
+    private const IMAGE_REFERENCE_MODEL = 'fal-ai/nano-banana/edit';
+    private const IMAGE_REFERENCE_LABEL = 'Nano Banana Edit (fal.ai)';
+    private const IMAGE_REFERENCE_HINT = 40_000; // per image (estimate)
+
     private const TEXT_PARAMS = ['temperature' => 0.6, 'top_p' => 0.95, 'max_tokens' => 12000];
     private const IMAGE_QUALITY = 'high';
     private const IMAGE_ASPECT = '16:9';
@@ -74,8 +81,8 @@ class StoryboardPipelineSeeder extends Seeder
         $this->seedTextStep(
             AiOperation::KEY_STORYBOARD_CHARACTERS,
             'Storyboard · Characters & Assets',
-            'You are a film continuity supervisor building the character and asset bible. From the story, identify EVERY character, location, and asset (product, logo, prop). Describe each character so an image model with NO memory can repaint them identically in every frame: apparent age, build, skin tone, face shape, hair (color, length, style), eyes, facial hair, and 1-2 distinguishing marks; give the outfit as an exact wardrobe list (garments, colors, fabrics, shoes, accessories) that stays IDENTICAL across the film unless the story changes it; and continuity_rules stating what must never change. For each location: time of day, architecture or terrain, set dressing, light sources. For each asset: its exact appearance; set must_be_exact=true for real products and logos that may not be altered. When an element has an uploaded reference image, bind it: set its tag to the matching @tag from the available list, verbatim — the reference image is ground truth and your description must defer to it. Never invent characters or brands the story does not contain. Return ONLY a JSON object matching the schema.',
-            "Clean story: {{clean_story}}.\nGenre profile: {{genre_profile}}.\nReference tags available: {{reference_tags}}.\nReturn strict JSON for the schema.",
+            'You are a film continuity supervisor building the character and asset bible. From the story, identify EVERY character, location, and asset (product, logo, prop). Describe each character so an image model with NO memory can repaint them identically in every frame: apparent age, build, skin tone, face shape, hair (color, length, style), eyes, facial hair, and 1-2 distinguishing marks; give the outfit as an exact wardrobe list (garments, colors, fabrics, shoes, accessories) that stays IDENTICAL across the film unless the story changes it; and continuity_rules stating what must never change. For each location: time of day, architecture or terrain, set dressing, light sources. For each asset: its exact appearance; set must_be_exact=true for real products and logos that may not be altered. When an element has an uploaded reference image, bind it: set its tag to the matching @tag, verbatim, and its VISION ANALYSIS is GROUND TRUTH — copy that analysis\'s physical details into the description word-for-word and never contradict them (the analysis describes the ACTUAL uploaded image; the story only says how the element behaves). Never invent characters or brands the story does not contain. Return ONLY a JSON object matching the schema.',
+            "Clean story: {{clean_story}}.\nGenre profile: {{genre_profile}}.\nReference tags available: {{reference_tags}}.\nReference image analyses (ground truth from the actual uploads):\n{{reference_descriptions}}\nReturn strict JSON for the schema.",
             $this->charactersSchema(),
         );
 
@@ -90,14 +97,58 @@ class StoryboardPipelineSeeder extends Seeder
         $this->seedTextStep(
             AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN,
             'Storyboard · Scene Breakdown',
-            'You are an award-winning storyboard director and prompt engineer for cinematic image models. Break the story into EXACTLY {{frame_count}} frames, one per {{frame_interval}} seconds, covering 0..{{duration}}s with no gaps: together they must tell the COMPLETE story with a clear setup, development and payoff, each frame a NEW story beat — never a redundant variation of the previous one. For every frame provide: the timing; a description of what happens (for humans); camera_angle and composition in real shot grammar (shot size, angle, lens in mm, depth of field, subject placement); the action; which characters appear; which @reference tags appear (verbatim from the available list); any text_overlay in the story\'s ORIGINAL language (else null); a motion phrase — one short English sentence of camera + subject movement for animating this frame into video (e.g. "slow push-in as she turns toward the window"); and the image_prompt. The image_prompt is the product: write it as a COMPLETE, SELF-CONTAINED English prompt for an image model that has NO memory of other frames — restate in full the appearance and exact wardrobe of every character in the shot (from the character bible), the location, the lighting, the camera and lens, and the visual bible\'s global style and palette, so all {{frame_count}} images read as consecutive stills from the same film. ALWAYS write image_prompt in English regardless of the story\'s language, keep @reference tags verbatim inside it, and never reference other frames ("same as before" is forbidden — the image model cannot see them). Add a per-frame negative_prompt: a SHORT comma-separated list of at most 10 distinct terms. Return ONLY a JSON object matching the schema with exactly {{frame_count}} frames.',
-            "Duration: {{duration}}s, one frame per {{frame_interval}}s => {{frame_count}} frames. Aspect ratio {{aspect_ratio}}.\nClean story: {{clean_story}}.\nGenre profile: {{genre_profile}}.\nCharacters: {{characters}}.\nVisual bible: {{visual_bible}}.\nReference tags available: {{reference_tags}}.\nReturn strict JSON for the schema with exactly {{frame_count}} frames.",
+            'You are an award-winning storyboard director and prompt engineer for cinematic image models. Break the story into EXACTLY {{frame_count}} frames, one per {{frame_interval}} seconds, covering 0..{{duration}}s with no gaps: together they must tell the COMPLETE story with a clear setup, development and payoff, each frame a NEW story beat — never a redundant variation of the previous one. For every frame provide: the timing; a description of what happens (for humans); camera_angle and composition in real shot grammar (shot size, angle, lens in mm, depth of field, subject placement); the action; which characters appear; which @reference tags appear (verbatim from the available list); any text_overlay in the story\'s ORIGINAL language (else null); a motion phrase — one short English sentence of camera + subject movement for animating this frame into video (e.g. "slow push-in as she turns toward the window"); and the image_prompt. The image_prompt is the product: write it as a COMPLETE, SELF-CONTAINED English prompt for an image model that has NO memory of other frames — restate in full the appearance and exact wardrobe of every character in the shot (from the character bible), the location, the lighting, the camera and lens, and the visual bible\'s global style and palette, so all {{frame_count}} images read as consecutive stills from the same film. A character or asset bound to a @reference tag MUST be described using its reference analysis word-for-word — the analysis is the ACTUAL uploaded image and outranks any other description. ALWAYS write image_prompt in English regardless of the story\'s language, keep @reference tags verbatim inside it, and never reference other frames ("same as before" is forbidden — the image model cannot see them). Add a per-frame negative_prompt: a SHORT comma-separated list of at most 10 distinct terms. Return ONLY a JSON object matching the schema with exactly {{frame_count}} frames.',
+            "Duration: {{duration}}s, one frame per {{frame_interval}}s => {{frame_count}} frames. Aspect ratio {{aspect_ratio}}.\nClean story: {{clean_story}}.\nGenre profile: {{genre_profile}}.\nCharacters: {{characters}}.\nVisual bible: {{visual_bible}}.\nReference tags available: {{reference_tags}}.\nReference image analyses (ground truth from the actual uploads):\n{{reference_descriptions}}\nReturn strict JSON for the schema with exactly {{frame_count}} frames.",
             $this->sceneBreakdownSchema(),
         );
 
         $this->seedFrameImageStep();
         $this->seedClipStep();
         $this->seedImprovePromptStep();
+        $this->seedAssetAnalysisStep();
+    }
+
+    /**
+     * Seed the VISION reference-analysis operation: a multimodal model describes each uploaded
+     * reference image (the ground truth behind a @tag) so planned characters match the uploads.
+     * Public so a data migration can seed it onto existing installs.
+     */
+    public function seedAssetAnalysisStep(): void
+    {
+        $this->clearModelFlags(AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS);
+
+        AiOperation::updateOrCreate(
+            ['operation_key' => AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS],
+            [
+                'label' => 'Storyboard · Reference Analysis',
+                'default_model' => self::TEXT_MODEL,
+                'fallback_model' => self::TEXT_FALLBACK,
+                'image_quality' => null,
+                'aspect_ratio' => null,
+                'params' => ['temperature' => 0.2, 'top_p' => 0.9, 'max_tokens' => 1500],
+                'input_schema' => [
+                    'type' => 'object',
+                    'additionalProperties' => false,
+                    'properties' => [
+                        'subject_type' => ['type' => 'string', 'enum' => StoryboardAsset::TYPES],
+                        'description' => ['type' => 'string'],
+                    ],
+                    'required' => ['subject_type', 'description'],
+                ],
+                'retention_days' => null,
+                'estimated_cost_micro_usd' => 5_000,
+                'credit_multiplier' => null,
+            ],
+        );
+
+        $this->seedModel(AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS, self::TEXT_MODEL, self::TEXT_MODEL_LABEL, isDefault: true, unit: AiModel::UNIT_PER_1K_TOKENS, costHint: self::TEXT_MODEL_HINT);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS, self::TEXT_FALLBACK, self::TEXT_FALLBACK_LABEL, isFallback: true, unit: AiModel::UNIT_PER_1K_TOKENS, costHint: self::TEXT_FALLBACK_HINT);
+
+        $this->seedPrompt(
+            AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS,
+            'You are a film continuity supervisor analyzing ONE reference image. Report exactly what is VISIBLE — never invent, never embellish. Return: subject_type (character, location, product, logo, style, outfit or prop) and a description — one dense English paragraph an image model could use to repaint this subject IDENTICALLY with no access to the image. For a person: apparent age, gender presentation, build, skin tone, face shape, hair (color, length, style), eyes, eyebrows, facial hair, distinguishing marks, and the FULL outfit as worn (each garment with its color, fabric and fit, plus shoes and accessories). For a product or logo: exact shape, colors, materials, any visible text or lettering, and proportions. For a location: architecture or terrain, time of day, lighting, and notable set dressing. Return ONLY a JSON object matching the schema.',
+            "Tag: @{{tag}} (declared type: {{declared_type}}).\nAnalyze the attached reference image.\nReturn strict JSON for the schema.",
+        );
     }
 
     /**
@@ -172,11 +223,12 @@ class StoryboardPipelineSeeder extends Seeder
         $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, self::CLIP_FAL_VEO, 'Veo 3.1 Fast (fal.ai)', unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_FAL);
 
         // Video providers take ONE prompt string (no system message), so everything the clip needs
-        // lives in the user template. {{motion}} is the frame's motion_prompt (camera + subject move).
+        // lives in the user template. {{motion}} is the frame's motion_prompt (camera + subject
+        // move); {{dialogue}} is the frame's spoken line (pre-formatted, empty when silent).
         $this->seedPrompt(
             AiOperation::KEY_STORYBOARD_CLIP,
             null,
-            "{{image_prompt}}\n\nAnimate this exact frame into a short cinematic clip. Camera and subject motion: {{motion}}. Keep the characters, wardrobe, lighting, composition and art style identical to the source image; motion must be smooth, subtle and physically plausible — no morphing, no flicker, no new elements or on-screen text.",
+            "{{image_prompt}}\n\nAnimate this exact frame into a short cinematic clip. Camera and subject motion: {{motion}}. Keep the characters, wardrobe, lighting, composition and art style identical to the source image; motion must be smooth, subtle and physically plausible — no morphing, no flicker, no new elements or on-screen text.\n{{dialogue}}",
         );
     }
 
@@ -221,7 +273,10 @@ class StoryboardPipelineSeeder extends Seeder
                 'fallback_model' => null,
                 'image_quality' => self::IMAGE_QUALITY,
                 'aspect_ratio' => self::IMAGE_ASPECT,
-                'params' => ['temperature' => 0.7, 'top_p' => 0.95],
+                // reference_model: a frame that carries reference images is generated by this
+                // EDIT-capable model instead of the (text-to-image) default, so the model actually
+                // SEES the tagged uploads. Admin-editable like every param.
+                'params' => ['temperature' => 0.7, 'top_p' => 0.95, 'reference_model' => self::IMAGE_REFERENCE_MODEL],
                 'input_schema' => null,
                 'retention_days' => null,
                 'estimated_cost_micro_usd' => 20_000,
@@ -230,7 +285,9 @@ class StoryboardPipelineSeeder extends Seeder
         );
 
         $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL, self::IMAGE_MODEL_LABEL, isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 15_000, provider: self::IMAGE_PROVIDER);
-        // The Gemini image models stay catalogued as NON-default choices (admin switches in settings).
+        // The reference-frames EDIT model + the Gemini image models stay catalogued as NON-default
+        // choices (admin switches in settings).
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_REFERENCE_MODEL, self::IMAGE_REFERENCE_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_REFERENCE_HINT, provider: self::IMAGE_PROVIDER);
         $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_GEMINI, 'Gemini 2.5 Flash Image', unit: AiModel::UNIT_PER_IMAGE, costHint: 40_000);
         $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_ALT, self::IMAGE_MODEL_ALT_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_ALT_HINT);
 

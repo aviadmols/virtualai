@@ -56,6 +56,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
 
     // The steps this page controls (in pipeline order).
     private const STEPS = [
+        AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS,
         AiOperation::KEY_STORYBOARD_READ_IDEA,
         AiOperation::KEY_STORYBOARD_GENRE,
         AiOperation::KEY_STORYBOARD_CHARACTERS,

@@ -83,6 +83,29 @@ class StoryboardFoundationTest extends TestCase
         }
     }
 
+    public function test_the_vision_analysis_op_is_seeded_and_referenced_frames_have_an_edit_model(): void
+    {
+        $this->seed(StoryboardPipelineSeeder::class);
+        $resolver = app(AiOperationResolver::class);
+
+        // The reference-analysis (vision) operation resolves on the strongest planning model.
+        $analysis = $resolver->for(AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS);
+        $this->assertSame('google/gemini-3.1-pro-preview', $analysis->model);
+        $this->assertArrayHasKey('description', $analysis->inputSchema['properties']);
+        $this->assertArrayHasKey('subject_type', $analysis->inputSchema['properties']);
+
+        // A frame carrying reference images routes to the EDIT-capable model — configured on the
+        // operation (param) and catalogued with its provider, never hardcoded in a service.
+        $image = $resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
+        $this->assertSame('fal-ai/nano-banana/edit', $image->params['reference_model'] ?? null);
+        $this->assertDatabaseHas('ai_models', [
+            'operation_key' => AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
+            'model_id' => 'fal-ai/nano-banana/edit',
+            'provider' => 'fal',
+            'is_active' => true,
+        ]);
+    }
+
     public function test_reseeding_clears_stale_default_and_fallback_model_flags(): void
     {
         // Simulate a pre-upgrade install: the superseded models still carry the flags.

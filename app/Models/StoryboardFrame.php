@@ -42,6 +42,7 @@ class StoryboardFrame extends Model
         'characters',
         'reference_tags',
         'text_overlay',
+        'dialogue',
         'image_prompt',
         'negative_prompt',
         'motion_prompt',

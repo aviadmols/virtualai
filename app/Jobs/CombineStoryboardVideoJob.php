@@ -57,7 +57,8 @@ final class CombineStoryboardVideoJob implements ShouldQueue
     // per-frame scenes are appended as DATA by autoPrompt(), not as creative instructions.
     private const AUTO_DIRECTIVE = 'Create ONE continuous cinematic film that follows this storyboard EXACTLY, scene by scene, in order. '
         .'The reference images ARE the storyboard frames: match their characters (faces, hair, wardrobe), locations, lighting, palette and art style precisely — do not restyle or reinterpret them. '
-        .'Preserve the plot and the film\'s structure across the whole video, with smooth, motivated transitions between scenes; keep all motion natural and physically plausible; no morphing, no flicker, no new characters, no on-screen text.';
+        .'Preserve the plot and the film\'s structure across the whole video, with smooth, motivated transitions between scenes; keep all motion natural and physically plausible; no morphing, no flicker, no new characters, no on-screen text. '
+        .'Every quoted line of dialogue must be SPOKEN aloud by its character in its own scene, clearly and lip-synced, at that scene\'s timing.';
 
     // Cap the character-continuity lines appended to the auto prompt.
     private const MAX_PROMPT_CHARACTERS = 5;
@@ -281,10 +282,21 @@ final class CombineStoryboardVideoJob implements ShouldQueue
      */
     private function autoPrompt(StoryboardProject $project): string
     {
+        // Each scene = its description + (when set) the frame's SPOKEN line, so the one-video
+        // generation voices the dialogue at the right beat.
         $scenes = $project->frames()
             ->orderBy('frame_number')
             ->get()
-            ->map(fn ($frame): string => trim((string) $frame->description))
+            ->map(static function (StoryboardFrame $frame): string {
+                $scene = trim((string) $frame->description);
+                $dialogue = trim((string) $frame->dialogue);
+
+                if ($scene === '' && $dialogue === '') {
+                    return '';
+                }
+
+                return $dialogue !== '' ? trim($scene.' — the character says: "'.$dialogue.'"') : $scene;
+            })
             ->filter()
             ->values()
             ->all();
@@ -311,11 +323,30 @@ final class CombineStoryboardVideoJob implements ShouldQueue
             $parts[] = 'Characters (keep identical throughout): '.$characters;
         }
 
+        // The VISION ground truth of the tagged uploads — the strongest character-fidelity signal
+        // (it describes the ACTUAL reference images the video must match).
+        if (($analyses = $this->referenceAnalysesLine($project)) !== '') {
+            $parts[] = 'Reference image analyses (ground truth): '.$analyses;
+        }
+
         if ($scenes !== []) {
             $parts[] = 'Scenes in order: '.implode(' | ', $scenes);
         }
 
         return implode("\n", $parts);
+    }
+
+    /** "@tag (type): description; …" for the analyzed reference uploads, capped. Empty when none. */
+    private function referenceAnalysesLine(StoryboardProject $project): string
+    {
+        return $project->assets()
+            ->whereNotNull('description')
+            ->where('description', '!=', '')
+            ->orderBy('id')
+            ->limit(self::MAX_PROMPT_CHARACTERS)
+            ->get()
+            ->map(static fn ($asset): string => '@'.$asset->tag.' ('.$asset->type.'): '.trim((string) $asset->description))
+            ->implode('; ');
     }
 
     /** "Name — description; …" for the pipeline's characters, capped. Empty when none exist. */

@@ -29,6 +29,8 @@ class StoryboardPipelineSettingsTest extends TestCase
         Filament::setCurrentPanel(Filament::getPanel('platform'));
         $this->actingAs(User::factory()->superAdmin()->create());
         $this->seed(StoryboardPipelineSeeder::class);
+        // The fal Model picker merges the live public catalog — keep tests off the network.
+        Http::fake(['https://fal.ai/api/models*' => Http::response(['items' => []], 200)]);
     }
 
     public function test_the_page_renders_with_the_seeded_steps(): void

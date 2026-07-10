@@ -14,7 +14,7 @@
     @php($assetTags = $this->getAssetTags())
     @php($finalVideo = $this->getFinalVideo())
 
-    <div class="to-sb" @if (! $editingFrameId && ! $improvingFrameId) wire:poll.5s @endif>
+    <div class="to-sb" @if (! $editingFrameId && ! $improvingFrameId && ! $dialogueFrameId) wire:poll.5s @endif>
         @if ($totalCost)
             <p class="to-sb-cost">{{ __('platform.storyboard.total_cost') }}: <strong>{{ $totalCost }}</strong></p>
         @endif
@@ -201,6 +201,10 @@
                             @else
                                 <p class="to-sb-frame__prompt">{{ \Illuminate\Support\Str::limit($frame['prompt'], 160) }}</p>
 
+                                @if (filled($frame['dialogue']))
+                                    <p class="to-sb-frame__dialogue">💬 “{{ $frame['dialogue'] }}”</p>
+                                @endif
+
                                 {{-- Version thumbnails --}}
                                 @if (count($frame['versions']) > 1)
                                     <div class="to-sb-frame__versions">
@@ -214,6 +218,29 @@
                                                 </button>
                                             @endif
                                         @endforeach
+                                    </div>
+                                @endif
+
+                                {{-- Spoken dialogue: what the character SAYS in this frame — limited to what
+                                     fits the frame's seconds; carried into the clip/video generation. --}}
+                                @if ($dialogueFrameId === $frame['id'])
+                                    <div class="to-sb-frame__edit" x-data="{ len: $wire.dialogueText.length }">
+                                        <textarea class="to-sb-input" wire:model="dialogueText" rows="2"
+                                            maxlength="{{ $frame['dialogueLimit'] }}"
+                                            x-on:input="len = $event.target.value.length"
+                                            placeholder="{{ __('platform.storyboard.dialogue_placeholder') }}"></textarea>
+                                        <div class="to-sb-composer__hint">
+                                            <span>{{ __('platform.storyboard.dialogue_hint', ['chars' => $frame['dialogueLimit'], 'time' => $frame['time']]) }}</span>
+                                            <span x-text="len + ' / ' + {{ $frame['dialogueLimit'] }}"></span>
+                                        </div>
+                                        <div class="to-sb-frame__actions">
+                                            <x-filament::button size="sm" wire:click="saveDialogue" icon="heroicon-o-chat-bubble-bottom-center-text">
+                                                {{ __('platform.storyboard.save') }}
+                                            </x-filament::button>
+                                            <x-filament::button size="sm" color="gray" wire:click="cancelDialogue">
+                                                {{ __('platform.storyboard.cancel') }}
+                                            </x-filament::button>
+                                        </div>
                                     </div>
                                 @endif
 
@@ -248,6 +275,9 @@
                                         </x-filament::button>
                                         <x-filament::button size="sm" color="gray" wire:click="startImprove({{ $frame['id'] }})" icon="heroicon-o-light-bulb">
                                             {{ __('platform.storyboard.improve') }}
+                                        </x-filament::button>
+                                        <x-filament::button size="sm" color="gray" wire:click="startDialogue({{ $frame['id'] }})" icon="heroicon-o-chat-bubble-bottom-center-text">
+                                            {{ __('platform.storyboard.dialogue') }}
                                         </x-filament::button>
                                         <x-filament::button size="sm" :color="$frame['approved'] ? 'success' : 'gray'" wire:click="approveFrame({{ $frame['id'] }})">
                                             {{ __('platform.storyboard.approve') }}

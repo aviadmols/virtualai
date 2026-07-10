@@ -30,4 +30,10 @@ class EditAiOperation extends EditRecord
     {
         return $this->foldEstimatedCost($data);
     }
+
+    /** A fal-catalog model picked from the full registry is auto-catalogued with its provider. */
+    protected function afterSave(): void
+    {
+        AiOperationResource::ensureModelsCatalogued($this->record);
+    }
 }

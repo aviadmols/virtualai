@@ -31,6 +31,13 @@ class StoryboardFrameGenerationTest extends TestCase
     private const FAL_RESULT = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST.'/response';
     private const FAL_IMAGE_URL = 'https://v3.fal.media/files/frame.png';
 
+    // A frame that carries input images (references / a regenerate) routes to the EDIT model.
+    private const NB_MODEL = 'fal-ai/nano-banana/edit';
+    private const NB_SUBMIT = 'https://queue.fal.run/'.self::NB_MODEL;
+    private const NB_REQUEST = 'req-nb1';
+    private const NB_STATUS = self::NB_SUBMIT.'/requests/'.self::NB_REQUEST.'/status';
+    private const NB_RESULT = self::NB_SUBMIT.'/requests/'.self::NB_REQUEST.'/response';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -52,6 +59,9 @@ class StoryboardFrameGenerationTest extends TestCase
             self::FAL_STATUS => Http::response(['status' => 'COMPLETED'], 200),
             self::FAL_RESULT => Http::response(['images' => [['url' => self::FAL_IMAGE_URL, 'content_type' => 'image/png']]], 200),
             self::FAL_SUBMIT => Http::response(['request_id' => self::FAL_REQUEST], 200),
+            self::NB_STATUS => Http::response(['status' => 'COMPLETED'], 200),
+            self::NB_RESULT => Http::response(['images' => [['url' => self::FAL_IMAGE_URL, 'content_type' => 'image/png']]], 200),
+            self::NB_SUBMIT => Http::response(['request_id' => self::NB_REQUEST], 200),
             self::FAL_IMAGE_URL => Http::response($png, 200),
             '*' => Http::response($png, 200), // signed input-image fetches (data-URI inlining)
         ]);
@@ -130,9 +140,27 @@ class StoryboardFrameGenerationTest extends TestCase
         $generator->generate($frame);              // first run: text-to-image, no input image
         $generator->generate($frame->refresh());   // regenerate: the current image must be fed in
 
-        // At least one request (the regenerate) carried an input image, so the model EDITS the
-        // existing frame (keeps composition/characters/style) instead of inventing a new one.
-        Http::assertSent(fn ($request): bool => str_contains((string) json_encode($request->data()), 'image_url'));
+        // The regenerate carries an input image AND routes to the EDIT-capable reference model
+        // (the text-to-image default cannot see images), so the model EDITS the existing frame.
+        Http::assertSent(fn ($request): bool => $request->url() === self::NB_SUBMIT
+            && str_contains((string) json_encode($request->data()), 'image_url'));
+    }
+
+    public function test_a_frame_with_reference_tags_routes_to_the_edit_model_that_sees_them(): void
+    {
+        $this->fakeImage();
+        $frame = $this->frame(['reference_tags' => ['hero']]);
+        $frame->project->assets()->create(['tag' => 'hero', 'type' => 'character', 'file_path' => 'storyboard/inputs/hero.png']);
+        Storage::disk('s3')->put('storyboard/inputs/hero.png', "\x89PNG\r\n\x1a\nHERO");
+
+        app(StoryboardFrameGenerator::class)->generate($frame);
+
+        $this->assertSame(StoryboardFrame::STATUS_READY, $frame->refresh()->status);
+        // FIRST generation already uses the edit model — the @hero reference image rides along.
+        Http::assertSent(fn ($request): bool => $request->url() === self::NB_SUBMIT
+            && str_starts_with((string) ($request->data()['image_url'] ?? ''), 'data:image/'));
+        // The recorded version pins the model that actually generated it.
+        $this->assertSame(self::NB_MODEL, $frame->versions()->first()->model);
     }
 
     public function test_selecting_an_older_version_swaps_the_frame_image(): void

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Platform\Resources;
 
+use App\Domain\Ai\FalModelCatalog;
 use App\Domain\Credits\CreditMath;
 use App\Filament\Platform\Resources\AiOperationResource\Pages\CreateAiOperation;
 use App\Filament\Platform\Resources\AiOperationResource\Pages\EditAiOperation;
@@ -186,17 +187,74 @@ class AiOperationResource extends Resource
         return $options;
     }
 
-    /** Allow-listed model ids for an operation (catalog rows) → option labels. */
+    // Image-generating operations: their Model pickers also browse the full fal.ai image catalog.
+    private const IMAGE_OPERATIONS = [
+        AiOperation::KEY_TRY_ON_GENERATION,
+        AiOperation::KEY_BANNER_GENERATION,
+        AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
+    ];
+
+    /**
+     * Model ids offered for an operation: the allow-listed catalog rows, plus — for the image
+     * operations — the FULL public fal.ai image catalog (choose any fal model; it is auto-
+     * catalogued with its provider on save via ensureModelsCatalogued()).
+     */
     public static function modelOptions(?string $operationKey): array
     {
         if ($operationKey === null || $operationKey === '') {
             return [];
         }
 
-        return AiModel::query()
+        $options = AiModel::query()
             ->forOperation($operationKey)
             ->orderBy('model_id')
             ->pluck('model_id', 'model_id')
             ->all();
+
+        if (in_array($operationKey, self::IMAGE_OPERATIONS, true)) {
+            foreach (app(FalModelCatalog::class)->options(FalModelCatalog::IMAGE_CATEGORIES) as $id => $label) {
+                $options[$id] ??= $label;
+            }
+        }
+
+        return $options;
+    }
+
+    /**
+     * After save: any chosen model id that is MISSING from the operation's catalog but exists in
+     * the fal.ai registry is catalogued with provider=fal (else the resolver would default its
+     * provider to OpenRouter and route it wrong). The row carries the correct default/fallback
+     * FLAG — the flags are the single authoring surface, and AiModelObserver writes the winner
+     * through into ai_operations (an unflagged row would be reverted by the observer). fal's
+     * advisory catalog price seeds the per-image cost hint; without one the money path fails
+     * CLOSED until the admin sets a price.
+     */
+    public static function ensureModelsCatalogued(AiOperation $record): void
+    {
+        $catalog = app(FalModelCatalog::class);
+
+        foreach (array_unique(array_filter([$record->default_model, $record->fallback_model])) as $modelId) {
+            $exists = AiModel::query()
+                ->where('operation_key', $record->operation_key)
+                ->where('model_id', $modelId)
+                ->exists();
+
+            $item = $exists ? null : $catalog->find($modelId);
+            if ($item === null) {
+                continue;
+            }
+
+            AiModel::create([
+                'operation_key' => $record->operation_key,
+                'provider' => AiModel::PROVIDER_FAL,
+                'model_id' => $modelId,
+                'label' => (string) ($item['title'] ?? $modelId),
+                'is_default' => $modelId === $record->default_model,
+                'is_fallback' => $modelId === $record->fallback_model,
+                'cost_hint_micro_usd' => $catalog->priceHintMicroUsd($modelId),
+                'cost_unit' => AiModel::UNIT_PER_IMAGE,
+                'is_active' => true,
+            ]);
+        }
     }
 }

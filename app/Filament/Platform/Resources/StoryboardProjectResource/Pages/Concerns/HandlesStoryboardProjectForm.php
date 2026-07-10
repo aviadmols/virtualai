@@ -3,6 +3,7 @@
 namespace App\Filament\Platform\Resources\StoryboardProjectResource\Pages\Concerns;
 
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\StoryboardBuilder;
+use App\Jobs\AnalyzeStoryboardAssetJob;
 use App\Models\StoryboardAsset;
 use App\Models\StoryboardProject;
 use Filament\Actions\Action;
@@ -68,18 +69,35 @@ trait HandlesStoryboardProjectForm
     protected function afterStoryboardPersisted(): void
     {
         if ($this->hasNumberedReferences) {
-            DB::transaction(function (): void {
+            $analyze = [];
+
+            DB::transaction(function () use (&$analyze): void {
+                // Keep each file's VISION analysis (description + detected type) across the
+                // delete-and-recreate renumbering — an unchanged image is never re-analyzed.
+                $prior = $this->record->assets()->whereNotNull('file_path')->get()->keyBy('file_path');
                 $this->record->assets()->delete();
 
                 foreach ($this->numberedReferencePaths as $i => $path) {
-                    $this->record->assets()->create([
+                    $existing = $prior->get($path);
+
+                    $asset = $this->record->assets()->create([
                         'tag' => self::TAG_PREFIX.($i + 1),
-                        'type' => self::DEFAULT_TYPE,
+                        'type' => $existing?->type ?? self::DEFAULT_TYPE,
                         'file_path' => $path,
+                        'description' => $existing?->description,
                         'reference_strength' => self::DEFAULT_STRENGTH,
                     ]);
+
+                    if (blank($asset->description)) {
+                        $analyze[] = $asset->id;
+                    }
                 }
             });
+
+            // Pre-warm the vision analysis for NEW images (the pipeline still covers stragglers).
+            foreach ($analyze as $assetId) {
+                AnalyzeStoryboardAssetJob::dispatch($assetId);
+            }
         }
 
         if ($this->runPipelineAfterSave) {

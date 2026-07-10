@@ -8,6 +8,7 @@ use App\Domain\Ai\OperationConfig;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Playground\PlaygroundImageRunner;
+use App\Models\AiModel;
 use App\Models\AiOperation;
 use App\Models\StoryboardFrame;
 use App\Models\StoryboardFrameVersion;
@@ -44,9 +45,10 @@ final class StoryboardFrameGenerator
         $config = $this->resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
         $prompt = $this->buildPrompt($config, $frame, $editInstruction);
         $inputs = $this->buildInputs($frame);
+        [$model, $provider, $priceHint] = $this->modelFor($config, $inputs);
 
         try {
-            $result = $this->runner->run($config->provider, $config->model, $prompt, $inputs, $config->estimatedCostMicroUsd, $config->aspectRatio);
+            $result = $this->runner->run($provider, $model, $prompt, $inputs, $priceHint, $config->aspectRatio);
         } catch (Throwable $e) {
             $frame->update([
                 'status' => StoryboardFrame::STATUS_FAILED,
@@ -58,11 +60,11 @@ final class StoryboardFrameGenerator
 
         $stored = $this->media->storeStoryboardFrame($frame->project_id, $frame->id, $result->imageBytes, $result->mimeType);
 
-        $this->recordVersion($frame, $stored->path, $prompt, $editInstruction, $config->provider, $result->modelUsed);
+        $this->recordVersion($frame, $stored->path, $prompt, $editInstruction, $provider, $result->modelUsed);
 
         $cost = $result->cost->available && $result->cost->costUsd !== null
             ? CreditMath::usdToMicro($result->cost->costUsd)
-            : $config->flatRatePriceMicroUsd();
+            : $priceHint;
 
         $frame->update([
             'image_path' => $stored->path,
@@ -124,6 +126,42 @@ final class StoryboardFrameGenerator
         }
 
         return $prompt;
+    }
+
+    /**
+     * The model + provider + price for THIS generation. A frame that carries input images routes
+     * to the operation's `reference_model` (an EDIT-capable model that actually SEES the tagged
+     * uploads) when the admin configured one AND it is catalogued — the default frame model may be
+     * text-to-image (Krea) and blind to references. All values come from the DB config (operation
+     * params + the ai_models catalog), never a literal.
+     *
+     * @param  array<int,ImagePayload>  $inputs
+     * @return array{0: string, 1: string, 2: ?int}
+     */
+    private function modelFor(OperationConfig $config, array $inputs): array
+    {
+        $default = [$config->model, $config->provider, $config->estimatedCostMicroUsd ?? $config->modelCostHintMicroUsd];
+        $referenceModel = trim((string) ($config->params['reference_model'] ?? ''));
+
+        if ($inputs === [] || $referenceModel === '' || $referenceModel === $config->model) {
+            return $default;
+        }
+
+        $catalogued = AiModel::query()
+            ->where('operation_key', AiOperation::KEY_STORYBOARD_FRAME_IMAGE)
+            ->where('model_id', $referenceModel)
+            ->where('is_active', true)
+            ->first();
+
+        if ($catalogued === null) {
+            return $default;
+        }
+
+        return [
+            $catalogued->model_id,
+            (string) $catalogued->provider,
+            $catalogued->cost_hint_micro_usd ?? $config->estimatedCostMicroUsd,
+        ];
     }
 
     /**

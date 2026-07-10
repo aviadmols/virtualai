@@ -6,6 +6,7 @@ use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\CreateStoryb
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\EditStoryboardProject;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\ListStoryboardProjects;
 use App\Filament\Platform\Resources\StoryboardProjectResource\Pages\StoryboardBuilder;
+use App\Jobs\AnalyzeStoryboardAssetJob;
 use App\Jobs\GenerateStoryboardFrameJob;
 use App\Jobs\RunStoryboardPipelineJob;
 use App\Models\StoryboardFrame;
@@ -90,6 +91,52 @@ class StoryboardUiTest extends TestCase
             ['storyboard/inputs/b.png', 'storyboard/inputs/a.png'],
             $project->assets()->orderBy('id')->pluck('file_path')->all(),
         );
+    }
+
+    public function test_saving_references_keeps_their_vision_analysis_and_analyzes_only_new_images(): void
+    {
+        config()->set('trayon.media.disk', 'public');
+        Storage::fake('public');
+        Bus::fake([AnalyzeStoryboardAssetJob::class]);
+
+        $project = StoryboardProject::factory()->create();
+        $project->assets()->create(['tag' => 'image1', 'type' => 'product', 'file_path' => 'storyboard/inputs/a.png', 'description' => 'ANALYZED: a red sneaker']);
+
+        Livewire::test(EditStoryboardProject::class, ['record' => $project->getRouteKey()])
+            ->fillForm(['reference_uploads' => ['storyboard/inputs/b.png', 'storyboard/inputs/a.png']])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $assets = $project->assets()->orderBy('id')->get();
+        // The re-uploaded image keeps its analysis (description + detected type) despite renumbering.
+        $this->assertSame('ANALYZED: a red sneaker', $assets->firstWhere('file_path', 'storyboard/inputs/a.png')->description);
+        $this->assertSame('product', $assets->firstWhere('file_path', 'storyboard/inputs/a.png')->type);
+        // Only the NEW image is queued for vision analysis.
+        Bus::assertDispatched(AnalyzeStoryboardAssetJob::class, 1);
+    }
+
+    public function test_dialogue_is_saved_per_frame_and_limited_to_the_frames_seconds(): void
+    {
+        $project = StoryboardProject::factory()->create();
+        $frame = StoryboardFrame::factory()->create([
+            'project_id' => $project->id,
+            'start_second' => 0,
+            'end_second' => 3, // 3s × 15 chars/s = 45 chars, floored at 30 → limit 45
+        ]);
+
+        $component = Livewire::test(StoryboardBuilder::class, ['record' => $project->getRouteKey()])
+            ->call('startDialogue', $frame->id)
+            ->set('dialogueText', 'שלום, ברוכים הבאים למסיבה!')
+            ->call('saveDialogue');
+
+        $this->assertSame('שלום, ברוכים הבאים למסיבה!', $frame->refresh()->dialogue);
+
+        // A line that cannot FIT the frame's seconds is rejected (the video timing must survive).
+        $component->call('startDialogue', $frame->id)
+            ->set('dialogueText', str_repeat('a', 46))
+            ->call('saveDialogue');
+
+        $this->assertSame('שלום, ברוכים הבאים למסיבה!', $frame->refresh()->dialogue);
     }
 
     public function test_the_form_generate_action_creates_and_runs_the_pipeline(): void

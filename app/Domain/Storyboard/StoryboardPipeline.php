@@ -25,11 +25,16 @@ final class StoryboardPipeline
     public function __construct(
         private readonly AiOperationResolver $resolver,
         private readonly StoryboardTextCaller $caller,
+        private readonly StoryboardAssetAnalyzer $assetAnalyzer,
     ) {}
 
     public function run(StoryboardProject $project): void
     {
         $project->update(['status' => StoryboardProject::STATUS_RUNNING]);
+
+        // Ground-truth first: any reference upload still missing its VISION description is
+        // analyzed now, so the planning prompts always see what the tagged images really contain.
+        $this->assetAnalyzer->analyzeMissing($project);
 
         foreach (StoryboardStep::TEXT_STEPS as $stepKey) {
             if (! $this->runStep($project, $stepKey)) {
@@ -132,10 +137,20 @@ final class StoryboardPipeline
     private function vars(StoryboardProject $project): array
     {
         $pipeline = $project->pipeline ?? [];
-        $tags = $project->assets()->pluck('tag')->map(static fn (string $t): string => '@'.$t)->implode(', ');
+        $assets = $project->assets()->orderBy('id')->get();
+        $tags = $assets->pluck('tag')->map(static fn (string $t): string => '@'.$t)->implode(', ');
+
+        // The VISION ground truth per @tag ("@image1 (character): …") — what the uploaded image
+        // REALLY contains, so planned characters match the references.
+        $descriptions = $assets->map(static function ($asset): string {
+            $description = trim((string) $asset->description);
+
+            return '@'.$asset->tag.' ('.$asset->type.'): '.($description !== '' ? $description : 'no visual analysis available');
+        })->implode("\n");
 
         return [
             'story_idea' => (string) $project->story_idea,
+            'reference_descriptions' => $descriptions,
             'genre' => (string) $project->genre,
             'duration' => (string) $project->duration_seconds,
             'frame_interval' => (string) $project->frame_interval_seconds,

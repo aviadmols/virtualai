@@ -76,6 +76,33 @@ final class FalModelCatalog
      */
     public function categoryOf(string $modelId): ?string
     {
+        $item = $this->find($modelId);
+
+        return is_string($item['category'] ?? null) ? $item['category'] : null;
+    }
+
+    /**
+     * fal's ADVISORY per-run price for a model, parsed from the catalog's human-readable pricing
+     * text (the only price surface fal exposes) — in micro-USD, or null when unknown. Used only
+     * as the initial cost hint when a fal model is auto-catalogued; the admin owns the final
+     * price on the Models page.
+     */
+    public function priceHintMicroUsd(string $modelId): ?int
+    {
+        $pricing = $this->find($modelId)['pricingInfoOverride'] ?? null;
+
+        if (! is_string($pricing) || preg_match('/\$\s*([0-9]+(?:\.[0-9]+)?)/', $pricing, $match) !== 1) {
+            return null;
+        }
+
+        $micro = (int) round(((float) $match[1]) * 1_000_000);
+
+        return $micro > 0 ? $micro : null;
+    }
+
+    /** The raw catalog item for ONE model id (cached), or null when unknown/unreachable. @return array<string,mixed>|null */
+    public function find(string $modelId): ?array
+    {
         if ($modelId === '') {
             return null;
         }
@@ -83,17 +110,18 @@ final class FalModelCatalog
         $cacheKey = self::CATEGORY_CACHE_PREFIX.md5($modelId);
         $cached = Cache::get($cacheKey);
 
-        if (is_string($cached)) {
-            return $cached;
+        if (is_array($cached)) {
+            return $cached === [] ? null : $cached; // [] marks a cached miss
         }
 
-        $category = $this->lookupCategory($modelId);
-        Cache::put($cacheKey, $category, $category === null ? self::EMPTY_TTL_SECONDS : self::CACHE_TTL_SECONDS);
+        $item = $this->lookupItem($modelId);
+        Cache::put($cacheKey, $item ?? [], $item === null ? self::EMPTY_TTL_SECONDS : self::CACHE_TTL_SECONDS);
 
-        return $category;
+        return $item;
     }
 
-    private function lookupCategory(string $modelId): ?string
+    /** @return array<string,mixed>|null */
+    private function lookupItem(string $modelId): ?array
     {
         try {
             $response = $this->http
@@ -109,7 +137,7 @@ final class FalModelCatalog
 
         foreach ($items as $item) {
             if (is_array($item) && ($item['id'] ?? null) === $modelId) {
-                return is_string($item['category'] ?? null) ? $item['category'] : null;
+                return $item;
             }
         }
 

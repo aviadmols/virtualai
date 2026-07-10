@@ -37,6 +37,9 @@ class AiOperation extends Model
     public const KEY_STORYBOARD_CLIP = 'storyboard_clip';
     // On-demand (not a pipeline step): AI-rewrite a single frame's image_prompt from an instruction.
     public const KEY_STORYBOARD_IMPROVE_PROMPT = 'storyboard_improve_prompt';
+    // On-demand (not a pipeline step): VISION analysis of one reference upload → a ground-truth
+    // physical description + subject type, injected into the planning steps for character fidelity.
+    public const KEY_STORYBOARD_ASSET_ANALYSIS = 'storyboard_asset_analysis';
 
     public const KEYS = [
         self::KEY_PRODUCT_SCAN,
@@ -50,6 +53,7 @@ class AiOperation extends Model
         self::KEY_STORYBOARD_FRAME_IMAGE,
         self::KEY_STORYBOARD_CLIP,
         self::KEY_STORYBOARD_IMPROVE_PROMPT,
+        self::KEY_STORYBOARD_ASSET_ANALYSIS,
     ];
 
     protected $fillable = [

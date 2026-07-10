@@ -76,7 +76,10 @@ class StoryboardClipTest extends TestCase
         Bus::fake([PollStoryboardClipJob::class]);
         Http::fake([self::TASKS => Http::response(['id' => self::TASK], 200)]);
 
-        $frame = $this->frame(['motion_prompt' => 'slow pan left across the pool']);
+        $frame = $this->frame([
+            'motion_prompt' => 'slow pan left across the pool',
+            'dialogue' => 'Welcome to the party!',
+        ]);
         (new GenerateStoryboardClipJob($frame->id))->handle(app(StoryboardClipGenerator::class));
 
         $frame->refresh();
@@ -91,6 +94,10 @@ class StoryboardClipTest extends TestCase
         // The frame's planned motion phrase reaches the provider via the {{motion}} placeholder.
         Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
             && str_contains((string) json_encode($req->data()), 'slow pan left across the pool'));
+
+        // The frame's spoken line rides along ({{dialogue}}), so the clip voices it lip-synced.
+        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
+            && str_contains((string) json_encode($req->data()), 'Welcome to the party!'));
     }
 
     public function test_a_succeeded_poll_stores_the_clip_and_render_time(): void

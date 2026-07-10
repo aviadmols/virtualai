@@ -28,11 +28,13 @@ final class StoryboardTextCaller
 
     /**
      * Run the step and return its JSON. Retries a JSON-only repair up to MAX_REPAIRS; throws a
-     * CODE_INVALID_JSON carrying the raw output if it never parses.
+     * CODE_INVALID_JSON carrying the raw output if it never parses. Optional $imageUrls attach
+     * reference images to the user message (a VISION step, e.g. the asset analysis).
      *
      * @param  array<string,string|int|float|null>  $vars
+     * @param  array<int,string>  $imageUrls
      */
-    public function extract(OperationConfig $config, array $vars = []): ScanResult
+    public function extract(OperationConfig $config, array $vars = [], array $imageUrls = []): ScanResult
     {
         $lastRaw = '';
         $repaired = false;
@@ -42,7 +44,7 @@ final class StoryboardTextCaller
                 $config->operationKey,
                 $config->model,
                 $config->fallbackModel,
-                fn (string $model): array => $this->buildBody($config, $model, $vars, $attempt > 0),
+                fn (string $model): array => $this->buildBody($config, $model, $vars, $attempt > 0, $imageUrls),
             );
 
             $lastRaw = $this->extractText($response);
@@ -74,12 +76,14 @@ final class StoryboardTextCaller
 
     /**
      * The chat body. Schema is passed as GUIDANCE (strict:false) so a creative model isn't forced
-     * into an all-or-nothing strict decode; json_object mode when there is no schema.
+     * into an all-or-nothing strict decode; json_object mode when there is no schema. When image
+     * urls are given the user message is multimodal (text part + image parts).
      *
      * @param  array<string,string|int|float|null>  $vars
+     * @param  array<int,string>  $imageUrls
      * @return array<string,mixed>
      */
-    private function buildBody(OperationConfig $config, string $model, array $vars, bool $repair): array
+    private function buildBody(OperationConfig $config, string $model, array $vars, bool $repair, array $imageUrls = []): array
     {
         // strtr substitution — never Blade (RCE prevention).
         $userText = $config->substituteUser($vars);
@@ -93,7 +97,16 @@ final class StoryboardTextCaller
         if ($system !== null) {
             $messages[] = ['role' => 'system', 'content' => $system];
         }
-        $messages[] = ['role' => 'user', 'content' => $userText];
+
+        if ($imageUrls === []) {
+            $messages[] = ['role' => 'user', 'content' => $userText];
+        } else {
+            $content = [['type' => 'text', 'text' => $userText]];
+            foreach ($imageUrls as $url) {
+                $content[] = ['type' => 'image_url', 'image_url' => ['url' => $url]];
+            }
+            $messages[] = ['role' => 'user', 'content' => $content];
+        }
 
         $body = [
             'model' => $model,

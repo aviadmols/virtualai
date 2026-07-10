@@ -20,6 +20,11 @@ use Throwable;
  */
 final class StoryboardClipGenerator
 {
+    // === CONSTANTS ===
+    // The {{dialogue}} template value when the frame has a spoken line; empty otherwise, so a
+    // silent frame's prompt carries no dialogue text at all.
+    private const DIALOGUE_PREFIX = 'The character speaks this line aloud, clearly and lip-synced: ';
+
     public function __construct(
         private readonly AiOperationResolver $resolver,
         private readonly VideoProviderRouter $router,
@@ -42,6 +47,9 @@ final class StoryboardClipGenerator
         $prompt = $config->substituteUser([
             'image_prompt' => (string) $frame->image_prompt,
             'motion' => (string) $frame->motion_prompt,
+            'dialogue' => filled($frame->dialogue)
+                ? self::DIALOGUE_PREFIX.'"'.trim((string) $frame->dialogue).'"'
+                : '',
         ]);
         $baseUrl = $this->baseUrl($config->model);
         $video = $this->router->for($config->provider);

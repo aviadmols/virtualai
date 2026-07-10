@@ -71,7 +71,11 @@ class StoryboardPipelineTest extends TestCase
     public function test_the_pipeline_runs_every_step_materialises_frames_and_logs_them(): void
     {
         $project = StoryboardProject::factory()->create(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
-        StoryboardAsset::factory()->create(['project_id' => $project->id, 'tag' => 'location_pool']);
+        StoryboardAsset::factory()->create([
+            'project_id' => $project->id,
+            'tag' => 'location_pool',
+            'description' => 'GROUND-TRUTH: a turquoise infinity pool at golden hour',
+        ]);
 
         $this->fakeHappyPath(5);
 
@@ -98,6 +102,12 @@ class StoryboardPipelineTest extends TestCase
         $this->assertSame(5, $project->stepRuns()->count());
         $this->assertSame(5, $project->stepRuns()->where('status', StoryboardStepRun::STATUS_SUCCEEDED)->count());
         $this->assertNotNull($project->stepRuns()->first()->duration_ms);
+
+        // The VISION ground truth of every @tag reaches the planning prompts.
+        $this->assertStringContainsString(
+            'GROUND-TRUTH: a turquoise infinity pool',
+            (string) ($project->stepRuns()->first()->input['reference_descriptions'] ?? ''),
+        );
 
         // A pipeline run NEVER charges.
         $this->assertDatabaseCount('credit_ledger', 0);

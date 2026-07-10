@@ -63,6 +63,16 @@ class StoryboardBuilder extends Page
 
     public string $improveInstruction = '';
 
+    // Inline DIALOGUE state (the spoken line for a frame, carried into the video generation).
+    public ?int $dialogueFrameId = null;
+
+    public string $dialogueText = '';
+
+    // Natural speech pace: ~15 characters/second — the dialogue must FIT the frame's seconds
+    // (e.g. a 3s frame → ~45 characters), so the video's timing survives.
+    private const DIALOGUE_CHARS_PER_SECOND = 15;
+    private const DIALOGUE_MIN_CHARS = 30;
+
     public function mount(int|string $record): void
     {
         $this->record = $this->resolveRecord($record);
@@ -237,6 +247,58 @@ class StoryboardBuilder extends Page
         $this->editingFrameId = $frame->id;
         $this->editPrompt = (string) $frame->image_prompt;
         $this->editNegative = (string) $frame->negative_prompt;
+        $this->cancelDialogue(); // only one inline editor open at a time
+    }
+
+    public function startDialogue(int $frameId): void
+    {
+        $frame = $this->frame($frameId);
+        if ($frame === null) {
+            return;
+        }
+
+        $this->dialogueFrameId = $frame->id;
+        $this->dialogueText = (string) $frame->dialogue;
+        $this->cancelEdit();
+        $this->cancelImprove();
+    }
+
+    public function cancelDialogue(): void
+    {
+        $this->dialogueFrameId = null;
+        $this->dialogueText = '';
+    }
+
+    /** Save the frame's spoken line — rejected when it cannot FIT the frame's seconds at speech pace. */
+    public function saveDialogue(): void
+    {
+        $frame = $this->frame((int) $this->dialogueFrameId);
+        if ($frame === null) {
+            return;
+        }
+
+        $dialogue = trim($this->dialogueText);
+        $limit = $this->dialogueLimit($frame);
+
+        if (mb_strlen($dialogue) > $limit) {
+            Notification::make()->danger()
+                ->title(__('platform.storyboard.dialogue_too_long', ['chars' => $limit]))
+                ->send();
+
+            return;
+        }
+
+        $frame->update(['dialogue' => $dialogue !== '' ? $dialogue : null]);
+        $this->cancelDialogue();
+        Notification::make()->success()->title(__('platform.storyboard.dialogue_saved'))->send();
+    }
+
+    /** Max dialogue characters for a frame: its seconds × speech pace (min floor for tiny frames). */
+    private function dialogueLimit(StoryboardFrame $frame): int
+    {
+        $seconds = max(1, (int) $frame->end_second - (int) $frame->start_second);
+
+        return max(self::DIALOGUE_MIN_CHARS, $seconds * self::DIALOGUE_CHARS_PER_SECOND);
     }
 
     public function cancelEdit(): void
@@ -272,6 +334,7 @@ class StoryboardBuilder extends Page
         $this->improvingFrameId = $frame->id;
         $this->improveInstruction = '';
         $this->cancelEdit(); // only one inline editor open at a time
+        $this->cancelDialogue();
     }
 
     public function cancelImprove(): void
@@ -355,6 +418,8 @@ class StoryboardBuilder extends Page
             'description' => $f->description,
             'prompt' => $f->image_prompt,
             'textOverlay' => $f->text_overlay,
+            'dialogue' => $f->dialogue,
+            'dialogueLimit' => $this->dialogueLimit($f),
             'status' => $f->status,
             'generating' => $f->status === StoryboardFrame::STATUS_GENERATING,
             'failed' => $f->status === StoryboardFrame::STATUS_FAILED,

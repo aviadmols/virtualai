@@ -35,6 +35,16 @@ final class BannerGenerationCaller
     private const XAI_RESPONSE_FORMAT = 'b64_json';
     private const XAI_IMAGE_COUNT = 1;
 
+    // fal has no free-form ratio: the aspect maps onto its image_size enum (and the raw ratio is
+    // also sent as aspect_ratio for the models that declare that field; extras are ignored).
+    private const FAL_IMAGE_SIZES = [
+        '16:9' => 'landscape_16_9',
+        '9:16' => 'portrait_16_9',
+        '4:3' => 'landscape_4_3',
+        '3:4' => 'portrait_4_3',
+        '1:1' => 'square_hd',
+    ];
+
     public function __construct(
         private readonly ProviderRouter $router,
     ) {}
@@ -96,6 +106,7 @@ final class BannerGenerationCaller
             fn (string $model): array => match ($providerId) {
                 ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->buildBytePlusBody($config, $model, $reference, $vars),
                 ImageGenerationProvider::PROVIDER_XAI => $this->buildXaiBody($config, $model, $vars),
+                ImageGenerationProvider::PROVIDER_FAL => $this->buildFalBody($config, $model, $reference, $vars),
                 default => $this->buildOpenRouterBody($config, $model, $reference, $vars),
             },
         );
@@ -222,6 +233,49 @@ final class BannerGenerationCaller
             'response_format' => self::XAI_RESPONSE_FORMAT,
             'n' => self::XAI_IMAGE_COUNT,
         ];
+    }
+
+    /**
+     * fal queue body (the model id is the URL path; the Fal client pops 'model' and inlines the
+     * image urls as data URIs): a single prompt (system prepended) + the OPTIONAL reference image
+     * + the aspect mapping. A text-to-image fal model ignores/strips the image fields.
+     *
+     * @param  array<string,string|int|float|null>  $vars
+     * @return array<string,mixed>
+     */
+    private function buildFalBody(
+        OperationConfig $config,
+        string $model,
+        ?ImagePayload $reference,
+        array $vars,
+    ): array {
+        $prompt = $config->substituteUser($vars);
+        $system = $config->substituteSystem($vars);
+
+        if ($system !== null && $system !== '') {
+            $prompt = $system."\n\n".$prompt;
+        }
+
+        $body = ['model' => $model, 'prompt' => $prompt];
+
+        if ($reference !== null) {
+            $body['image_url'] = $reference->url;
+            $body['image_urls'] = [$reference->url];
+        }
+
+        if ($config->aspectRatio !== null) {
+            $body['aspect_ratio'] = $config->aspectRatio;
+            $size = self::FAL_IMAGE_SIZES[$config->aspectRatio] ?? null;
+            if ($size !== null) {
+                $body['image_size'] = $size;
+            }
+        }
+
+        if (array_key_exists('seed', $config->params)) {
+            $body['seed'] = $config->params['seed'];
+        }
+
+        return $body;
     }
 
     /**

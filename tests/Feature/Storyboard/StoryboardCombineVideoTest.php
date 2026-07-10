@@ -127,10 +127,15 @@ class StoryboardCombineVideoTest extends TestCase
                 StoryboardProject::PIPE_CHARACTERS => ['characters' => [['name' => 'HERO-MARKER', 'description' => 'a tall knight']]],
             ],
         ]);
-        $project->assets()->create(['tag' => 'image1', 'type' => 'character', 'file_path' => 'storyboard/inputs/a.png']);
-        StoryboardFrame::factory()->create(['project_id' => $project->id, 'description' => 'SCENE-MARKER opening shot']);
+        $project->assets()->create(['tag' => 'image1', 'type' => 'character', 'file_path' => 'storyboard/inputs/a.png', 'description' => 'ANALYSIS-MARKER: silver-haired knight in navy armor']);
+        StoryboardFrame::factory()->create([
+            'project_id' => $project->id,
+            'description' => 'SCENE-MARKER opening shot',
+            'dialogue' => 'DIALOGUE-MARKER welcome home',
+        ]);
 
-        // Empty prompt -> the auto prompt must embed the story, visual bible, characters and scenes.
+        // Empty prompt -> the auto prompt must embed the story, visual bible, characters, the
+        // reference VISION analyses (character fidelity) and the scenes.
         (new CombineStoryboardVideoJob($project->id, CombineStoryboardVideoJob::MODE_REFERENCE, '720p', 10, null, '16:9'))
             ->handle(app(StoryboardVideoComposer::class));
 
@@ -145,7 +150,9 @@ class StoryboardCombineVideoTest extends TestCase
                 && str_contains($body, 'STYLE-MARKER')
                 && str_contains($body, 'RULES-MARKER')
                 && str_contains($body, 'HERO-MARKER')
-                && str_contains($body, 'SCENE-MARKER');
+                && str_contains($body, 'ANALYSIS-MARKER')
+                && str_contains($body, 'SCENE-MARKER')
+                && str_contains($body, 'DIALOGUE-MARKER'); // the spoken line is voiced at its scene
         });
         $this->assertDatabaseCount('credit_ledger', 0);
     }
