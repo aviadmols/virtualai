@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Shopify\Webhooks\RecoverStuckShopifyWebhooksJob;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -14,6 +15,13 @@ Artisan::command('inspire', function () {
 
 // Per-minute heartbeat. The health surface reads its age (green/yellow/red).
 Schedule::command('trayon:heartbeat')->everyMinute()->withoutOverlapping();
+
+// Shopify webhook recovery: re-dispatch receipts stuck in received/queued (a 200 was
+// returned but the handler job was lost) + prune old receipt payloads. The receipt
+// row is the durable source of truth, not the queue.
+Schedule::job(new RecoverStuckShopifyWebhooksJob, config('trayon.queues.webhooks'))
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
 
 // Media-retention purge (the command is owned by laravel-backend; the SCHEDULE
 // host is owned here). Runs off-peak, chunked + idempotent, dispatching delete

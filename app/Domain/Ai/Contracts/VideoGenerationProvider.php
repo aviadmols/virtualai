@@ -12,17 +12,24 @@ namespace App\Domain\Ai\Contracts;
  *
  * pollTask() returns a NORMALIZED task array so every poller reads the SAME shape regardless of
  * upstream: ['status' => succeeded|failed|<processing>, 'content' => ['video_url' => ...],
- * 'error' => ['message' => ...], 'created_at' => int, 'updated_at' => int].
+ * 'error' => ['message' => ...], 'created_at' => int, 'updated_at' => int,
+ * 'cost' => ['micro_usd' => int|null]].
  *
  * Auth + host + error classification stay provider-side (each upstream has its own key, endpoints,
- * and error envelope). No USD cost is returned — video is flat-rate; the caller applies the admin
- * per-clip price. Storyboard clips NEVER charge.
+ * and error envelope). Storyboard clips NEVER charge.
  */
 interface VideoGenerationProvider
 {
     // Terminal, non-success task states — a poll that sees these stops (a result, not an error).
     // Providers normalize their own failure states onto 'failed' so this set is shared.
     public const TERMINAL_FAILURE = ['failed', 'cancelled', 'expired'];
+
+    // OPTIONAL cost of the task, when the upstream returns one (Kling bills per task and answers
+    // with billing[]). A provider that returns no cost simply omits the key, and the caller falls
+    // back to the admin flat-rate price hint. A REAL cost always beats the hint.
+    public const KEY_COST = 'cost';
+
+    public const KEY_COST_MICRO_USD = 'micro_usd';
 
     /**
      * Submit a video-generation task; returns the upstream task/prediction id. $imageUrls are the

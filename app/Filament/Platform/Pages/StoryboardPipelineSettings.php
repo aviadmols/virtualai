@@ -3,6 +3,7 @@
 namespace App\Filament\Platform\Pages;
 
 use App\Domain\Ai\FalModelCatalog;
+use App\Domain\Ai\KlingCatalog;
 use App\Domain\Ai\OperationConfig;
 use App\Domain\Ai\StoryboardTextCaller;
 use App\Domain\Playground\PlaygroundImageRunner;
@@ -48,7 +49,9 @@ class StoryboardPipelineSettings extends Page implements HasForms
     protected static string $view = 'filament.platform.pages.storyboard-pipeline-settings';
 
     private const NAV_LABEL = 'platform.storyboard.pipeline_nav';
+
     private const TITLE = 'platform.storyboard.pipeline_title';
+
     private const SAVED = 'platform.storyboard.pipeline_saved';
 
     // A tiny neutral prompt for the image-step Test (a real generation).
@@ -57,10 +60,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
     // The steps this page controls (in pipeline order).
     private const STEPS = [
         AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS,
-        AiOperation::KEY_STORYBOARD_READ_IDEA,
-        AiOperation::KEY_STORYBOARD_GENRE,
-        AiOperation::KEY_STORYBOARD_CHARACTERS,
-        AiOperation::KEY_STORYBOARD_VISUAL_BIBLE,
+        AiOperation::KEY_STORYBOARD_STORY_DIRECTOR,
         AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN,
         AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
         AiOperation::KEY_STORYBOARD_CLIP,
@@ -73,6 +73,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
         AiModel::PROVIDER_XAI => 'xAI (Grok)',
         AiModel::PROVIDER_ATLASCLOUD => 'AtlasCloud',
         AiModel::PROVIDER_FAL => 'fal.ai',
+        AiModel::PROVIDER_KLING => 'Kling (Kuaishou)',
     ];
 
     // Known model ids per provider — offered in the Model dropdown alongside catalogued models so
@@ -84,6 +85,9 @@ class StoryboardPipelineSettings extends Page implements HasForms
         AiModel::PROVIDER_XAI => ['grok-2-image', 'grok-imagine-image-quality'],
         AiModel::PROVIDER_ATLASCLOUD => ['bytedance/seedance-2.0/reference-to-video', 'bytedance/seedance-2.0/image-to-video'],
         AiModel::PROVIDER_FAL => ['fal-ai/krea-2/turbo', 'fal-ai/flux/dev', 'fal-ai/nano-banana/edit', 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', 'fal-ai/veo3.1/fast/image-to-video'],
+        // Kling's NATIVE api (not via fal). Its image + video lines; the clip step also lists the
+        // video ids via modelOptions(). Suggestions only — Kling publishes no catalog endpoint.
+        AiModel::PROVIDER_KLING => [...KlingCatalog::IMAGE_MODELS, ...KlingCatalog::TRY_ON_MODELS, ...KlingCatalog::VIDEO_MODELS],
     ];
 
     /** @var array<string,mixed> */
@@ -325,10 +329,13 @@ class StoryboardPipelineSettings extends Page implements HasForms
             'frame_count' => '5',
             'aspect_ratio' => '16:9',
             'reference_tags' => '@hero, @location_pool',
-            'clean_story' => '{"clean_story_summary":"A chaotic pool party trailer","main_intent":"entertain","creative_direction":"comedy trailer"}',
+            'reference_descriptions' => '@hero (character): the party host, short dark hair, athletic build',
+            'clean_story' => '{"clean_story_summary":"A chaotic pool party trailer","main_intent":"entertain","creative_direction":"comedy trailer","content_type":"trailer"}',
             'genre_profile' => '{"genre":"comedy trailer","emotional_tone":"fun"}',
             'characters' => '{"characters":[{"name":"Hero","description":"the party host"}]}',
             'visual_bible' => '{"global_style":"realistic cinematic","negative_prompt":"no cartoon"}',
+            'shot_timing' => '[{"frame_number":1,"start_second":0,"end_second":3},{"frame_number":2,"start_second":3,"end_second":6},{"frame_number":3,"start_second":6,"end_second":9},{"frame_number":4,"start_second":9,"end_second":12},{"frame_number":5,"start_second":12,"end_second":15}]',
+            'content_type' => 'trailer',
             // Asset-analysis vars.
             'tag' => 'hero',
             'declared_type' => 'character',
@@ -399,6 +406,14 @@ class StoryboardPipelineSettings extends Page implements HasForms
                 : FalModelCatalog::IMAGE_CATEGORIES;
 
             foreach (app(FalModelCatalog::class)->options($categories) as $id => $label) {
+                $options[$id] ??= $label;
+            }
+        }
+
+        // Kling exposes NO catalog endpoint, so its known ids are offered per step kind (video ids
+        // for the clip step, image + try-on ids elsewhere). Any other id can still be typed.
+        if ($provider === AiModel::PROVIDER_KLING) {
+            foreach (KlingCatalog::options(video: $stepKey === AiOperation::KEY_STORYBOARD_CLIP) as $id => $label) {
                 $options[$id] ??= $label;
             }
         }

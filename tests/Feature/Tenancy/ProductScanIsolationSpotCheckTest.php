@@ -11,6 +11,7 @@ use App\Models\Account;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Site;
+use App\Models\User;
 use App\Support\GlobalModels;
 use App\Support\Tenant;
 use Database\Seeders\AiControlPlaneSeeder;
@@ -34,7 +35,9 @@ class ProductScanIsolationSpotCheckTest extends TestCase
 
     // === CONSTANTS ===
     private const BASE = 'https://openrouter.ai/api/v1';
+
     private const URL_A = 'https://shop-a.example.com/products/widget-a';
+
     private const URL_B = 'https://shop-b.example.com/products/widget-b';
 
     protected function setUp(): void
@@ -238,7 +241,7 @@ class ProductScanIsolationSpotCheckTest extends TestCase
 
         // The allow-list is exactly the documented set — nothing silently escaped.
         $this->assertSame([
-            \App\Models\User::class,
+            User::class,
             'App\\Models\\AiModel',
             'App\\Models\\AiOperation',
             'App\\Models\\Prompt',
@@ -249,6 +252,14 @@ class ProductScanIsolationSpotCheckTest extends TestCase
             'App\\Models\\StoryboardFrame',
             'App\\Models\\StoryboardFrameVersion',
             'App\\Models\\StoryboardStepRun',
+            // Shopify inbound-webhook inbox: rows are created PRE-BIND (no tenant is
+            // known when a webhook arrives) — the SiteRouter exception class. Tenant
+            // data flows only through the bound topic handler, never off this row.
+            'App\\Models\\ShopifyWebhookReceipt',
+            // Shopify install parked at the OAuth callback: PRE-BIND for the same reason
+            // (an install starting on Shopify has no account yet). No tenant data on the
+            // row; consumed exactly once by an authenticated account, then deleted.
+            'App\\Models\\ShopifyPendingInstall',
         ], GlobalModels::ALLOW_LIST);
     }
 
@@ -300,7 +311,8 @@ class ProductScanIsolationSpotCheckTest extends TestCase
     {
         $html = file_get_contents(base_path('tests/Fixtures/Scan/shopify_pdp.html'));
 
-        $this->app->bind(PageSource::class, fn (): PageSource => new class($html) implements PageSource {
+        $this->app->bind(PageSource::class, fn (): PageSource => new class($html) implements PageSource
+        {
             public function __construct(private readonly string $html) {}
 
             public function fetch(string $url): FetchResult

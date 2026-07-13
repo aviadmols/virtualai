@@ -2,6 +2,8 @@
 
 namespace App\Domain\Scan;
 
+use App\Domain\Products\PersistProduct;
+use App\Domain\Products\ProductOrigin;
 use App\Domain\Scan\Fetch\FetchException;
 use App\Domain\Scan\Map\MappedProduct;
 use App\Domain\Scan\Preview\PreviewSnapshotStore;
@@ -9,7 +11,6 @@ use App\Jobs\TenantAwareJob;
 use App\Models\Product;
 use App\Models\Site;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
-use Illuminate\Support\Facades\DB;
 
 /**
  * ScanProductJob — orchestrate one PDP scan, tenant-bound.
@@ -82,45 +83,17 @@ final class ScanProductJob extends TenantAwareJob implements ShouldBeUnique
     }
 
     /**
-     * Persist the scanned product as DRAFT (never auto-approved) + its variants.
-     * Wrapped in a transaction so a half-written scan never persists. Re-scan of
-     * the same url updates the existing DRAFT/FAILED row; a CONFIRMED row is left
-     * untouched (a re-scan over a confirmed product is an explicit, diffed action
-     * handled above this job).
+     * Persist the scanned product as DRAFT (never auto-approved) + its variants,
+     * through the SHARED PersistProduct action (the same writer the Shopify sync
+     * uses). Re-scan of the same url refreshes the existing DRAFT/FAILED row; a
+     * CONFIRMED row is left untouched, and a variant that vanished from the page is
+     * ARCHIVED rather than deleted — so `generations.product_variant_id` survives.
      */
     private function persist(Site $site, MappedProduct $mapped): Product
     {
-        return DB::transaction(function () use ($site, $mapped): Product {
-            $product = $this->existingScannable($site)
-                ?? new Product([
-                    'site_id' => $site->getKey(),
-                    'source_url' => $this->url,
-                    'source_url_hash' => sha1($this->url),
-                ]);
-
-            $product->fill($mapped->toProductAttributes());
-            $product->source_url = $this->url;
-            $product->source_url_hash = sha1($this->url);
-            $product->site_id = $site->getKey();
-            $product->status = Product::STATUS_DRAFT; // a scan NEVER auto-approves
-            $product->save();
-
-            // Replace the draft's variants with the freshly mapped set.
-            $product->variants()->delete();
-
-            foreach ($mapped->variantRows as $row) {
-                $product->variants()->create([
-                    'options' => $row['options'],
-                    'image_url' => $row['image_url'] ?? null,
-                    'sku' => $row['sku'] ?? null,
-                    'available' => (bool) ($row['available'] ?? true),
-                    'price_minor' => $row['price_minor'] ?? null,
-                    'confidence' => $row['confidence'] ?? null,
-                ]);
-            }
-
-            return $product;
-        });
+        return app(PersistProduct::class)
+            ->persist($site, $mapped, ProductOrigin::scan($this->url))
+            ->product;
     }
 
     /** Persist a FAILED product carrying the merchant-facing reason + manual path. */

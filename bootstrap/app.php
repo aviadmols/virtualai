@@ -6,6 +6,7 @@ use App\Http\Middleware\WidgetRateLimit;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -14,14 +15,19 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
         then: function () {
             // Server-to-server webhooks (no session, no CSRF — signature-verified).
-            Illuminate\Support\Facades\Route::middleware('throttle:webhooks')
+            Route::middleware('throttle:webhooks')
                 ->group(__DIR__.'/../routes/webhooks.php');
+
+            // The Shopify app surface: the server-to-server webhook intake (HMAC-verified,
+            // no CSRF) + the OAuth/install browser redirects (the `web` stack, applied
+            // inside the file). Paths and names are consts in routes/shopify.php.
+            Route::group([], __DIR__.'/../routes/shopify.php');
 
             // The signed widget API (Phase 7a). Stateless: no session, no CSRF — the auth
             // is site_key + Origin allow-list (+ optional HMAC), resolved by ResolveWidgetSite
             // which binds the tenant for the request lifecycle. WidgetRateLimit applies the
             // per-account/per-site request caps. Every route lives under /widget/v1.
-            Illuminate\Support\Facades\Route::prefix(config('widget.prefix'))
+            Route::prefix(config('widget.prefix'))
                 ->middleware([ResolveWidgetSite::class, WidgetRateLimit::class])
                 ->group(__DIR__.'/../routes/widget.php');
         },

@@ -19,11 +19,14 @@ class PredeployCheck extends Command
     protected $description = 'Fail-closed env/config guard run before a deploy takes traffic.';
 
     private const ENV_PRODUCTION = 'production';
+
     private const ENV_LOCAL = 'local';
+
     private const ENV_TESTING = 'testing';
 
     // Local-driver disks that live inside the container filesystem (wiped on every deploy).
     private const DRIVER_LOCAL = 'local';
+
     private const EPHEMERAL_DISKS = ['local', 'public'];
 
     // Secrets/URLs that must be present in EVERY environment.
@@ -46,7 +49,17 @@ class PredeployCheck extends Command
     ];
 
     private const MEDIA_DISK_CONFIG = 'trayon.media.disk';
+
     private const PROBE_PATH = 'predeploy/.probe';
+
+    // The Shopify OAuth callback is a CROSS-SITE top-level GET back from Shopify, and the
+    // install's CSRF wall (the state nonce) lives in the session — so the session cookie MUST
+    // survive that navigation. 'strict' drops it and EVERY install dies with invalid_state (an
+    // outage, never a leak). A well-meaning hardening pass is exactly how that happens, so the
+    // guard pins it here.
+    private const SESSION_SAME_SITE_CONFIG = 'session.same_site';
+
+    private const SESSION_SAME_SITE_ALLOWED = ['lax', 'none'];
 
     public function handle(): int
     {
@@ -92,7 +105,19 @@ class PredeployCheck extends Command
             }
         }
 
-        // 4. Media disk must be configured (and reachable unless skipped).
+        // 4. The Shopify install depends on the session cookie surviving Shopify's cross-site
+        //    redirect back to our callback (see SESSION_SAME_SITE_ALLOWED).
+        $sameSite = strtolower((string) config(self::SESSION_SAME_SITE_CONFIG));
+
+        if (! in_array($sameSite, self::SESSION_SAME_SITE_ALLOWED, true)) {
+            $failures[] = sprintf(
+                "SESSION_SAME_SITE='%s' breaks the Shopify OAuth callback (the state nonce lives in the session; the cookie must survive Shopify's cross-site redirect). Use one of: %s.",
+                $sameSite,
+                implode(', ', self::SESSION_SAME_SITE_ALLOWED),
+            );
+        }
+
+        // 5. Media disk must be configured (and reachable unless skipped).
         $diskName = (string) config(self::MEDIA_DISK_CONFIG);
         if (blank($diskName)) {
             $failures[] = 'media disk is not configured (config trayon.media.disk).';

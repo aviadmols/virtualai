@@ -15,15 +15,27 @@ use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 /**
- * The storyboard pipeline runs the five text steps in order, stores each output, materialises the
- * frames from the scene breakdown, logs every step, and never charges. OpenRouter is faked.
+ * The storyboard pipeline runs TWO planning calls (Story Director → Scene Breakdown), splits the
+ * director's sections into the pipeline bags, stamps the frames with the LOCKED shot timing (never
+ * the breakdown's own numbers), composes each frame's image_prompt deterministically from the
+ * locked bibles, logs every step, and never charges. OpenRouter is faked.
  */
 class StoryboardPipelineTest extends TestCase
 {
     use RefreshDatabase;
 
     private const OR_BASE = 'https://openrouter.ai/api/v1';
+
     private const CHAT = self::OR_BASE.'/chat/completions';
+
+    // The Story Director's VARIED pacing (2+2+2+4+5 = 15s) — the lock under test.
+    private const LOCKED_TIMING = [
+        ['frame_number' => 1, 'start_second' => 0, 'end_second' => 2],
+        ['frame_number' => 2, 'start_second' => 2, 'end_second' => 4],
+        ['frame_number' => 3, 'start_second' => 4, 'end_second' => 6],
+        ['frame_number' => 4, 'start_second' => 6, 'end_second' => 10],
+        ['frame_number' => 5, 'start_second' => 10, 'end_second' => 15],
+    ];
 
     protected function setUp(): void
     {
@@ -45,30 +57,62 @@ class StoryboardPipelineTest extends TestCase
         ];
     }
 
-    private function fakeHappyPath(int $frameCount): void
+    /** @return array<string,mixed> the Story Director's single locked-plan output */
+    private function directorOutput(int $frameCount): array
+    {
+        return [
+            'story' => [
+                'clean_story_summary' => 'A pool party rescue',
+                'main_intent' => 'entertain',
+                'creative_direction' => 'family adventure',
+                'content_type' => StoryboardProject::CONTENT_COMPLETE,
+            ],
+            'genre_profile' => ['genre' => 'Family Adventure', 'emotional_tone' => 'warm', 'negative_rules' => ['no shaky-cam blur']],
+            'characters' => ['characters' => [[
+                'name' => 'Matan',
+                'tag' => 'image1',
+                'description' => 'the older brother',
+                'identity_lock' => 'short dark hair, athletic build.',
+                'story_wardrobe' => 'purple and yellow jersey number 6, black shorts, white sneakers',
+                'signature_prop' => 'a red whistle',
+            ]]],
+            'visual_bible' => [
+                'global_style' => 'realistic cinematic film still.',
+                'lighting' => 'warm golden hour',
+                'color_palette' => 'turquoise water, golden light',
+                'negative_prompt' => 'blurry, watermark',
+            ],
+            'shot_timing' => array_slice(self::LOCKED_TIMING, 0, $frameCount),
+        ];
+    }
+
+    /** @return array<int,array<string,mixed>> scene-only frames CLAIMING wrong uniform timing */
+    private function breakdownFrames(int $frameCount): array
     {
         $frames = [];
         for ($i = 1; $i <= $frameCount; $i++) {
             $frames[] = [
                 'frame_number' => $i,
-                'start_second' => ($i - 1) * 3,
-                'end_second' => $i * 3,
                 'description' => "Frame {$i} description",
                 'motion' => "slow push-in {$i}",
-                'image_prompt' => "Cinematic frame {$i}, bright daylight, @location_pool",
+                'scene_prompt' => "Scene beat {$i}: Matan runs toward the pool at @location_pool",
+                'characters' => ['Matan'],
                 'reference_tags' => ['@location_pool'],
+                'negative_prompt' => 'cartoon, blurry',
             ];
         }
 
-        Http::fake([self::CHAT => Http::sequence()
-            ->push($this->orResponse(['clean_story_summary' => 'A pool party trailer', 'main_intent' => 'entertain', 'creative_direction' => 'comedy trailer']))
-            ->push($this->orResponse(['genre' => 'comedy trailer', 'emotional_tone' => 'fun']))
-            ->push($this->orResponse(['characters' => [['name' => 'Host', 'description' => 'the party host']]]))
-            ->push($this->orResponse(['global_style' => 'realistic cinematic', 'negative_prompt' => 'no cartoon']))
-            ->push($this->orResponse(['frames' => $frames]))]);
+        return $frames;
     }
 
-    public function test_the_pipeline_runs_every_step_materialises_frames_and_logs_them(): void
+    private function fakeHappyPath(int $frameCount): void
+    {
+        Http::fake([self::CHAT => Http::sequence()
+            ->push($this->orResponse($this->directorOutput($frameCount)))
+            ->push($this->orResponse(['frames' => $this->breakdownFrames($frameCount)]))]);
+    }
+
+    public function test_the_pipeline_runs_two_steps_materialises_frames_and_logs_them(): void
     {
         $project = StoryboardProject::factory()->create(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
         StoryboardAsset::factory()->create([
@@ -84,23 +128,23 @@ class StoryboardPipelineTest extends TestCase
         $project->refresh();
         $this->assertSame(StoryboardProject::STATUS_READY, $project->status);
 
-        // Each single-object step landed under pipeline[...].
+        // The director's single output was split into the known bags + the locked timing.
         $this->assertArrayHasKey(StoryboardProject::PIPE_STORY, $project->pipeline);
         $this->assertArrayHasKey(StoryboardProject::PIPE_GENRE, $project->pipeline);
         $this->assertArrayHasKey(StoryboardProject::PIPE_CHARACTERS, $project->pipeline);
         $this->assertArrayHasKey(StoryboardProject::PIPE_VISUAL_BIBLE, $project->pipeline);
+        $this->assertSame(self::LOCKED_TIMING, $project->pipeline[StoryboardProject::PIPE_TIMING]);
 
         // The scene breakdown became frames.
         $this->assertSame(5, $project->frames()->count());
         $first = $project->frames()->first();
         $this->assertSame(1, $first->frame_number);
-        $this->assertStringContainsString('Cinematic frame 1', (string) $first->image_prompt);
         $this->assertSame('slow push-in 1', (string) $first->motion_prompt);
         $this->assertSame(StoryboardFrame::STATUS_PENDING, $first->status);
 
-        // Every step is logged succeeded with a model + duration.
-        $this->assertSame(5, $project->stepRuns()->count());
-        $this->assertSame(5, $project->stepRuns()->where('status', StoryboardStepRun::STATUS_SUCCEEDED)->count());
+        // TWO planning calls, both logged succeeded with a model + duration.
+        $this->assertSame(2, $project->stepRuns()->count());
+        $this->assertSame(2, $project->stepRuns()->where('status', StoryboardStepRun::STATUS_SUCCEEDED)->count());
         $this->assertNotNull($project->stepRuns()->first()->duration_ms);
 
         // The VISION ground truth of every @tag reaches the planning prompts.
@@ -113,11 +157,76 @@ class StoryboardPipelineTest extends TestCase
         $this->assertDatabaseCount('credit_ledger', 0);
     }
 
+    public function test_frame_timing_comes_from_the_locked_plan_not_the_breakdown(): void
+    {
+        $project = StoryboardProject::factory()->create(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
+        $this->fakeHappyPath(5);
+
+        app(StoryboardPipeline::class)->run($project);
+
+        // The breakdown carried NO timing at all — every frame is stamped from the LOCKED
+        // varied plan (2,2,2,4,5), not uniform 3s slices.
+        $timings = $project->frames()->get()->map(
+            static fn (StoryboardFrame $f): array => [$f->start_second, $f->end_second],
+        )->all();
+
+        $this->assertSame([[0, 2], [2, 4], [4, 6], [6, 10], [10, 15]], $timings);
+    }
+
+    public function test_image_prompts_are_composed_deterministically_from_the_locked_bibles(): void
+    {
+        $project = StoryboardProject::factory()->create(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
+        $this->fakeHappyPath(5);
+
+        app(StoryboardPipeline::class)->run($project);
+
+        $frames = $project->frames()->get();
+
+        // Every frame: its own scene beat + the IDENTICAL locked character + style blocks.
+        $characterBlock = null;
+        foreach ($frames as $frame) {
+            $prompt = (string) $frame->image_prompt;
+            $this->assertStringContainsString("Scene beat {$frame->frame_number}", $prompt);
+            // Identity is anchored to the reference tag — not a re-invented description.
+            $this->assertStringContainsString('exact person in @image1', $prompt);
+            $this->assertStringContainsString('purple and yellow jersey number 6', $prompt);
+            $this->assertStringContainsString('realistic cinematic film still', $prompt);
+
+            // The character+style tail (everything after the scene beat) is byte-identical.
+            $tail = (string) strstr($prompt, 'Matan is the exact person');
+            $characterBlock ??= $tail;
+            $this->assertSame($characterBlock, $tail);
+        }
+
+        // The frame's negative merges its own terms with the visual bible's (deduped).
+        $this->assertSame('cartoon, blurry, watermark', (string) $frames->first()->negative_prompt);
+    }
+
+    public function test_unusable_proposed_timing_falls_back_to_uniform_slices(): void
+    {
+        $project = StoryboardProject::factory()->create(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
+
+        $director = $this->directorOutput(5);
+        $director['shot_timing'] = [['frame_number' => 1, 'start_second' => 0, 'end_second' => 15]]; // wrong count
+
+        Http::fake([self::CHAT => Http::sequence()
+            ->push($this->orResponse($director))
+            ->push($this->orResponse(['frames' => $this->breakdownFrames(5)]))]);
+
+        app(StoryboardPipeline::class)->run($project);
+
+        $timings = $project->frames()->get()->map(
+            static fn (StoryboardFrame $f): array => [$f->start_second, $f->end_second],
+        )->all();
+
+        $this->assertSame([[0, 3], [3, 6], [6, 9], [9, 12], [12, 15]], $timings);
+    }
+
     public function test_a_failed_step_fails_the_project_and_materialises_no_frames(): void
     {
         $project = StoryboardProject::factory()->create();
 
-        // Every call errors -> the first step (read_idea) fails.
+        // Every call errors -> the first step (story director) fails.
         Http::fake([self::CHAT => Http::response(['error' => ['message' => 'bad request']], 400)]);
 
         app(StoryboardPipeline::class)->run($project);

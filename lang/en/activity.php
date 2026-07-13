@@ -39,6 +39,24 @@ return [
         'generation_failed' => 'Generation failed',
         'generation_cancelled' => 'Generation cancelled',
         'generation_status_changed' => 'Generation status changed',
+
+        // Shopify app + product sync.
+        'shopify_installed' => 'Shopify store connected',
+        'shopify_uninstalled' => 'Shopify store disconnected',
+        'shopify_sync_started' => 'Product import started',
+        'shopify_sync_completed' => 'Product import finished',
+        'shopify_sync_failed' => 'Product import failed',
+        'shopify_sync_truncated' => 'Product import stopped early (partial catalog)',
+        'shopify_product_imported' => 'Product imported from Shopify',
+        'shopify_product_updated' => 'Product updated from Shopify',
+        'shopify_product_archived' => 'Product archived (removed from Shopify)',
+
+        // Product Image Studio (bulk AI image generation + review).
+        'product_image_batch_started' => 'Image batch started',
+        'product_image_batch_completed' => 'Image batch finished',
+        'product_asset_status_changed' => 'Product image status changed',
+        'product_asset_approved' => 'Product image approved',
+        'product_asset_rejected' => 'Product image rejected',
     ],
 
     // Per-end-user activity timeline on the merchant lead card (WS3).

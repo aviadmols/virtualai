@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\StoryboardProjectFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,24 +16,42 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class StoryboardProject extends Model
 {
-    /** @use HasFactory<\Database\Factories\StoryboardProjectFactory> */
+    /** @use HasFactory<StoryboardProjectFactory> */
     use HasFactory;
 
     // === CONSTANTS ===
     public const STATUS_DRAFT = 'draft';
+
     public const STATUS_RUNNING = 'running';
+
     public const STATUS_READY = 'ready';
+
     public const STATUS_FAILED = 'failed';
 
-    // Keys under `pipeline` (each text step writes its structured output here).
+    // Keys under `pipeline`. The Story Director step writes the first five in ONE call
+    // (its sections are split into these bags so every downstream reader keeps working);
+    // PIPE_TIMING holds the LOCKED per-frame shot timing the scene breakdown must obey.
     public const PIPE_STORY = 'story';
+
     public const PIPE_GENRE = 'genre';
+
     public const PIPE_CHARACTERS = 'characters';
+
     public const PIPE_VISUAL_BIBLE = 'visual_bible';
+
+    public const PIPE_TIMING = 'shot_timing';
+
+    // Story content types (decided by the Story Director from the brief): a complete story
+    // must RESOLVE in the final frame; a trailer may end on a deliberate cliffhanger.
+    public const CONTENT_COMPLETE = 'complete_micro_story';
+
+    public const CONTENT_TRAILER = 'trailer';
 
     // Combined-video (all frames stitched into one MP4) lifecycle.
     public const VIDEO_GENERATING = 'generating';
+
     public const VIDEO_READY = 'ready';
+
     public const VIDEO_FAILED = 'failed';
 
     protected $fillable = [

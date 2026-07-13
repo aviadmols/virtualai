@@ -1,0 +1,82 @@
+/* ============================================================================
+ * Shopify store (Phase 2) — the merchant connect/disconnect screen: the store
+ * facts list (status / domain / connected-on / API version / granted scopes),
+ * the scope + topic chips, and the empty-state CTA slot. Badges, empty states
+ * and buttons are the shared components; only the facts grid + chips live here.
+ * Logical properties only (RTL-safe). No inline CSS, no raw values.
+ *
+ * TOKENS: --toa-surface-alt --toa-border --toa-radius-field --to-ink
+ *   --to-ink-muted --to-space-1..5 --toa-type-body-size --toa-type-caption-size
+ *   --to-fw-medium --to-fw-semibold --to-track-label --to-bw-input
+ * The identifier (mono) face mirrors embed-code.css — the one identifier stack.
+ * ==========================================================================*/
+
+.to-shopify__facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--to-space-5);
+    margin: 0;
+}
+
+.to-shopify__fact {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-1);
+}
+
+/* The scope / topic lists read better across the full row. */
+.to-shopify__fact--wide {
+    grid-column: 1 / -1;
+}
+
+.to-shopify__label {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    letter-spacing: var(--to-track-label);
+    text-transform: uppercase;
+}
+
+.to-shopify__value {
+    color: var(--to-ink);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-semibold);
+    margin: 0;
+}
+
+/* A store domain / API version is an identifier — never re-typed, always scanned. */
+.to-shopify__value--mono {
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    font-weight: var(--to-fw-medium);
+}
+
+.to-shopify__muted {
+    color: var(--to-ink-muted);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-shopify__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--to-space-2);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.to-shopify__chip {
+    background: var(--toa-surface-alt);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-field);
+    color: var(--to-ink);
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    padding-block: var(--to-space-1);
+    padding-inline: var(--to-space-2);
+}
+
+/* The connect button inside the disconnected empty state. */
+.to-shopify__cta {
+    margin-block-start: var(--to-space-4);
+}

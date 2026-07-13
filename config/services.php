@@ -94,6 +94,33 @@ return [
         'timeout' => (int) env('FAL_TIMEOUT', 80),
     ],
 
+    // Kling (Kuaishou) — images, VIRTUAL TRY-ON (kolors-virtual-try-on) and video through one async
+    // task API. TWO credentials are accepted (https://kling.ai/dev/api-key) and both work:
+    //   api_key                — the static key today's console issues ('api-key-kling-…'), sent as
+    //                            the bearer verbatim. PREFERRED: set this one.
+    //   access_key + secret_key — the legacy pair; a short-lived HS256 JWT is signed per request
+    //                            with the secret (see KlingJwt). Used only when api_key is unset.
+    // All are server-side only. base_url is the region host — api-singapore is the INTERNATIONAL
+    // one (api-beijing serves the China account); a mismatched region rejects the credential.
+    // Kling returns no inline USD cost (flat-rate) — the admin per-image/per-clip price applies.
+    'kling' => [
+        'api_key' => env('KLING_API_KEY'),
+        'access_key' => env('KLING_ACCESS_KEY'),
+        'secret_key' => env('KLING_SECRET_KEY'),
+        'base_url' => env('KLING_BASE_URL', 'https://api-singapore.klingai.com'),
+        'timeout' => (int) env('KLING_TIMEOUT', 80),
+    ],
+
+    // Shopify — the app-level OAuth credentials (client id/secret from the Partner
+    // Dashboard). Platform-wide: per-store offline tokens live encrypted on each
+    // ShopifyConnection, never here. Secret is server-side only (webhook HMAC + token
+    // exchange); the DB-override lives in PlatformSettings (super-admin rotatable).
+    'shopify' => [
+        'client_id' => env('SHOPIFY_CLIENT_ID'),
+        'client_secret' => env('SHOPIFY_CLIENT_SECRET'),
+        'timeout' => (int) env('SHOPIFY_TIMEOUT', 30),
+    ],
+
     // PayPlus — the LOCKED credit-purchase rail for v1 (behind CreditPaymentProvider).
     // secret_key is BOTH the request auth header and the webhook-signature HMAC key (the
     // `hash` header = base64(HMAC-SHA256(rawBody, secret_key))). webhook_secret is kept

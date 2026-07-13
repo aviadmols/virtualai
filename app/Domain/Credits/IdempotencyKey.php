@@ -20,10 +20,17 @@ final class IdempotencyKey
 {
     // === CONSTANTS ===
     private const PREFIX_GENERATION = 'generation';
+
     private const PREFIX_BANNER = 'banner';
+
+    private const PREFIX_PRODUCT_ASSET = 'product_asset';
+
     private const PREFIX_REFUND = 'refund';
+
     private const PREFIX_GRANT = 'grant';
+
     private const PREFIX_ADJUSTMENT = 'adjustment';
+
     private const PREFIX_PURCHASE = 'purchase';
 
     // The opening-grant slug — one opening grant per account, ever.
@@ -70,6 +77,54 @@ final class IdempotencyKey
             $accountId,
             $siteId,
             $bannerId,
+            $clientRequestId,
+        ]);
+    }
+
+    /**
+     * The charge key for ONE bulk product-image transform (Product Image Studio).
+     *
+     * The identity of a product image is EVERY input that decides what the AI produces:
+     * the product, the exact SOURCE photo, the operation, the prompt VERSION, the model and
+     * its params. Hashing them means the same request always maps to the same asset — so a
+     * double-clicked batch (or a re-run of the same selection) can neither regenerate nor
+     * re-charge an image that already exists.
+     *
+     * $clientRequestId is the escape hatch, and it is deliberate: a normal batch passes the
+     * CONSTANT ProductAsset::REQUEST_BATCH (fully deduped), while an explicit "Regenerate"
+     * passes a fresh id, which VARIES the key on purpose and mints a new, separately-charged
+     * asset. account_id stays the first segment (the ledger's unique index depends on it).
+     *
+     * @param  array<string,mixed>  $modelParams  the resolved sampler bag (seed/temperature/...)
+     */
+    public static function forProductAsset(
+        int $accountId,
+        int $siteId,
+        int $productId,
+        string $sourceImageHash,
+        string $operationKey,
+        int $promptVersion,
+        string $modelId,
+        array $modelParams,
+        string $clientRequestId,
+    ): string {
+        $params = $modelParams;
+        ksort($params);
+
+        $fingerprint = sha1((string) json_encode([
+            'product_id' => $productId,
+            'source_image_hash' => $sourceImageHash,
+            'operation_key' => $operationKey,
+            'prompt_version' => $promptVersion,
+            'model_id' => $modelId,
+            'model_params' => $params,
+        ]));
+
+        return implode(':', [
+            self::PREFIX_PRODUCT_ASSET,
+            $accountId,
+            $siteId,
+            $fingerprint,
             $clientRequestId,
         ]);
     }

@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
+use App\Domain\Media\PurgeSiteMediaJob;
 use App\Domain\Tenancy\MerchantSiteTenancy;
 use App\Models\Concerns\BelongsToAccount;
 use Database\Factories\SiteFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 /**
@@ -39,6 +41,18 @@ class Site extends Model
     // The Filament merchant-panel tenant slug attribute/route field.
     public const TENANT_SLUG_FIELD = 'slug';
 
+    // Which storefront platform the site runs on. 'custom' = the scripted widget
+    // install (PDP scan + DOM add-to-cart); 'shopify' = connected via the Shopify app
+    // (Admin-API product data, ajax add-to-cart, Shopify credit-purchase rail).
+    public const PLATFORM_CUSTOM = 'custom';
+
+    public const PLATFORM_SHOPIFY = 'shopify';
+
+    public const PLATFORMS = [
+        self::PLATFORM_CUSTOM,
+        self::PLATFORM_SHOPIFY,
+    ];
+
     public const DEFAULT_FREE_GENERATIONS_BEFORE_SIGNUP = 2;
 
     public const DEFAULT_RETENTION_DAYS = 30;
@@ -53,6 +67,7 @@ class Site extends Model
     protected $fillable = [
         'name',
         'domain',
+        'platform',
         'product_category',
         'allowed_origins',
         'site_key',
@@ -135,13 +150,25 @@ class Site extends Model
         // account_id + site_id — never inferred on the worker. Queued on the media queue so a
         // large bucket delete never blocks the delete request.
         static::deleted(function (Site $site): void {
-            \App\Domain\Media\PurgeSiteMediaJob::dispatch((int) $site->account_id, (int) $site->getKey());
+            PurgeSiteMediaJob::dispatch((int) $site->account_id, (int) $site->getKey());
         });
     }
 
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    /** The Shopify store this site is connected to (1:1), or null on a custom site. */
+    public function shopifyConnection(): HasOne
+    {
+        return $this->hasOne(ShopifyConnection::class);
+    }
+
+    /** True when this site's storefront is a connected Shopify store. */
+    public function isShopify(): bool
+    {
+        return $this->platform === self::PLATFORM_SHOPIFY;
     }
 
     /**

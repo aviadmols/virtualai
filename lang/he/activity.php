@@ -39,6 +39,24 @@ return [
         'generation_failed' => 'יצירה נכשלה',
         'generation_cancelled' => 'יצירה בוטלה',
         'generation_status_changed' => 'סטטוס היצירה השתנה',
+
+        // אפליקציית Shopify וסנכרון מוצרים.
+        'shopify_installed' => 'חנות Shopify חוברה',
+        'shopify_uninstalled' => 'חנות Shopify נותקה',
+        'shopify_sync_started' => 'ייבוא מוצרים התחיל',
+        'shopify_sync_completed' => 'ייבוא מוצרים הסתיים',
+        'shopify_sync_failed' => 'ייבוא מוצרים נכשל',
+        'shopify_sync_truncated' => 'ייבוא המוצרים נעצר מוקדם (קטלוג חלקי)',
+        'shopify_product_imported' => 'מוצר יובא מ-Shopify',
+        'shopify_product_updated' => 'מוצר עודכן מ-Shopify',
+        'shopify_product_archived' => 'מוצר הועבר לארכיון (הוסר מ-Shopify)',
+
+        // סטודיו תמונות המוצר (יצירת תמונות AI בכמות + סקירה).
+        'product_image_batch_started' => 'אצוות תמונות התחילה',
+        'product_image_batch_completed' => 'אצוות תמונות הסתיימה',
+        'product_asset_status_changed' => 'סטטוס תמונת המוצר השתנה',
+        'product_asset_approved' => 'תמונת מוצר אושרה',
+        'product_asset_rejected' => 'תמונת מוצר נדחתה',
     ],
 
     // ציר פעילות פר-משתמש-קצה בכרטיס הליד של הסוחר (WS3).

@@ -109,12 +109,12 @@ class StoryboardFoundationTest extends TestCase
     public function test_reseeding_clears_stale_default_and_fallback_model_flags(): void
     {
         // Simulate a pre-upgrade install: the superseded models still carry the flags.
-        AiModel::create(['operation_key' => AiOperation::KEY_STORYBOARD_READ_IDEA, 'provider' => AiModel::PROVIDER_OPENROUTER, 'model_id' => 'google/gemini-2.5-flash', 'label' => 'Old default', 'is_default' => true, 'is_active' => true]);
-        AiModel::create(['operation_key' => AiOperation::KEY_STORYBOARD_READ_IDEA, 'provider' => AiModel::PROVIDER_OPENROUTER, 'model_id' => 'openai/gpt-4o-mini', 'label' => 'Old fallback', 'is_fallback' => true, 'is_active' => true]);
+        AiModel::create(['operation_key' => AiOperation::KEY_STORYBOARD_STORY_DIRECTOR, 'provider' => AiModel::PROVIDER_OPENROUTER, 'model_id' => 'google/gemini-2.5-flash', 'label' => 'Old default', 'is_default' => true, 'is_active' => true]);
+        AiModel::create(['operation_key' => AiOperation::KEY_STORYBOARD_STORY_DIRECTOR, 'provider' => AiModel::PROVIDER_OPENROUTER, 'model_id' => 'openai/gpt-4o-mini', 'label' => 'Old fallback', 'is_fallback' => true, 'is_active' => true]);
 
         $this->seed(StoryboardPipelineSeeder::class);
 
-        $models = AiModel::query()->where('operation_key', AiOperation::KEY_STORYBOARD_READ_IDEA)->get();
+        $models = AiModel::query()->where('operation_key', AiOperation::KEY_STORYBOARD_STORY_DIRECTOR)->get();
         $this->assertSame(['google/gemini-3.1-pro-preview'], $models->where('is_default', true)->pluck('model_id')->all());
         $this->assertSame(['google/gemini-3.5-flash'], $models->where('is_fallback', true)->pluck('model_id')->all());
         // The superseded rows survive as plain catalog entries (still selectable, never auto-picked).
@@ -126,16 +126,27 @@ class StoryboardFoundationTest extends TestCase
         $this->seed(StoryboardPipelineSeeder::class);
         $resolver = app(AiOperationResolver::class);
 
-        // A text step carries a strict JSON schema; the image step does not.
-        $readIdea = $resolver->for(AiOperation::KEY_STORYBOARD_READ_IDEA);
-        $this->assertIsArray($readIdea->inputSchema);
-        $this->assertSame('object', $readIdea->inputSchema['type']);
-        $this->assertStringContainsString('{{story_idea}}', $readIdea->userPrompt);
+        // A text step carries a strict JSON schema; the image step does not. The Story Director's
+        // ONE output holds every planning section including the LOCKED shot timing.
+        $director = $resolver->for(AiOperation::KEY_STORYBOARD_STORY_DIRECTOR);
+        $this->assertIsArray($director->inputSchema);
+        $this->assertSame('object', $director->inputSchema['type']);
+        $this->assertStringContainsString('{{story_idea}}', $director->userPrompt);
+        foreach (['story', 'genre_profile', 'characters', 'visual_bible', 'shot_timing'] as $section) {
+            $this->assertArrayHasKey($section, $director->inputSchema['properties']);
+        }
 
         $scene = $resolver->for(AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN);
         $this->assertArrayHasKey('frames', $scene->inputSchema['properties']);
-        // Each frame plans its own motion phrase (feeds the video clip step's {{motion}}).
-        $this->assertArrayHasKey('motion', $scene->inputSchema['properties']['frames']['items']['properties']);
+        // Each frame plans its own motion phrase (feeds the video clip step's {{motion}}) and a
+        // SCENE-ONLY prompt (the composer appends the locked character/style blocks in code).
+        $frameProps = $scene->inputSchema['properties']['frames']['items']['properties'];
+        $this->assertArrayHasKey('motion', $frameProps);
+        $this->assertArrayHasKey('scene_prompt', $frameProps);
+        $this->assertArrayNotHasKey('start_second', $frameProps);
+        // The breakdown receives the LOCKED plan as read-only data.
+        $this->assertStringContainsString('{{shot_timing}}', $scene->userPrompt);
+        $this->assertStringContainsString('{{content_type}}', $scene->userPrompt);
 
         $image = $resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
         $this->assertNull($image->inputSchema);

@@ -1,0 +1,46 @@
+# === CONSTANTS ===
+# The Shopify CLI app config for Tray On. `client_id` is filled from the Partner
+# Dashboard app (it is the PUBLIC key — the secret NEVER lives in this file; it goes
+# to SHOPIFY_CLIENT_SECRET / the Super-Admin Settings page).
+#
+# Every URL below is derived from ONE host — the deployed app URL (APP_URL). Keep the
+# paths in lockstep with routes/shopify.php:
+#   /shopify/install          install_new_shop  (Shopify sends the merchant here)
+#   /shopify/oauth/callback   the shared OAuth callback (both flows)
+#
+# Scopes mirror config/shopify.php (docs/shopify/DECISIONS.md §3) — minimal by design.
+
+name = "Tray On"
+handle = "tray-on"
+client_id = ""
+application_url = "https://REPLACE_WITH_APP_HOST"
+embedded = true
+
+[access_scopes]
+scopes = "read_products,write_products,read_orders"
+
+[auth]
+redirect_urls = [
+  "https://REPLACE_WITH_APP_HOST/shopify/oauth/callback",
+]
+
+[webhooks]
+api_version = "2026-04"
+
+  # The three MANDATORY compliance webhooks. Registered HERE (app config), not via the
+  # API, and answered by the same signed intake endpoint from day one.
+  [[webhooks.subscriptions]]
+  topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "https://REPLACE_WITH_APP_HOST/shopify/webhooks"
+
+  # The product/order/uninstall topics are registered per store after install
+  # (RegisterShopifyWebhooksJob) so they always point at the live app host.
+
+[app_proxy]
+# Reserved: Phase 6 may serve the attribution beacon through a proxy subpath.
+
+[build]
+include_config_on_deploy = true
+
+[pos]
+embedded = false

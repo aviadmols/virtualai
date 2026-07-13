@@ -67,4 +67,28 @@ class PredeployCheckTest extends TestCase
             ->doesntExpectOutputToContain('WARNING')
             ->assertExitCode(0);
     }
+
+    public function test_a_strict_same_site_cookie_is_refused_because_it_kills_every_shopify_install(): void
+    {
+        // The Shopify OAuth callback is a cross-site top-level redirect and the install's CSRF
+        // wall (the state nonce) lives in the session: 'strict' silently drops the cookie and
+        // every install 403s with invalid_state. The deploy must fail LOUDLY instead.
+        config()->set('app.env', 'staging');
+        config()->set('trayon.media.disk', 's3');
+        config()->set('session.same_site', 'strict');
+
+        $this->artisan('trayon:predeploy-check', ['--skip-disk' => true])
+            ->expectsOutputToContain('SESSION_SAME_SITE')
+            ->assertExitCode(1);
+    }
+
+    public function test_the_default_lax_cookie_passes(): void
+    {
+        config()->set('app.env', 'staging');
+        config()->set('trayon.media.disk', 's3');
+        config()->set('session.same_site', 'lax');
+
+        $this->artisan('trayon:predeploy-check', ['--skip-disk' => true])
+            ->assertExitCode(0);
+    }
 }

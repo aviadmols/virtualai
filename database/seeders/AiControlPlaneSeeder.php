@@ -28,13 +28,16 @@ class AiControlPlaneSeeder extends Seeder
 {
     // === CONSTANTS (DB seed DEFAULTS — admin-editable, never read by a service) ===
     private const SCAN_DEFAULT_MODEL = 'google/gemini-2.5-flash';
+
     private const SCAN_FALLBACK_MODEL = 'openai/gpt-4o-mini';
 
     private const TRYON_DEFAULT_MODEL = 'google/gemini-3.1-flash-image';
+
     private const TRYON_FALLBACK_MODEL = 'google/gemini-2.5-flash-image';
 
     // Banner generation reuses the strong Gemini image line (same catalog, image output).
     private const BANNER_DEFAULT_MODEL = 'google/gemini-3.1-flash-image';
+
     private const BANNER_FALLBACK_MODEL = 'google/gemini-2.5-flash-image';
 
     // Extra Gemini image models catalogued for banners so the Super-Admin can switch the
@@ -47,6 +50,7 @@ class AiControlPlaneSeeder extends Seeder
 
     // Banners are wide marketing creatives; quality high, a landscape aspect ratio.
     private const BANNER_IMAGE_QUALITY = 'high';
+
     private const BANNER_ASPECT_RATIO = '16:9';
 
     // BytePlus/Seedream try-on model, catalogued but INACTIVE — the admin activates it after
@@ -68,11 +72,63 @@ class AiControlPlaneSeeder extends Seeder
     ];
 
     private const TRYON_IMAGE_QUALITY = 'high';
+
     private const TRYON_ASPECT_RATIO = '3:4';
+
+    // --- Product Image Studio (packshot_generation + on_model_generation) ---
+    // Default: fal's nano-banana EDIT model (image-to-image; it TRANSFORMS the supplied product
+    // photo). fal returns no inline USD cost -> the flat-rate hint below IS the authoritative
+    // per-image price (money-safe: clear it and the money path fails closed, never guesses).
+    private const PRODUCT_IMAGE_DEFAULT_MODEL = 'fal-ai/nano-banana/edit';
+
+    // Fallback on a DIFFERENT upstream (OpenRouter, real inline cost) so a fal outage still
+    // yields an image and an honest charge.
+    private const PRODUCT_IMAGE_FALLBACK_MODEL = 'google/gemini-3.1-flash-image';
+
+    // fal's published nano-banana edit price: $0.039 / image.
+    private const PRODUCT_IMAGE_FLAT_RATE_MICRO_USD = 39_000;
+
+    // The pre-flight reservation estimate (raw cost; the markup is applied by CreditEstimator).
+    private const PRODUCT_IMAGE_ESTIMATE_MICRO_USD = 40_000;
+
+    private const PRODUCT_IMAGE_QUALITY = 'high';
+
+    // Extra image-EDIT models the Super-Admin may switch either operation to.
+    // xAI is deliberately ABSENT: its images endpoint is TEXT-to-image and cannot edit a
+    // supplied product photo. A BytePlus/Seedream alternative is left for the admin to add
+    // from the Models page (it needs a BytePlus key + a confirmed per-image price first).
+    private const PRODUCT_IMAGE_ALT_MODELS = [
+        'google/gemini-2.5-flash-image' => ['label' => 'Gemini 2.5 Flash Image', 'cost' => 40_000, 'provider' => AiModel::PROVIDER_OPENROUTER, 'active' => true],
+        'fal-ai/flux-pro/kontext' => ['label' => 'FLUX.1 Kontext Pro (fal.ai)', 'cost' => 40_000, 'provider' => AiModel::PROVIDER_FAL, 'active' => true],
+    ];
+
+    // The two operations, each independently prompted + shaped. {{product_details}} expands to
+    // NOTHING when the product carries no facts, so a sparse product still yields a clean prompt.
+    private const PRODUCT_IMAGE_OPERATIONS = [
+        AiOperation::KEY_PACKSHOT_GENERATION => [
+            'label' => 'Packshot Generation',
+            'aspect_ratio' => '1:1',
+            'params' => ['temperature' => 0.2, 'top_p' => 0.9],
+            'system' => 'You are a product photography retoucher. You convert a supplied photograph of a product — including one worn or held by a person — into a clean, professional e-commerce PACKSHOT of that exact product. Preserve the product\'s true shape, colour, material, texture, print and every detail; never redesign it, never invent parts you cannot see. Remove people, hands, mannequins, props and background clutter. Output studio product photography on a seamless neutral background with soft, even lighting and a natural contact shadow.',
+            'user' => 'Turn the supplied photo of {{product_name}} ({{product_type}}) into a clean studio packshot of the product alone, centred, on a seamless light-neutral background with soft even lighting and a subtle contact shadow. Keep the product exactly as it is — same shape, colour, material and details. {{product_details}}',
+        ],
+        AiOperation::KEY_ON_MODEL_GENERATION => [
+            'label' => 'Product On Model',
+            'aspect_ratio' => '3:4',
+            'params' => ['temperature' => 0.3, 'top_p' => 0.9],
+            'system' => 'You are a fashion/e-commerce photographer. You take a supplied product photo (typically a packshot) and render a photorealistic image of that EXACT product naturally worn, held or used by a human model. Preserve the product\'s shape, colour, material, texture and print with total fidelity — the product must remain recognisably identical; never restyle it. Produce a natural pose, realistic drape/fit and scale, coherent lighting and a clean, uncluttered lifestyle or studio setting.',
+            'user' => 'Render a photorealistic image of a model naturally wearing or using the {{product_name}} ({{product_type}}) from the supplied photo. Keep the product identical in shape, colour, material and detail; use a natural pose, correct scale and fit, coherent lighting and a clean uncluttered setting. {{product_details}}',
+        ],
+    ];
 
     // Appended to every try-on user prompt so the result matches the shopper's photo
     // (the model tends to reframe/crop otherwise — the merchant asked for true size).
     private const FRAMING_CLAUSE = 'Return the image at the SAME orientation, framing and aspect ratio as the input photo — do not crop, zoom or reframe the subject; keep the whole figure exactly as uploaded.';
+
+    // The REAL product data (options / materials / measurements / description) that
+    // ProductFacts composes at generation time. It expands to NOTHING when a product
+    // carries none of it, so a sparse product still yields a clean prompt.
+    private const PRODUCT_DETAILS_CLAUSE = '{{product_details}}';
 
     // Tailored try-on prompts per store type (StoreCategory). Seeded as product_type-scoped
     // defaults the resolver prefers over the generic global prompt; fully admin-editable.
@@ -113,7 +169,94 @@ class AiControlPlaneSeeder extends Seeder
         $this->seedScanOperation();
         $this->seedTryOnOperation();
         $this->seedBannerOperation();
+        $this->seedProductImageOperations();
         $this->seedCategoryPrompts();
+    }
+
+    /**
+     * Seed the two Product Image Studio operations (bulk merchant-billed transforms of a
+     * product's own photos). They are INDEPENDENT: separate models, prompts, aspect ratios
+     * and credit multipliers, so the admin prices and tunes each one on its own.
+     *
+     * Both default to fal's nano-banana EDIT model (an image-to-image editor — the right
+     * shape for "take this photo and transform it") with a FLAT-RATE price hint: fal returns
+     * no inline USD cost, so the admin-entered per-image price IS the authoritative cost and
+     * the money path fails closed (never charges) if it is ever cleared.
+     *
+     * The OpenRouter Gemini image model is catalogued as the FALLBACK — a different upstream,
+     * with a REAL inline cost — so a fal outage still produces an image and an honest charge.
+     * xAI is deliberately EXCLUDED: its images endpoint is text-to-image only and cannot edit
+     * a supplied product photo.
+     */
+    public function seedProductImageOperations(): void
+    {
+        foreach (self::PRODUCT_IMAGE_OPERATIONS as $operationKey => $spec) {
+            AiOperation::updateOrCreate(
+                ['operation_key' => $operationKey],
+                [
+                    'label' => $spec['label'],
+                    'default_model' => self::PRODUCT_IMAGE_DEFAULT_MODEL,
+                    'fallback_model' => self::PRODUCT_IMAGE_FALLBACK_MODEL,
+                    'image_quality' => self::PRODUCT_IMAGE_QUALITY,
+                    'aspect_ratio' => $spec['aspect_ratio'],
+                    'params' => $spec['params'],
+                    'input_schema' => null,
+                    // Generated marketing/catalog artwork is not shopper PII — kept until deleted.
+                    'retention_days' => null,
+                    'estimated_cost_micro_usd' => self::PRODUCT_IMAGE_ESTIMATE_MICRO_USD,
+                    // null = the platform default markup (config trayon.pricing.markup_default).
+                    // The admin may set a per-operation multiplier from the control plane.
+                    'credit_multiplier' => null,
+                ],
+            );
+
+            $this->seedModel(
+                $operationKey,
+                self::PRODUCT_IMAGE_DEFAULT_MODEL,
+                'Nano Banana Edit (fal.ai)',
+                isDefault: true,
+                costHint: self::PRODUCT_IMAGE_FLAT_RATE_MICRO_USD,
+                unit: AiModel::UNIT_PER_IMAGE,
+                provider: AiModel::PROVIDER_FAL,
+            );
+
+            $this->seedModel(
+                $operationKey,
+                self::PRODUCT_IMAGE_FALLBACK_MODEL,
+                'Gemini 3.1 Flash Image',
+                isFallback: true,
+                costHint: 60_000,
+                unit: AiModel::UNIT_PER_IMAGE,
+            );
+
+            foreach (self::PRODUCT_IMAGE_ALT_MODELS as $modelId => $meta) {
+                $this->seedModel(
+                    $operationKey,
+                    $modelId,
+                    $meta['label'],
+                    costHint: $meta['cost'],
+                    unit: AiModel::UNIT_PER_IMAGE,
+                    provider: $meta['provider'],
+                    isActive: $meta['active'],
+                );
+            }
+
+            Prompt::updateOrCreate(
+                [
+                    'scope' => Prompt::SCOPE_GLOBAL,
+                    'operation_key' => $operationKey,
+                    'product_type' => null,
+                    'account_id' => null,
+                    'site_id' => null,
+                ],
+                [
+                    'system_prompt' => $spec['system'],
+                    'user_prompt' => $spec['user'],
+                    'version' => 1,
+                    'is_active' => true,
+                ],
+            );
+        }
     }
 
     /**
@@ -185,7 +328,7 @@ class AiControlPlaneSeeder extends Seeder
                 ],
                 [
                     'system_prompt' => $prompt['system'],
-                    'user_prompt' => $prompt['user'].' '.self::FRAMING_CLAUSE,
+                    'user_prompt' => $prompt['user'].' '.self::PRODUCT_DETAILS_CLAUSE.' '.self::FRAMING_CLAUSE,
                     'version' => 1,
                     'is_active' => true,
                 ],
@@ -270,7 +413,7 @@ class AiControlPlaneSeeder extends Seeder
             ],
             [
                 'system_prompt' => 'You generate photorealistic virtual try-on images. Keep the shopper\'s face, body and pose; place the product naturally and accurately on them.',
-                'user_prompt' => 'Generate a realistic try-on of {{product_name}} ({{variant}}) on the person in the first image, using the product in the second image. The person is {{height}} cm tall. Match lighting and perspective. '.self::FRAMING_CLAUSE,
+                'user_prompt' => 'Generate a realistic try-on of {{product_name}} ({{variant}}) on the person in the first image, using the product in the second image. The person is {{height}} cm tall. Match lighting and perspective. '.self::PRODUCT_DETAILS_CLAUSE.' '.self::FRAMING_CLAUSE,
                 'version' => 1,
                 'is_active' => true,
             ],

@@ -20,24 +20,58 @@ final class PlatformSettings
     // === CONSTANTS ===
     // Setting keys (the DB `key` column). Stable identifiers, never magic strings.
     public const OPENROUTER_API_KEY = 'openrouter.api_key';
+
     public const BYTEPLUS_API_KEY = 'byteplus.api_key';
+
     public const XAI_API_KEY = 'xai.api_key';
+
     public const ATLASCLOUD_API_KEY = 'atlascloud.api_key';
+
     public const FAL_API_KEY = 'fal.api_key';
+
+    // Kling takes EITHER the static API key the console issues today ('api-key-kling-…', preferred)
+    // OR the legacy access+secret PAIR (both required; a JWT is signed per request).
+    public const KLING_API_KEY = 'kling.api_key';
+
+    public const KLING_ACCESS_KEY = 'kling.access_key';
+
+    public const KLING_SECRET_KEY = 'kling.secret_key';
+
     public const PAYPLUS_API_KEY = 'payplus.api_key';
+
     public const PAYPLUS_SECRET_KEY = 'payplus.secret_key';
+
     public const PAYPLUS_PAGE_UID = 'payplus.page_uid';
+
     public const PAYPLUS_WEBHOOK_SECRET = 'payplus.webhook_secret';
+
+    // Shopify app-level OAuth credentials (Partner Dashboard). The client SECRET is
+    // also the webhook HMAC key. Per-store offline tokens are NOT here — they live
+    // encrypted on each ShopifyConnection row.
+    public const SHOPIFY_CLIENT_ID = 'shopify.client_id';
+
+    public const SHOPIFY_CLIENT_SECRET = 'shopify.client_secret';
+
+    // The platform-admin override of the "import all products" soft cap. Unset = the
+    // config default (1,000). Merchant-visible, merchant-UNSETTABLE — it protects the
+    // bulk queue, so only a super-admin may raise it.
+    public const SHOPIFY_IMPORT_CAP = 'shopify.import_cap';
 
     // SMTP outbound-mail settings (Super-Admin managed). Only SMTP_PASSWORD is a secret;
     // the rest are VISIBLE config values (host/port/encryption/username/from) the admin
     // sees and edits in the UI. Fallbacks point at Laravel's native mail.* config keys.
     public const SMTP_HOST = 'smtp.host';
+
     public const SMTP_PORT = 'smtp.port';
+
     public const SMTP_ENCRYPTION = 'smtp.encryption';
+
     public const SMTP_USERNAME = 'smtp.username';
+
     public const SMTP_PASSWORD = 'smtp.password';
+
     public const MAIL_FROM_ADDRESS = 'mail.from_address';
+
     public const MAIL_FROM_NAME = 'mail.from_name';
 
     // setting key → the config()/env fallback used when the DB value is unset.
@@ -47,10 +81,16 @@ final class PlatformSettings
         self::XAI_API_KEY => 'services.xai.api_key',
         self::ATLASCLOUD_API_KEY => 'services.atlascloud.api_key',
         self::FAL_API_KEY => 'services.fal.api_key',
+        self::KLING_API_KEY => 'services.kling.api_key',
+        self::KLING_ACCESS_KEY => 'services.kling.access_key',
+        self::KLING_SECRET_KEY => 'services.kling.secret_key',
         self::PAYPLUS_API_KEY => 'services.payplus.api_key',
         self::PAYPLUS_SECRET_KEY => 'services.payplus.secret_key',
         self::PAYPLUS_PAGE_UID => 'services.payplus.page_uid',
         self::PAYPLUS_WEBHOOK_SECRET => 'services.payplus.webhook_secret',
+        self::SHOPIFY_CLIENT_ID => 'services.shopify.client_id',
+        self::SHOPIFY_CLIENT_SECRET => 'services.shopify.client_secret',
+        self::SHOPIFY_IMPORT_CAP => 'shopify.import.soft_cap',
         // Laravel-11 smtp mailer uses `scheme` (tls/ssl/null) for encryption.
         self::SMTP_HOST => 'mail.mailers.smtp.host',
         self::SMTP_PORT => 'mail.mailers.smtp.port',

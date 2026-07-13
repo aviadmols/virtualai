@@ -21,6 +21,7 @@ final class VideoProviderRouter
         return match ($provider) {
             ImageGenerationProvider::PROVIDER_ATLASCLOUD => app(AtlasCloudVideoClient::class),
             ImageGenerationProvider::PROVIDER_FAL => app(FalVideoClient::class),
+            ImageGenerationProvider::PROVIDER_KLING => app(KlingVideoClient::class),
             default => app(BytePlusVideoClient::class),
         };
     }

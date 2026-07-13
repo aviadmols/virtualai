@@ -76,7 +76,8 @@ final readonly class OperationConfig
     /**
      * True when this config CANNOT produce an honest charge and it is knowable BEFORE
      * the provider call — i.e. EVERY usable attempt is a flat-rate provider (BytePlus,
-     * which returns no inline USD cost) AND none has a positive configured price. The
+     * xAI, AtlasCloud, fal, Kling — none returns an inline USD cost) AND none has a
+     * positive configured price. The
      * money path fails EARLY on this (no wasted render). It returns FALSE the moment any
      * attempt is OpenRouter (that path returns a real inline cost, so cost is knowable
      * only after the call) or any flat-rate attempt has a positive price.
@@ -104,7 +105,7 @@ final readonly class OperationConfig
         return $this->fallbackFlatRatePriceMicroUsd() === null;
     }
 
-    /** A provider is flat-rate when it returns no inline USD cost (BytePlus + xAI/Grok + AtlasCloud + fal). */
+    /** A provider is flat-rate when it returns no inline USD cost (BytePlus + xAI/Grok + AtlasCloud + fal + Kling). */
     private function isFlatRate(string $provider): bool
     {
         return in_array($provider, [
@@ -112,6 +113,7 @@ final readonly class OperationConfig
             ImageGenerationProvider::PROVIDER_XAI,
             ImageGenerationProvider::PROVIDER_ATLASCLOUD,
             ImageGenerationProvider::PROVIDER_FAL,
+            ImageGenerationProvider::PROVIDER_KLING,
         ], true);
     }
 

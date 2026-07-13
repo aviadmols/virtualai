@@ -37,14 +37,14 @@ class StoryboardPipelineSettingsTest extends TestCase
     {
         Livewire::test(StoryboardPipelineSettings::class)
             ->assertOk()
-            ->assertFormSet(fn (array $state): bool => ($state['storyboard_read_idea']['model'] ?? null) === 'google/gemini-3.1-pro-preview');
+            ->assertFormSet(fn (array $state): bool => ($state['storyboard_story_director']['model'] ?? null) === 'google/gemini-3.1-pro-preview');
     }
 
     public function test_saving_updates_the_operation_prompt_and_model(): void
     {
         Livewire::test(StoryboardPipelineSettings::class)
             ->fillForm([
-                'storyboard_read_idea' => [
+                'storyboard_story_director' => [
                     'provider' => 'openrouter',
                     'model' => 'google/gemini-custom',
                     'system_prompt' => 'NEW SYSTEM',
@@ -55,20 +55,20 @@ class StoryboardPipelineSettingsTest extends TestCase
             ->call('save')
             ->assertHasNoFormErrors();
 
-        $op = AiOperation::query()->where('operation_key', AiOperation::KEY_STORYBOARD_READ_IDEA)->first();
+        $op = AiOperation::query()->where('operation_key', AiOperation::KEY_STORYBOARD_STORY_DIRECTOR)->first();
         $this->assertSame('google/gemini-custom', $op->default_model);
         // The string param is coerced to a number on save (a string temperature is a 400).
         $this->assertSame(0.9, $op->params['temperature']);
 
         $this->assertDatabaseHas('ai_models', [
-            'operation_key' => AiOperation::KEY_STORYBOARD_READ_IDEA,
+            'operation_key' => AiOperation::KEY_STORYBOARD_STORY_DIRECTOR,
             'model_id' => 'google/gemini-custom',
             'is_default' => true,
         ]);
 
         $prompt = Prompt::query()
             ->where('scope', Prompt::SCOPE_GLOBAL)
-            ->where('operation_key', AiOperation::KEY_STORYBOARD_READ_IDEA)
+            ->where('operation_key', AiOperation::KEY_STORYBOARD_STORY_DIRECTOR)
             ->first();
         $this->assertSame('NEW SYSTEM', $prompt->system_prompt);
         $this->assertStringContainsString('{{story_idea}}', $prompt->user_prompt);
@@ -103,13 +103,13 @@ class StoryboardPipelineSettingsTest extends TestCase
         Sleep::fake();
 
         Http::fake(['https://openrouter.ai/api/v1/chat/completions' => Http::response([
-            'choices' => [['message' => ['content' => '{"genre":"comedy","emotional_tone":"fun"}']]],
+            'choices' => [['message' => ['content' => '{"frames":[{"frame_number":1,"description":"beat","scene_prompt":"a beat"}]}']]],
             'model' => 'google/gemini-2.5-flash',
             'usage' => ['cost' => 0.001],
         ], 200)]);
 
         Livewire::test(StoryboardPipelineSettings::class)
-            ->call('testStep', AiOperation::KEY_STORYBOARD_GENRE)
+            ->call('testStep', AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN)
             ->assertNotified();
     }
 }

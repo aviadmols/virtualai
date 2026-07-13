@@ -15,6 +15,8 @@ class DatabaseSeeder extends Seeder
         // so the resolver works out of the box, then the tenant demo data.
         $this->call(AiControlPlaneSeeder::class);
         $this->call(StoryboardPipelineSeeder::class);
+        // The Kling catalog rides on the operations the two seeders above create.
+        $this->call(KlingCatalogSeeder::class);
         $this->call(TenantDemoSeeder::class);
     }
 }

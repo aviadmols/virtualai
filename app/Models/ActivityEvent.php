@@ -69,6 +69,59 @@ class ActivityEvent extends Model
     // specific shop's merchant workspace. Explicit + logged (canAccessTenant permits it).
     public const KIND_PLATFORM_SHOP_DRILL_IN = 'platform_shop_drill_in';
 
+    // Shopify app lifecycle (a store connected/disconnected the Tray On app).
+    public const KIND_SHOPIFY_INSTALLED = 'shopify_installed';
+
+    public const KIND_SHOPIFY_UNINSTALLED = 'shopify_uninstalled';
+
+    // Shopify product sync (Phase 3). A product is never deleted — it is ARCHIVED, and
+    // the archive leaves a trace so the merchant can see why it left their catalog.
+    public const KIND_SHOPIFY_SYNC_STARTED = 'shopify_sync_started';
+
+    public const KIND_SHOPIFY_SYNC_COMPLETED = 'shopify_sync_completed';
+
+    public const KIND_SHOPIFY_SYNC_FAILED = 'shopify_sync_failed';
+
+    // A catalog walk that hit its page budget with pages still unread. It is COMPLETED,
+    // not failed — but it saw only part of the store, so it swept NOTHING (archiving on an
+    // incomplete traversal would archive live products). The merchant is told, on the
+    // timeline and in the import history, that the catalog was only partly walked.
+    public const KIND_SHOPIFY_SYNC_TRUNCATED = 'shopify_sync_truncated';
+
+    public const KIND_SHOPIFY_PRODUCT_IMPORTED = 'shopify_product_imported';
+
+    public const KIND_SHOPIFY_PRODUCT_UPDATED = 'shopify_product_updated';
+
+    public const KIND_SHOPIFY_PRODUCT_ARCHIVED = 'shopify_product_archived';
+
+    // Product Image Studio (bulk AI image transforms). The batch bookends + every per-asset
+    // status/review move (written by the models' guarded transitions).
+    public const KIND_PRODUCT_IMAGE_BATCH_STARTED = 'product_image_batch_started';
+
+    public const KIND_PRODUCT_IMAGE_BATCH_COMPLETED = 'product_image_batch_completed';
+
+    public const KIND_PRODUCT_ASSET_STATUS_CHANGED = 'product_asset_status_changed';
+
+    public const KIND_PRODUCT_ASSET_APPROVED = 'product_asset_approved';
+
+    public const KIND_PRODUCT_ASSET_REJECTED = 'product_asset_rejected';
+
+    // Phase 5 — pushing an APPROVED image into the store's product media. A push is FREE (no
+    // ledger row, ever); these traces are how a merchant sees what happened to a LIVE gallery.
+    public const KIND_PRODUCT_ASSET_PUSH_STATUS_CHANGED = 'product_asset_push_status_changed';
+
+    public const KIND_SHOPIFY_MEDIA_PUSHED = 'shopify_media_pushed';
+
+    public const KIND_SHOPIFY_MEDIA_PUSH_FAILED = 'shopify_media_push_failed';
+
+    // The mandatory pre-flight of any DESTRUCTIVE push: our own copy of the original gallery.
+    // Without it, Undo is a lie (Shopify drops the bytes when the media is deleted).
+    public const KIND_SHOPIFY_MEDIA_SNAPSHOT_CAPTURED = 'shopify_media_snapshot_captured';
+
+    public const KIND_SHOPIFY_MEDIA_SNAPSHOT_FAILED = 'shopify_media_snapshot_failed';
+
+    public const KIND_SHOPIFY_MEDIA_RESTORED = 'shopify_media_restored';
+
     // Site control-plane actions (merchant / platform admin).
     public const KIND_SITE_KEY_REGENERATED = 'site_key_regenerated';
 

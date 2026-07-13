@@ -32,6 +32,7 @@ defined('Q_GENERATIONS') || define('Q_GENERATIONS', 'generations');
 defined('Q_SCANS') || define('Q_SCANS', 'scans');
 defined('Q_WEBHOOKS') || define('Q_WEBHOOKS', 'webhooks');
 defined('Q_MEDIA') || define('Q_MEDIA', 'media');
+defined('Q_BULK') || define('Q_BULK', 'bulk');
 defined('Q_DEFAULT') || define('Q_DEFAULT', 'default');
 
 return [
@@ -68,11 +69,15 @@ return [
     ],
 
     // The canonical queue map. Backend dispatches onto these names by key.
+    // `bulk` is the merchant-triggered mass-generation trickle (product image
+    // transforms) — its own capped supervisor so a 500-image batch can never
+    // starve the shopper-facing `generations` money path.
     'queues' => [
         'generations' => Q_GENERATIONS,
         'scans' => Q_SCANS,
         'webhooks' => Q_WEBHOOKS,
         'media' => Q_MEDIA,
+        'bulk' => Q_BULK,
         'default' => Q_DEFAULT,
     ],
 ];

@@ -28,11 +28,15 @@ final class PollStoryboardClipJob implements ShouldQueue
 
     // === CONSTANTS ===
     public int $tries = 1;
+
     public int $timeout = 120;
 
     private const MAX_ATTEMPTS = 40;
+
     private const DELAY_SECONDS = 15;
+
     private const VIDEO_MIME = 'video/mp4';
+
     private const MS_PER_SECOND = 1000;
 
     public function __construct(
@@ -101,14 +105,32 @@ final class PollStoryboardClipJob implements ShouldQueue
 
         $stored = $media->storeStoryboardFrame($frame->project_id, $frame->id, $bytes, self::VIDEO_MIME);
 
-        $cost = is_array($frame->video_meta) ? ($frame->video_meta['cost'] ?? null) : null;
-
         $frame->update([
             'video_status' => StoryboardFrame::VIDEO_READY,
             'video_path' => $stored->path,
             'video_duration_ms' => $this->renderMs($task),
-            'video_cost_micro_usd' => $cost,
+            'video_cost_micro_usd' => $this->cost($frame, $task),
         ]);
+    }
+
+    /**
+     * The REAL cost the upstream billed for this clip when it returns one (Kling answers with
+     * billing[]), else the per-clip price hint recorded at submit time. Never charges — this is a
+     * recorded cost, not a ledger row.
+     *
+     * @param  array<string,mixed>  $task
+     */
+    private function cost(StoryboardFrame $frame, array $task): ?int
+    {
+        $real = data_get($task, VideoGenerationProvider::KEY_COST.'.'.VideoGenerationProvider::KEY_COST_MICRO_USD);
+
+        if (is_int($real) && $real > 0) {
+            return $real;
+        }
+
+        $hint = is_array($frame->video_meta) ? ($frame->video_meta['cost'] ?? null) : null;
+
+        return is_numeric($hint) ? (int) $hint : null;
     }
 
     private function renderMs(array $task): ?int

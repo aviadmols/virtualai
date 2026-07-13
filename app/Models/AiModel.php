@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Domain\Ai\Contracts\ImageGenerationProvider;
+use Database\Factories\AiModelFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,18 +17,25 @@ use Illuminate\Database\Eloquent\Model;
  */
 class AiModel extends Model
 {
-    /** @use HasFactory<\Database\Factories\AiModelFactory> */
+    /** @use HasFactory<AiModelFactory> */
     use HasFactory;
 
     // === CONSTANTS ===
     public const UNIT_PER_IMAGE = 'per_image';
+
     public const UNIT_PER_1K_TOKENS = 'per_1k_tokens';
 
     public const PROVIDER_OPENROUTER = ImageGenerationProvider::PROVIDER_OPENROUTER;
+
     public const PROVIDER_BYTEPLUS = ImageGenerationProvider::PROVIDER_BYTEPLUS;
+
     public const PROVIDER_XAI = ImageGenerationProvider::PROVIDER_XAI;
+
     public const PROVIDER_ATLASCLOUD = ImageGenerationProvider::PROVIDER_ATLASCLOUD;
+
     public const PROVIDER_FAL = ImageGenerationProvider::PROVIDER_FAL;
+
+    public const PROVIDER_KLING = ImageGenerationProvider::PROVIDER_KLING;
 
     protected $fillable = [
         'operation_key',

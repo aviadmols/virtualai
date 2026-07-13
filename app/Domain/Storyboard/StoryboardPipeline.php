@@ -3,6 +3,7 @@
 namespace App\Domain\Storyboard;
 
 use App\Domain\Ai\AiOperationResolver;
+use App\Domain\Ai\ParsedCost;
 use App\Domain\Ai\StoryboardTextCaller;
 use App\Domain\Credits\CreditMath;
 use App\Models\AiOperation;
@@ -12,13 +13,16 @@ use App\Models\StoryboardStepRun;
 use Throwable;
 
 /**
- * StoryboardPipeline — runs the text pre-production steps in order and materialises the frames.
+ * StoryboardPipeline — runs the TWO planning calls in order and materialises the frames.
  *
- * Each step resolves its DB-managed AiOperation (model/prompt/params/schema) and calls the shared
- * strict-JSON caller (the same structured-output path the product scan uses). Single-object step
- * outputs land under project.pipeline[...]; the scene-breakdown step becomes storyboard_frames.
- * Every step is logged in storyboard_step_runs (progress + cost). NOT a money path — cost is
- * recorded for display only, never charged. A failed step fails the project (no partial frames).
+ * Call 1 (Story Director) locks the whole plan in one structured output — story bible, genre
+ * profile, character/asset bible, visual bible and the shot timing; its sections are split into
+ * the project's pipeline bags. Call 2 (Scene Breakdown) receives the locked plan and returns the
+ * per-frame SCENE beats only; frame timing is stamped from the LOCKED plan (never the model's own
+ * arithmetic) and the final image_prompt is assembled deterministically by the composer, so the
+ * character/style text is IDENTICAL in every frame. Every step is logged in storyboard_step_runs
+ * (progress + cost). NOT a money path — cost is recorded for display only, never charged. A failed
+ * step fails the project (no partial frames).
  */
 final class StoryboardPipeline
 {
@@ -26,6 +30,7 @@ final class StoryboardPipeline
         private readonly AiOperationResolver $resolver,
         private readonly StoryboardTextCaller $caller,
         private readonly StoryboardAssetAnalyzer $assetAnalyzer,
+        private readonly StoryboardPromptComposer $composer,
     ) {}
 
     public function run(StoryboardProject $project): void
@@ -98,8 +103,23 @@ final class StoryboardPipeline
             return;
         }
 
+        // Story Director: split the single output into the pipeline bags every downstream
+        // reader already knows, and LOCK the normalized shot timing alongside them.
         $pipeline = $project->pipeline ?? [];
-        $pipeline[StoryboardStep::PIPELINE_KEY[$stepKey]] = $json;
+
+        foreach (StoryboardStep::DIRECTOR_SECTIONS as $section => $bag) {
+            if (is_array($json[$section] ?? null)) {
+                $pipeline[$bag] = $json[$section];
+            }
+        }
+
+        $pipeline[StoryboardProject::PIPE_TIMING] = StoryboardTimingPlan::normalize(
+            $json['shot_timing'] ?? null,
+            (int) $project->duration_seconds,
+            (int) $project->frame_interval_seconds,
+            $project->expectedFrameCount(),
+        );
+
         $project->update(['pipeline' => $pipeline]);
     }
 
@@ -108,11 +128,27 @@ final class StoryboardPipeline
     {
         $project->frames()->delete(); // replace on a fresh run
 
-        foreach ($frames as $f) {
+        $pipeline = $project->pipeline ?? [];
+        $charactersBag = is_array($pipeline[StoryboardProject::PIPE_CHARACTERS] ?? null) ? $pipeline[StoryboardProject::PIPE_CHARACTERS] : [];
+        $visualBible = is_array($pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] ?? null) ? $pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] : [];
+
+        // The LOCKED plan is the only timing authority — the breakdown's own numbers are ignored.
+        $plan = StoryboardTimingPlan::normalize(
+            $pipeline[StoryboardProject::PIPE_TIMING] ?? null,
+            (int) $project->duration_seconds,
+            (int) $project->frame_interval_seconds,
+            $project->expectedFrameCount(),
+        );
+
+        usort($frames, static fn (array $a, array $b): int => (int) ($a['frame_number'] ?? 0) <=> (int) ($b['frame_number'] ?? 0));
+
+        foreach (array_values($frames) as $i => $f) {
+            $slot = $plan[$i] ?? end($plan);
+
             $project->frames()->create([
-                'frame_number' => (int) ($f['frame_number'] ?? 0),
-                'start_second' => (int) ($f['start_second'] ?? 0),
-                'end_second' => (int) ($f['end_second'] ?? 0),
+                'frame_number' => $i + 1,
+                'start_second' => $slot['start_second'],
+                'end_second' => $slot['end_second'],
                 'description' => $f['description'] ?? null,
                 'camera_angle' => $f['camera_angle'] ?? null,
                 'composition' => $f['composition'] ?? null,
@@ -121,9 +157,11 @@ final class StoryboardPipeline
                 'reference_tags' => is_array($f['reference_tags'] ?? null) ? $f['reference_tags'] : [],
                 'text_overlay' => $f['text_overlay'] ?? null,
                 'motion_prompt' => is_string($f['motion'] ?? null) ? $f['motion'] : null,
-                'image_prompt' => $f['image_prompt'] ?? null,
-                'negative_prompt' => $f['negative_prompt'] ?? null,
+                // Deterministic assembly: scene beat + locked character blocks + locked style.
+                'image_prompt' => $this->composer->compose($f, $charactersBag, $visualBible),
+                'negative_prompt' => $this->composer->negativePrompt($f['negative_prompt'] ?? null, $visualBible),
                 'status' => StoryboardFrame::STATUS_PENDING,
+                'meta' => ['scene_prompt' => $f['scene_prompt'] ?? $f['image_prompt'] ?? null],
             ]);
         }
     }
@@ -161,6 +199,9 @@ final class StoryboardPipeline
             'genre_profile' => $this->encode($pipeline[StoryboardProject::PIPE_GENRE] ?? null),
             'characters' => $this->encode($pipeline[StoryboardProject::PIPE_CHARACTERS] ?? null),
             'visual_bible' => $this->encode($pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] ?? null),
+            // LOCKED planning decisions the scene breakdown must obey (read-only data).
+            'shot_timing' => $this->encode($pipeline[StoryboardProject::PIPE_TIMING] ?? null),
+            'content_type' => (string) ($pipeline[StoryboardProject::PIPE_STORY]['content_type'] ?? StoryboardProject::CONTENT_COMPLETE),
         ];
     }
 
@@ -169,7 +210,7 @@ final class StoryboardPipeline
         return $value === null ? '' : (string) json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
-    private function costMicro(\App\Domain\Ai\ParsedCost $cost): ?int
+    private function costMicro(ParsedCost $cost): ?int
     {
         return $cost->available && $cost->costUsd !== null ? CreditMath::usdToMicro($cost->costUsd) : null;
     }

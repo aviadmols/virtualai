@@ -178,6 +178,67 @@ class ScanReviewContractTest extends TestCase
         $this->assertTrue($review->gate->canConfirm);
     }
 
+    // === THE BLOCKING SET — PINNED PER RAIL ===
+    // Which fields a merchant MUST review is a product decision, not an implementation
+    // detail. These three tests are the pin: widen the optional set (move name, price or
+    // main_image_url out of blocking), or drop the source check that scopes optionality
+    // to the authoritative rail, and one of them goes RED.
+
+    /**
+     * SCAN RAIL. Every scanned field is a GUESS, so the original blocking set stands:
+     * name, price, description, product_type and main_image_url all block until reviewed,
+     * and every undetected selector role blocks too.
+     */
+    public function test_the_blocking_set_is_pinned_on_the_scan_rail(): void
+    {
+        [$account, $product] = $this->productWithAbsentFields(ScanConstants::SOURCE_MODEL_INFERRED);
+
+        $review = Tenant::run($account, fn () => ScanReview::fromProduct($product));
+
+        $this->assertSame(
+            ['name', 'price', 'description', 'product_type', 'main_image_url'],
+            $this->blockingKeys($review->fieldRows),
+            'the SCAN rail blocking set may not be widened without this test going red',
+        );
+
+        $this->assertSame(ScanConstants::SELECTOR_ROLES, $this->blockingKeys($review->selectorRows));
+        $this->assertFalse($review->gate->canConfirm);
+    }
+
+    /**
+     * SHOPIFY RAIL. The store's own record is authoritative: "no description" is a FACT,
+     * not a failed extraction — so description + product_type do not block. A try-on still
+     * needs the name, the price and the image: those block on this rail exactly as on the
+     * scan rail.
+     */
+    public function test_the_blocking_set_is_pinned_on_the_shopify_rail(): void
+    {
+        [$account, $product] = $this->productWithAbsentFields(ScanConstants::SOURCE_SHOPIFY);
+
+        $review = Tenant::run($account, fn () => ScanReview::fromProduct($product));
+
+        $this->assertSame(
+            ['name', 'price', 'main_image_url'],
+            $this->blockingKeys($review->fieldRows),
+            'an imported product may skip description/product_type — NEVER name, price or the image',
+        );
+
+        $this->assertFalse($review->gate->canConfirm);
+    }
+
+    /** A product with no image at all has nothing to render a try-on ON — both rails block. */
+    public function test_an_imageless_product_blocks_confirm_on_both_rails(): void
+    {
+        foreach ([ScanConstants::SOURCE_JSONLD, ScanConstants::SOURCE_SHOPIFY] as $source) {
+            [$account, $product] = $this->imagelessProduct($source);
+
+            $review = Tenant::run($account, fn () => ScanReview::fromProduct($product));
+
+            $this->assertFalse($review->gate->canConfirm, "an imageless {$source} product must block");
+            $this->assertContains('field:main_image_url', $review->gate->blockingKeys);
+        }
+    }
+
     // === SELECTOR-TEST CONTRACT ===
 
     public function test_selector_test_result_maps_count_to_typed_outcome(): void
@@ -291,6 +352,62 @@ class ScanReviewContractTest extends TestCase
             'physical_dimensions' => [],
             'detected_selectors' => [],
         ]);
+    }
+
+    /**
+     * Every reviewable field carried by ONE rail, with NO value — the rail says the
+     * product has none. What blocks then is purely a function of the rail's authority.
+     *
+     * @return array{0: Account, 1: Product}
+     */
+    private function productWithAbsentFields(string $source): array
+    {
+        $fields = [];
+
+        foreach (['name', 'price', 'description', 'product_type', 'main_image_url'] as $field) {
+            $fields[$field] = ['value' => null, 'confidence' => 1.0, 'source' => $source];
+        }
+
+        return $this->draftProduct([
+            'field_confidence' => $fields,
+            'physical_dimensions' => [],
+            'detected_selectors' => [],
+        ]);
+    }
+
+    /** Everything the rail knows, except the one thing a try-on cannot do without. */
+    private function imagelessProduct(string $source): array
+    {
+        $fields = ['main_image_url' => ['value' => null, 'confidence' => 1.0, 'source' => $source]];
+
+        foreach (['name', 'price', 'description', 'product_type'] as $field) {
+            $fields[$field] = ['value' => 'v', 'confidence' => 1.0, 'source' => $source];
+        }
+
+        $selectors = [];
+        foreach (ScanConstants::SELECTOR_ROLES as $role) {
+            $selectors[$role] = ['primary' => '#'.$role, 'fallback_chain' => [], 'confidence' => 0.95, 'matched_count' => 1, 'needs_review' => false];
+        }
+
+        return $this->draftProduct([
+            'field_confidence' => $fields,
+            'physical_dimensions' => [],
+            'detected_selectors' => $selectors,
+        ]);
+    }
+
+    /**
+     * The keys of the rows that BLOCK confirm, in row order.
+     *
+     * @param  array<int,ScanReviewRow>  $rows
+     * @return array<int,string>
+     */
+    private function blockingKeys(array $rows): array
+    {
+        return array_values(array_map(
+            fn (ScanReviewRow $row): string => $row->key,
+            array_filter($rows, fn (ScanReviewRow $row): bool => $row->blocksConfirm()),
+        ));
     }
 
     /** A scan where every field + selector is high (gate open, no review needed). */

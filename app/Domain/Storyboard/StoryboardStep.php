@@ -16,12 +16,11 @@ use App\Models\StoryboardProject;
 final class StoryboardStep
 {
     // === CONSTANTS ===
-    // The text pipeline, in execution order.
+    // The text pipeline, in execution order: ONE Story Director call locks the whole plan
+    // (story bible, genre, characters, visual bible, shot timing), then ONE Scene Breakdown
+    // call turns the locked plan into frames. Two calls — not five — by design.
     public const TEXT_STEPS = [
-        AiOperation::KEY_STORYBOARD_READ_IDEA,
-        AiOperation::KEY_STORYBOARD_GENRE,
-        AiOperation::KEY_STORYBOARD_CHARACTERS,
-        AiOperation::KEY_STORYBOARD_VISUAL_BIBLE,
+        AiOperation::KEY_STORYBOARD_STORY_DIRECTOR,
         AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN,
     ];
 
@@ -37,13 +36,15 @@ final class StoryboardStep
         AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR,
     ];
 
-    // Which project.pipeline key each single-object text step stores its output under. The
-    // scene-breakdown step is materialised into storyboard_frames instead, so it has no bag key.
-    public const PIPELINE_KEY = [
-        AiOperation::KEY_STORYBOARD_READ_IDEA => StoryboardProject::PIPE_STORY,
-        AiOperation::KEY_STORYBOARD_GENRE => StoryboardProject::PIPE_GENRE,
-        AiOperation::KEY_STORYBOARD_CHARACTERS => StoryboardProject::PIPE_CHARACTERS,
-        AiOperation::KEY_STORYBOARD_VISUAL_BIBLE => StoryboardProject::PIPE_VISUAL_BIBLE,
+    // Which pipeline bag each SECTION of the Story Director's single output is split into —
+    // the same bags the old four-step pipeline wrote, so every downstream reader (video
+    // director, combine job, builder) keeps working unchanged. The scene-breakdown step is
+    // materialised into storyboard_frames instead, so it has no bag key.
+    public const DIRECTOR_SECTIONS = [
+        'story' => StoryboardProject::PIPE_STORY,
+        'genre_profile' => StoryboardProject::PIPE_GENRE,
+        'characters' => StoryboardProject::PIPE_CHARACTERS,
+        'visual_bible' => StoryboardProject::PIPE_VISUAL_BIBLE,
     ];
 
     public static function isTextStep(string $stepKey): bool

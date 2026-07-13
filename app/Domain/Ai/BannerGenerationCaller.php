@@ -22,8 +22,11 @@ final class BannerGenerationCaller
 
     // BytePlus/Seedream: image_quality -> size token, response format, defaults.
     private const BYTEPLUS_RESPONSE_FORMAT = 'b64_json';
+
     private const BYTEPLUS_DEFAULT_SIZE = '2K';
+
     private const BYTEPLUS_SEQUENTIAL = 'disabled';
+
     private const BYTEPLUS_QUALITY_SIZE = [
         'high' => '2K',
         'standard' => '1K',
@@ -33,6 +36,7 @@ final class BannerGenerationCaller
     // xAI/Grok images/generations is TEXT-TO-IMAGE: only model + prompt + these two are sent
     // (no size/quality/aspect/seed — xAI rejects unknown params).
     private const XAI_RESPONSE_FORMAT = 'b64_json';
+
     private const XAI_IMAGE_COUNT = 1;
 
     // fal has no free-form ratio: the aspect maps onto its image_size enum (and the raw ratio is
@@ -107,6 +111,7 @@ final class BannerGenerationCaller
                 ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->buildBytePlusBody($config, $model, $reference, $vars),
                 ImageGenerationProvider::PROVIDER_XAI => $this->buildXaiBody($config, $model, $vars),
                 ImageGenerationProvider::PROVIDER_FAL => $this->buildFalBody($config, $model, $reference, $vars),
+                ImageGenerationProvider::PROVIDER_KLING => $this->buildKlingBody($config, $model, $reference, $vars),
                 default => $this->buildOpenRouterBody($config, $model, $reference, $vars),
             },
         );
@@ -273,6 +278,44 @@ final class BannerGenerationCaller
 
         if (array_key_exists('seed', $config->params)) {
             $body['seed'] = $config->params['seed'];
+        }
+
+        return $body;
+    }
+
+    /**
+     * Kling body (async task API; the client submits + polls behind the sync contract). A single
+     * prompt (system prepended) + the OPTIONAL reference image, which the client inlines as raw
+     * base64. A kolors-virtual-try-on model is NOT a banner model — it takes no prompt — so the
+     * admin must catalogue a Kling IMAGE model for this operation.
+     *
+     * @param  array<string,string|int|float|null>  $vars
+     * @return array<string,mixed>
+     */
+    private function buildKlingBody(
+        OperationConfig $config,
+        string $model,
+        ?ImagePayload $reference,
+        array $vars,
+    ): array {
+        $prompt = $config->substituteUser($vars);
+        $system = $config->substituteSystem($vars);
+
+        if ($system !== null && $system !== '') {
+            $prompt = $system."\n\n".$prompt;
+        }
+
+        $body = [
+            KlingImageClient::KEY_MODEL => $model,
+            KlingImageClient::KEY_PROMPT => $prompt,
+        ];
+
+        if ($reference !== null) {
+            $body[KlingImageClient::KEY_IMAGE_URLS] = [$reference->url];
+        }
+
+        if ($config->aspectRatio !== null) {
+            $body['aspect_ratio'] = $config->aspectRatio;
         }
 
         return $body;

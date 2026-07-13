@@ -33,6 +33,35 @@ final readonly class ScanReview
         'main_image_url' => 'scan.field.main_image',
     ];
 
+    /**
+     * Fields a TRY-ON does not need — NON-BLOCKING ONLY ON AN AUTHORITATIVE RAIL.
+     *
+     * A field is optional when BOTH hold:
+     *  1. it is listed here (a try-on needs the name, the price and the product image;
+     *     it does not need marketing prose, and the prompt's product_type leg falls back
+     *     to the site's own store category), AND
+     *  2. it came from an AUTHORITATIVE source (below) — the merchant's own store record,
+     *     where "absent" is a FACT ("this product has no description"), not a failed
+     *     extraction.
+     *
+     * On the SCAN rail every field is a GUESS: an absent description means the scanner
+     * did not find one, which is exactly the case the merchant must review. So the scan
+     * rail's blocking set is unchanged, and name / price / main_image_url are never in
+     * this list — an imageless (or nameless, or price-less) product blocks on BOTH rails.
+     *
+     * Pinned by ScanReviewContractTest (the blocking set of both rails). Moving a field
+     * in or out of these lists MUST go red there.
+     */
+    private const OPTIONAL_FIELDS_ON_AUTHORITATIVE_RAIL = [
+        'description',
+        'product_type',
+    ];
+
+    /** Sources that KNOW (nothing was guessed): the platform's own product record. */
+    private const AUTHORITATIVE_SOURCES = [
+        ScanConstants::SOURCE_SHOPIFY,
+    ];
+
     private const VARIANTS_LABEL_KEY = 'scan.field.variants';
 
     private const DIMENSIONS_LABEL_KEY = 'scan.field.dimensions';
@@ -100,6 +129,7 @@ final readonly class ScanReview
     private static function scalarFieldRow(string $field, string $labelKey, ?array $meta): ScanReviewRow
     {
         $value = $meta['value'] ?? null;
+        $source = $meta['source'] ?? null;
         $detected = self::isPresent($value);
 
         $level = ConfidenceLevel::fromScore(
@@ -114,8 +144,22 @@ final readonly class ScanReview
             value: $value,
             level: $level,
             editable: true,
-            detail: ['source' => $meta['source'] ?? null],
+            optional: self::isOptional($field, $source),
+            detail: ['source' => $source],
         );
+    }
+
+    /**
+     * The optionality predicate — scoped to the rail that produced the field.
+     *
+     * An unknown/absent source is NEVER authoritative, so a field with no provenance
+     * falls back to the strict (scan) blocking set: fail closed, never open.
+     */
+    private static function isOptional(string $field, mixed $source): bool
+    {
+        return in_array($field, self::OPTIONAL_FIELDS_ON_AUTHORITATIVE_RAIL, true)
+            && is_string($source)
+            && in_array($source, self::AUTHORITATIVE_SOURCES, true);
     }
 
     /**

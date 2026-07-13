@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\AiOperationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -16,30 +17,53 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class AiOperation extends Model
 {
-    /** @use HasFactory<\Database\Factories\AiOperationFactory> */
+    /** @use HasFactory<AiOperationFactory> */
     use HasFactory;
 
     // === CONSTANTS ===
     // The operation keys the platform runs. Callers reference these consts,
     // never a magic string.
     public const KEY_PRODUCT_SCAN = 'product_scan';
+
     public const KEY_TRY_ON_GENERATION = 'try_on_generation';
+
     public const KEY_BANNER_GENERATION = 'banner_generation';
+
+    // Product Image Studio (bulk merchant-billed transforms of a product's OWN photos).
+    // Two INDEPENDENT operations — each with its own model / prompt / credit multiplier, so
+    // an admin can price and tune them separately without touching code.
+    //   packshot_generation  — a model-worn (or busy) photo -> a clean e-commerce packshot.
+    //   on_model_generation  — a packshot -> the product worn/used by a model.
+    public const KEY_PACKSHOT_GENERATION = 'packshot_generation';
+
+    public const KEY_ON_MODEL_GENERATION = 'on_model_generation';
+
+    // The operations the Product Image Studio offers (the merchant's operation picker).
+    public const PRODUCT_IMAGE_KEYS = [
+        self::KEY_PACKSHOT_GENERATION,
+        self::KEY_ON_MODEL_GENERATION,
+    ];
 
     // Storyboard pipeline steps — each pre-production step is a DB-managed operation
     // (its own model/prompt/params/schema/fallback), run in order by StoryboardPipeline.
-    public const KEY_STORYBOARD_READ_IDEA = 'storyboard_read_idea';
-    public const KEY_STORYBOARD_GENRE = 'storyboard_genre';
-    public const KEY_STORYBOARD_CHARACTERS = 'storyboard_characters';
-    public const KEY_STORYBOARD_VISUAL_BIBLE = 'storyboard_visual_bible';
+    // The STORY DIRECTOR is the single planning call: story bible + genre + characters +
+    // visual bible + the locked shot timing in ONE structured output (it replaced the four
+    // separate read_idea/genre/characters/visual_bible steps — half the cost, no drift).
+    public const KEY_STORYBOARD_STORY_DIRECTOR = 'storyboard_story_director';
+
     public const KEY_STORYBOARD_SCENE_BREAKDOWN = 'storyboard_scene_breakdown';
+
     public const KEY_STORYBOARD_FRAME_IMAGE = 'storyboard_frame_image';
+
     public const KEY_STORYBOARD_CLIP = 'storyboard_clip';
+
     // On-demand (not a pipeline step): AI-rewrite a single frame's image_prompt from an instruction.
     public const KEY_STORYBOARD_IMPROVE_PROMPT = 'storyboard_improve_prompt';
+
     // On-demand (not a pipeline step): VISION analysis of one reference upload → a ground-truth
     // physical description + subject type, injected into the planning steps for character fidelity.
     public const KEY_STORYBOARD_ASSET_ANALYSIS = 'storyboard_asset_analysis';
+
     // On-demand (not a pipeline step): the DIRECTOR pass — a multimodal model receives the
     // generated frame images + storyboard data and composes the final one-call video prompt.
     public const KEY_STORYBOARD_VIDEO_DIRECTOR = 'storyboard_video_director';
@@ -48,10 +72,9 @@ class AiOperation extends Model
         self::KEY_PRODUCT_SCAN,
         self::KEY_TRY_ON_GENERATION,
         self::KEY_BANNER_GENERATION,
-        self::KEY_STORYBOARD_READ_IDEA,
-        self::KEY_STORYBOARD_GENRE,
-        self::KEY_STORYBOARD_CHARACTERS,
-        self::KEY_STORYBOARD_VISUAL_BIBLE,
+        self::KEY_PACKSHOT_GENERATION,
+        self::KEY_ON_MODEL_GENERATION,
+        self::KEY_STORYBOARD_STORY_DIRECTOR,
         self::KEY_STORYBOARD_SCENE_BREAKDOWN,
         self::KEY_STORYBOARD_FRAME_IMAGE,
         self::KEY_STORYBOARD_CLIP,

@@ -645,7 +645,104 @@ The lookup axis. File each entry under exactly one category; cross-link the rest
   [[app/Domain/Credits/CreditLedgerService.php]], [[app/Domain/Credits/CreditMath.php]],
   [[database/migrations/2026_06_25_130000_create_generations_table.php]]
 
+### TS-CREDITS-008 — a LONG async render strands the reservation forever: the hold's cache TTL lapses, so the terminal release finds no key and never decrements `reserved_micro_usd`
+- **Date:** 2026-07-13
+- **Category:** credits/ledger
+- **Severity:** blocker (silently destroys spendable credit)
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `reservation`, `ttl`, `hold-renewal`, `async`, `submit-poll`, `reserved-micro-usd`, `bulk`, `shopify-phase-4`
+
+- **SYMPTOM:** Design defect found while building the async (submit → poll → finalize) bulk
+  product-image pipeline. `ReservationManager::release()` only decrements
+  `accounts.reserved_micro_usd` if it can `Cache::pull()` the in-flight key (the atomic
+  claim from TS-CREDITS-006). The key's TTL is `trayon.credits.reservation_ttl` = **300s**.
+  A bulk/async render (fal queue: minutes) outlives that. The key expires, the render then
+  finishes, `release()`/`charge()` pull **null**, skip the decrement — and the hold stays on
+  the account **forever**. Spendable = balance − reserved, so the merchant permanently loses
+  that credit with no ledger row explaining it. Invisible: no error, no failed job, balances
+  just drift down.
+- **CONTEXT / TRIGGER:** Any generation whose provider call is longer-lived than the
+  reservation TTL. The SYNC try-on/banner paths are safe by construction (`timeout=70` <
+  300s, asserted by `GenerationInvariantsTest`), which is exactly why nothing caught it until
+  a job intentionally spanned many minutes.
+- **ROOT CAUSE:** The reservation is TWO stores that must agree — the durable column
+  (`reserved_micro_usd`) and the short-lived cache key. Only the cache key expires. The
+  release path is keyed on the cache key, so an expired key means "nothing to release", while
+  the column still holds the money. The TTL was sized for a 70s job, and the invariant
+  "key present ⇔ column holds this estimate" quietly breaks the moment a render is slower.
+- **SOLUTION:** RENEW the hold on every poll tick, and make renew a `put`, never an increment.
+  1. `app/Domain/Credits/ReservationManager.php::renew(Reservation)` — re-stamps the cache key
+     with the held amount and a FULL fresh TTL and **does not touch the column**. Safe in both
+     directions: key alive → extend; key already lapsed → re-stamp (the column was never
+     decremented, so this RESTORES the invariant instead of double-holding).
+  2. `app/Domain/ProductImages/PollProductImageJob::lockRenewAndClaim()` calls it **inside the
+     asset's row-locked transaction**, and only while the asset is still `processing` — the
+     same lock the terminal release runs under. That serialises renew against release, so a
+     renew can never resurrect a hold a release already claimed (which would double-decrement).
+  3. The poll budget (MAX_ATTEMPTS × DELAY = 60 × 10s) stays well inside the renewed TTL, so
+     two consecutive ticks can never straddle an expiry.
+  VERIFIED (mutation-proven, not theater):
+  `tests/Feature/ProductImages/ProductImageMoneyPathTest::test_a_long_render_renews_the_hold_so_it_never_lapses_mid_generation`
+  travels 200s + 200s (past the 300s TTL) across two poll ticks and asserts the hold is still
+  held mid-flight and `reserved_micro_usd` returns to 0 after the charge. **Delete the
+  `renew()` call → RED** ("The in-flight hold must survive a render longer than the
+  reservation TTL"); restored → green.
+- **PREVENTION:** Any provider call that can outlive `trayon.credits.reservation_ttl` MUST
+  renew its hold on each progress tick (under the row lock), or the hold is stranded. When
+  adding a new money path, check the pair: **max wall-clock time of the call vs. the
+  reservation TTL** — if the call can be longer, renewal is mandatory, not optional. A hold is
+  only ever released by the code path that also ends the row's non-terminal status.
+- **RELATED:** [[laravel-backend]], [[TS-CREDITS-006]], [[TS-CREDITS-007]],
+  [[app/Domain/Credits/ReservationManager.php]], [[app/Domain/ProductImages/PollProductImageJob.php]],
+  [[tests/Feature/ProductImages/ProductImageMoneyPathTest.php]]
+
 ## openrouter/ai
+
+### TS-OPENROUTER-004 — fal.ai documents NO idempotency key: a re-submitted render bills twice, so the submit-once wall must be OURS (DB-backed), not the provider's
+- **Date:** 2026-07-13
+- **Category:** openrouter/ai
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `fal`, `idempotency`, `queue-api`, `double-submit`, `async`, `provider-request-id`, `money-safety`, `shopify-phase-4`
+
+- **SYMPTOM:** The Phase-4 plan called for calling the provider queue API "with a **provider
+  idempotency key**" so a repeated submit cannot double-generate. Building it, the assumption
+  failed: fal's queue API has **no such mechanism**. Coding against an invented header
+  (`X-Fal-Idempotency-Key`) would have produced a guarantee that does not exist — the worst
+  kind: a second submit would silently start a SECOND paid render.
+- **CONTEXT / TRIGGER:** `FalImageClient::submitAsync()` (the async seam for bulk product-image
+  generation). Any retry/at-least-once delivery of the submit job.
+- **ROOT CAUSE:** Verified against fal's own docs (`https://fal.ai/docs/model-endpoints/queue`,
+  fetched 2026-07-13): the submit reply carries `request_id`, `status_url`, `response_url`,
+  `cancel_url`, `queue_position`; the statuses are `IN_QUEUE` / `IN_PROGRESS` / `COMPLETED`.
+  There is **no documented idempotency header or body field** — the docs explicitly leave
+  deduplication to the caller ("track request_id values yourself").
+- **SOLUTION:** Make the submit-once wall DB-backed and prove it. The key is still threaded
+  through the seam (`AsyncImageGenerationProvider::submitAsync(..., string $idempotencyKey)`)
+  so an upstream that DOES support one can use it — but the guarantee comes from three of our
+  own layers, in `app/Domain/ProductImages/SubmitProductImageJob.php`:
+  1. `ShouldBeUnique` on the deterministic asset key (a duplicate dispatch is dropped);
+  2. the row-locked `lockAndPrecheck()` — an asset that is not `pending` never submits;
+  3. **the provider_request_id wall** — an asset that already carries a `provider_request_id`
+     NEVER submits again (the crash-recovery shape: fal accepted the render, the worker died
+     before the status moved). The retry hands off to the POLLER instead.
+  A network blip after submit therefore retries the *poll* of the SAME `request_id`; it can
+  never start a second render.
+  VERIFIED (mutation-proven):
+  `ProductImageMoneyPathTest::test_a_resubmit_of_an_already_accepted_render_never_submits_again`
+  forces the row back to `pending` with the ticket stored and re-runs the submit job — the
+  upstream submit count stays 1. **Delete the provider_request_id check → RED** (2 submits).
+- **PREVENTION:** Before relying on a provider's idempotency key, VERIFY it exists in that
+  provider's docs — most image/video queue APIs (fal included) have none. For any paid async
+  call, the submit-once guarantee must be ours: a deterministic key + `ShouldBeUnique` + a
+  row-locked "already has a provider_request_id → never re-submit" wall, with the retry path
+  pointed at the POLL. Persist the provider's request id in the SAME transaction that moves
+  the row to `processing`.
+- **RELATED:** [[laravel-backend]], [[ai-openrouter]], [[TS-CREDITS-008]],
+  [[app/Domain/Ai/FalImageClient.php]], [[app/Domain/Ai/Contracts/AsyncImageGenerationProvider.php]],
+  [[app/Domain/ProductImages/SubmitProductImageJob.php]]
 
 ### TS-OPENROUTER-001 — OpenRouter doc URLs drifted; verified the current API shape before coding
 - **Date:** 2026-06-24
@@ -1458,6 +1555,106 @@ _No recorded issues yet._
   [[app/Domain/Media/StoredMedia.php]], [[app/Domain/Generation/GenerateTryOnJob.php]],
   [[tests/Feature/Generation/MediaStorageTest.php]]
 
+### TS-MEDIA-002 — a write ATTEMPTED is not a write VERIFIED: every disk is `throw => false`, so a failed `put()` returns FALSE and `MediaStorage` handed back a path pointing at NOTHING
+- **Date:** 2026-07-13
+- **Category:** media/storage
+- **Severity:** blocker
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `s3`, `r2`, `volume`, `filesystem-throw-false`, `silent-write-failure`, `shopify-media`, `money-path`, `phase-5`
+
+- **SYMPTOM:** A failed media write was INVISIBLE. `MediaStorage` ignored the boolean that
+  `disk()->put()` returns and always minted a `StoredMedia` with a path — so every caller
+  believed bytes had landed when they had not. Two blast radii, both real: (a) the Shopify
+  original-gallery snapshot was stamped `captured` with nothing behind it, which then
+  LICENSED deleting the merchant's original from a LIVE storefront — the image was gone
+  from Shopify *and* from us, and Undo threw `notRestorable` forever; (b) on the money
+  rails, a "stored" result that does not exist would still be charged (store-before-charge
+  is only a law if the store is real).
+- **CONTEXT / TRIGGER:** Any media write on any rail (try-on, banner, product-image,
+  storyboard, playground, Shopify snapshot). Triggered by a real S3/R2/volume write
+  failure — a full disk, a bad credential, a bucket policy, an outage.
+- **ROOT CAUSE:** EVERY disk in `config/filesystems.php` sets `'throw' => false`
+  (:45, :54, :67, :84). Laravel's `FilesystemAdapter` therefore CATCHES `UnableToWriteFile`
+  and returns `false` instead of raising. Ten `put()` call sites ignored that return value.
+  A second, subtler shape: a disk that ACCEPTS the write and cannot serve it back (a lying
+  or eventually-consistent backend) — the boolean alone does not catch that one.
+- **SOLUTION:** ONE write gateway: `MediaStorage::write()`
+  (`app/Domain/Media/MediaStorage.php`) — every `store*()` method routes through it, and it
+  (1) throws `MediaWriteException::rejected()` when `put()` returns `false`, and (2) READS
+  THE OBJECT BACK (`byteSize() >= 1`) and throws `MediaWriteException::unverified()` when it
+  is missing or empty. `StoredMedia::byteSize` is now the VERIFIED size, not `strlen($bytes)`.
+  Downstream: the Shopify snapshotter re-verifies the whole capture before it may transition
+  to `captured` (`assertVerified()`), and the pusher re-verifies before every destructive
+  push (`assertSnapshotRestorable()` / `assertMediaRestorable()`) — a path STRING is not
+  bytes. The money rails already wrapped the store in a try/catch, so a typed write failure
+  now releases the hold and writes NO charge row (they stay green).
+- **PREVENTION:** Never trust `Storage::put()`'s side effect while `throw => false` is set —
+  check the boolean AND read the object back before anything irreversible (a delete, a
+  charge, a state transition) hangs on it. Pin BOTH checks separately: a mock disk with
+  `put -> false, exists -> true` proves the boolean check, and `put -> true, exists -> false`
+  proves the readback. Mutation-verified in
+  `tests/Feature/Shopify/ShopifyMediaSafetyTest.php` +
+  `ProductImageMoneyPathTest::test_a_silently_refused_disk_write_never_debits_the_merchant`.
+- **RELATED:** [[TS-MEDIA-001]], [[laravel-backend]], [[app/Domain/Media/MediaStorage.php]],
+  [[app/Domain/Media/MediaWriteException.php]],
+  [[app/Domain/Shopify/Media/ShopifyMediaSnapshotter.php]],
+  [[app/Domain/Shopify/Media/ShopifyMediaPusher.php]]
+
+### TS-MEDIA-003 — an UNDO that restores the order but not the bytes is an undo that lies: three ways the Shopify destructive rail could lose a merchant's original for good
+- **Date:** 2026-07-13
+- **Category:** media/storage
+- **Severity:** blocker
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `shopify`, `product-media`, `destructive-push`, `undo`, `idempotency`, `pagination`, `state-machine`, `phase-5`
+
+- **SYMPTOM:** Four independent ways a merchant's live product could end up with a deleted
+  original nobody could restore, or with junk in their gallery:
+  (1) a crash mid-restore re-uploaded the SAME original again (the snapshot's
+  `restored_media_id` was saved only AFTER the whole loop), so the live gallery grew a
+  DUPLICATE original on every retry;
+  (2) the snapshot captured the WHOLE live gallery — including images WE had already
+  pushed with an APPEND (an append is non-destructive and takes no snapshot) — so a second
+  Undo re-uploaded OUR OWN AI image into the storefront as if it were an "original", where
+  it stayed forever;
+  (3) `media(first: 50)` had no `pageInfo`: a >50-media product was silently TRUNCATED and
+  still stamped `captured`, so Undo could never restore the rest's order;
+  (4) `approved -> rejected` was legal with no push guard, so Undo mutated the store and
+  THEN threw on `pushTransitionTo()` — the asset was stranded at `pushed` with a dead media
+  id, no restore event, and an Undo button that threw forever.
+- **CONTEXT / TRIGGER:** Phase 5 (`app/Domain/Shopify/Media/*`). Any REPLACE / position-N
+  push, an append followed by a destructive push, a >50-image product, a poll-budget
+  exhaustion or throttle park mid-restore, a merchant who rejects an image they pushed.
+- **ROOT CAUSE:** Four different instances of the same family — a step whose durable record
+  lagged the irreversible act it was supposed to justify. Notably (1) is the SAME window as
+  the push rail's `createMedia()` (already closed there): the provider minted the resource
+  and our DB write did not land.
+- **SOLUTION:** (1) `ShopifyMediaSnapshot::rememberRestoredMediaId()` is called between
+  `createMedia()` and `awaitReady()` — the id is persisted in the SAME BREATH as the call
+  that mints it, per item, before anything that can throw. A resumed restore also re-awaits a
+  not-yet-READY original, so the "delete ours only after every original is READY" law holds
+  on the resume path too. (2) `ShopifyMediaSnapshotter::capture()` EXCLUDES every media id
+  carried by this product's `product_assets.shopify_media_id` and rebases the positions over
+  what remains — the snapshot is the merchant's TRUE pre-Tray-On state. (3)
+  `ShopifyMediaQueries::productMedia()` now requests `pageInfo { hasNextPage endCursor }` and
+  `ShopifyMediaClient::gallery()` WALKS it, throwing `ShopifyMediaException::galleryUnread()`
+  when the gallery cannot be read to its end (fail closed; bounded by
+  `shopify.media.max_pages`). (4) `ProductAsset::reviewTransitionTo()` refuses to REJECT an
+  asset that `isInStore()`, and `pushTransitionTo()`'s approval gate now guards only the way
+  INTO the store — leaving it (`-> not_pushed`, i.e. undo) needs no approval, so undo can
+  always close the loop.
+- **PREVENTION:** Persist the remote id in the same breath as the call that mints it (never
+  after the loop). A snapshot must represent the state BEFORE we touched anything — never
+  re-capture our own writes. A partial read of a paginated resource is not a shorter
+  resource: fail closed. Two machines that can move independently (review + push) must be
+  made to agree, or one can brick the other. Every one of these guards is pinned by a
+  mutation-verified test in `tests/Feature/Shopify/ShopifyMediaSafetyTest.php`.
+- **RELATED:** [[TS-MEDIA-002]], [[laravel-backend]],
+  [[app/Domain/Shopify/Media/ShopifyMediaPusher.php]],
+  [[app/Domain/Shopify/Media/ShopifyMediaSnapshotter.php]],
+  [[app/Domain/Shopify/Media/ShopifyMediaClient.php]], [[app/Models/ProductAsset.php]]
+
 ## privacy/retention
 
 ### TS-PRIVACY-001 — Phase-5a `end_users` shipped with NO consent columns; marketing-consent-default-OFF had nowhere to store
@@ -1503,6 +1700,114 @@ _No recorded issues yet._
 
 ## build/deploy
 
+### TS-BUILD-009 — TWO agents running the suite at once: `Storage::fake('s3')` WIPES the shared testing-disk directory, so the other process's just-written file vanishes mid-test
+- **Date:** 2026-07-13
+- **Category:** build/deploy
+- **Severity:** minor (environmental; no product bug — but it looks exactly like a money-path flake)
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `storage-fake`, `parallel-agents`, `flaky`, `testing-disks`, `media`, `false-positive`
+
+- **SYMPTOM:** A single, non-reproducible failure in the product-image money path:
+  `Storage::disk('s3')->assertExists($asset->image_path)` failed while EVERY other assertion in
+  the same test (status succeeded, charge = 97_500, ledger row, balance, released hold) passed.
+  The next four consecutive runs — and the full suite — were green. A "sometimes the stored image
+  isn't there" failure on a money path is alarming and easy to chase for an hour.
+- **CONTEXT / TRIGGER:** Two agents (this repo runs a multi-agent team) executed
+  `vendor/bin/phpunit` at the same time on the same working copy.
+- **ROOT CAUSE:** `Storage::fake($disk)` is NOT process-isolated: it writes to the SHARED path
+  `storage/framework/testing/disks/{disk}` and **cleans that directory** every time it is called.
+  The other process's `Storage::fake('s3')` (in its own `setUp`) therefore deleted the files my
+  test had just written, between the write and the assertion. The DB assertions survived because
+  each process has its own sqlite/`RefreshDatabase` transaction — only the filesystem is shared.
+- **SOLUTION:** Nothing to fix in product code (verified: the pipeline stores the bytes BEFORE the
+  charge, and the path/charge assertions were all correct). Do not run two suites against one
+  working copy at the same time; re-run to confirm before treating a lone `assertExists` failure
+  on a faked disk as a real defect. Verified: 4 consecutive `--filter ProductImage` runs green
+  (30 tests) and the full suite green (1091 tests) once the other agent's run finished.
+- **PREVENTION:** When a media/disk assertion fails ALONE while the money/DB assertions in the same
+  test pass, suspect a concurrent `Storage::fake()` wipe before suspecting the pipeline. In a
+  multi-agent session, serialise full-suite runs (or give each run its own working copy); if
+  parallel runs ever become routine, point the testing disk root at a per-process temp dir.
+- **RELATED:** [[laravel-backend]], [[TS-MEDIA-001]], [[TS-BUILD-008]],
+  [[tests/Feature/ProductImages/ProductImageMoneyPathTest.php]]
+
+### TS-BUILD-008 — `Http::fake()` runs EVERY matching stub closure (not just the winner), so a counter inside a stub over-counts; and a SEED MIGRATION breaks an unrelated `assertDatabaseMissing`
+- **Date:** 2026-07-13
+- **Category:** build/deploy
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `http-fake`, `stub-callbacks`, `side-effects`, `call-counting`, `seed-migration`, `assert-database-missing`, `shopify-phase-4`
+
+- **SYMPTOM:** Two test-harness traps while proving the async product-image money path.
+  (1) A test asserting "the provider is never re-SUBMITTED" counted submits with a `$this->count++`
+  inside the submit stub closure. It reported **3 submits for 1 real submit** — the anti-double-submit
+  assertion was measuring nonsense, and a genuine double-submit bug would have been invisible.
+  (2) After adding a migration that SEEDS the AI control plane (the two product-image operations
+  + their model catalog), an unrelated platform test went RED:
+  `AiModelCostHintTest::test_a_byteplus_model_cannot_be_saved_without_a_per_image_price`
+  → `assertDatabaseMissing('ai_models', ['model_id' => 'seedream-5-0-260128'])` now found rows.
+- **CONTEXT / TRIGGER:** (1) `Http::fake([...])` with several URL patterns whose globs overlap
+  (`/*/requests/*/status`, `/*/requests/*`, `/*`). (2) Any `RefreshDatabase` test — migrations
+  run, so a seed migration's rows exist in EVERY test, not just the ones that call `$this->seed()`.
+- **ROOT CAUSE:**
+  (1) `Factory::send()` does `$this->stubCallbacks->map(fn ($cb) => $cb($request, $options))->filter()->first()`
+  — `map()` is EAGER, so **every** stub whose pattern matches is invoked; only the first non-null
+  RESPONSE is used. A broad catch-all pattern therefore fires its closure on every request,
+  including the status/result polls, even though its response is discarded. Side effects in a
+  stub closure are not a call count.
+  (2) A seed migration is global test state. `assertDatabaseMissing` on a catalog row is a
+  test that "nobody has seeded this id" — a new seed migration silently invalidates it.
+- **SOLUTION:**
+  (1) Keep stub closures SIDE-EFFECT-FREE for counting and read call counts from `Http::recorded()`,
+  which records the requests that actually went out:
+  `tests/Feature/ProductImages/ProductImageTestSupport.php` —
+  `falSubmitCount()` = recorded POSTs whose url has no `/requests/`; `falPollCount()` = recorded
+  urls ending in `/status`. (Sequencing state — "IN_QUEUE then COMPLETED" — may stay in the
+  closure; it is idempotent per matching request. Combine with TS-BUILD-004: install ONE fake and
+  make the RESPONDER the mutable part.)
+  (2) Keep the seed migration, and keep the catalog it seeds MINIMAL: the BytePlus/Seedream row
+  was dropped from the product-image alt-model list (fal + OpenRouter only), which restores the
+  other test's premise without weakening it. Verified: full suite green afterwards.
+- **PREVENTION:** Never count provider calls with a counter inside an `Http::fake` closure — use
+  `Http::recorded()` / `Http::assertSentCount()`. Assume EVERY matching stub closure runs. And
+  before adding a migration that seeds a catalog table, grep the suite for `assertDatabaseMissing`
+  / count assertions on that table — a seed migration is global state for every `RefreshDatabase`
+  test.
+- **RELATED:** [[laravel-backend]], [[TS-BUILD-004]], [[TS-BUILD-007]],
+  [[tests/Feature/ProductImages/ProductImageTestSupport.php]],
+  [[database/migrations/2026_07_13_120002_seed_product_image_operations.php]],
+  [[database/seeders/AiControlPlaneSeeder.php]]
+
+### TS-BUILD-006 — `php artisan test` dies with "Allowed memory size of 134217728 bytes exhausted" while `vendor/bin/phpunit` passes
+- **Date:** 2026-07-12
+- **Category:** build/deploy
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `phpunit`, `artisan-test`, `memory_limit`, `toolchain`, `herd`
+
+- **SYMPTOM:** `php artisan test` fails partway through with repeated
+  `In FinfoMimeTypeDetector.php line 76: Allowed memory size of 134217728 bytes
+  exhausted (tried to allocate 7340161 bytes)` and never reports a summary. The exact
+  same suite run as `vendor/phpunit/phpunit/phpunit` is fully green (983 tests).
+- **CONTEXT / TRIGGER:** Any full-suite run once the suite crossed ~128 MB peak
+  (it now peaks at ~144 MB — the media/image fixtures dominate). Hit while gating
+  Shopify Phase 2. Passing `-d memory_limit=1G` to the artisan command does NOT help.
+- **ROOT CAUSE:** `artisan test` SPAWNS a separate PHP process for PHPUnit. That child
+  inherits the php.ini `memory_limit` (128M in Herd's php84), not the `-d` flag given
+  to the parent artisan process — so the child OOMs while a direct phpunit invocation
+  with a raised limit succeeds. It is not a leak in any test.
+- **SOLUTION:** Pin the limit in the PHPUnit config itself so the child process reads
+  it: in `phpunit.xml`, inside `<php>`, add
+  `<ini name="memory_limit" value="512M"/>`.
+  Verified: `php artisan test` -> 983 passed (3286 assertions).
+- **PREVENTION:** Set test-runner ini values in `phpunit.xml` (`<ini>`), never on the
+  artisan command line — the runner is a child process. If a suite-wide OOM appears
+  after adding image/media fixtures, raise this value rather than chasing a leak.
+- **RELATED:** [[phpunit.xml]], [[TS-MEDIA-001]], [[laravel-backend]]
+
 ### TS-BUILD-005 — the storefront widget must be a CLASSIC-script IIFE on a STABLE static path, not an ESM/hashed Vite asset (a `<script src>` can't send the site_key header, and the locked embed snippet has no `type=module`)
 - **Date:** 2026-06-30
 - **Category:** build/deploy
@@ -1545,13 +1850,29 @@ _No recorded issues yet._
   [[Dockerfile]], [[package.json]], [[resources/views/components/to/embed-code.blade.php]],
   [[app/Http/Middleware/ResolveWidgetSite.php]]
 
-### TS-BUILD-004 — generation-suite determinism: `Sleep` is `Illuminate\Support\Sleep` (not `…\Facades\Sleep`), and a later `Http::fake([…])` does NOT override an earlier empty `Http::fake()`
-- **Date:** 2026-06-25
+### TS-BUILD-004 — generation-suite determinism: `Sleep` is `Illuminate\Support\Sleep` (not `…\Facades\Sleep`), and a later `Http::fake([…])` does NOT override an earlier `Http::fake()`
+- **Date:** 2026-06-25   (re-occurrence: 2026-07-13 — Shopify Phase 3 product sync)
 - **Category:** build/deploy
 - **Severity:** major
-- **Recurrence:** 1
-- **Status:** resolved
-- **Tags:** `flaky-tests`, `sleep-fake`, `http-fake`, `test-isolation`, `money-path`, `determinism`, `phase-6`
+- **Recurrence:** 2
+- **Status:** recurring
+- **Tags:** `flaky-tests`, `sleep-fake`, `http-fake`, `test-isolation`, `money-path`, `determinism`, `phase-6`, `shopify`
+
+> **RECURRENCE 2026-07-13 (Shopify Phase 3, `laravel-backend`).** The same trap, a NEW
+> facet: it is not only an *empty* catch-all that wins — **two non-empty `Http::fake([...])`
+> calls using the SAME url pattern also do not replace each other.** `Factory::fake()`
+> MERGES stub callbacks and `stubCallbacks->first(non-null)` wins, so the FIRST stub keeps
+> answering. Symptom in the sync suite: a test faked catalog page A, then re-faked a smaller
+> catalog to simulate a deleted product — and kept getting page A, so "the product vanished
+> from Shopify" never happened and the archive assertions failed with confusing "true is not
+> false" messages. Same root cause bit the webhook tests (an `import()` helper that faked the
+> API, then the test re-faked it with the updated product → the stale product came back).
+> **VERIFIED FIX (reusable):** register EXACTLY ONE stub and swap the behaviour behind it —
+> `tests/Feature/Shopify/ShopifyProductTestSupport::respondWith(Closure $responder)` installs
+> `Http::fake(['*/admin/api/*/graphql.json' => fn ($r) => ($this->shopifyResponder)($r)])`
+> once, and every later `fakeCatalog()` / `fakeSingleProduct()` only reassigns the closure.
+> Re-stubbing then actually works. Rule of thumb: **`Http::fake()` is append-only within a
+> test — treat it as install-once, and make the RESPONDER the mutable part.**
 
 - **SYMPTOM:** Closing the Phase-6 determinism blocker (the consumer side of
   TS-OPENROUTER-003), two test-harness traps cost real time:
@@ -1596,6 +1917,44 @@ _No recorded issues yet._
 - **RELATED:** [[laravel-backend]], [[ai-openrouter]], [[TS-OPENROUTER-003]],
   [[tests/Feature/Generation/GenerationTestSupport.php]],
   [[tests/Feature/Generation/GenerateTryOnJobTest.php]]
+
+### TS-BUILD-007 — `QUEUE_CONNECTION=sync` in tests makes a SELF-REDISPATCHING job cascade inline, silently invalidating page-by-page assertions
+- **Date:** 2026-07-13
+- **Category:** build/deploy
+- **Severity:** major
+- **Recurrence:** 1
+- **Status:** resolved
+- **Tags:** `queue-sync`, `self-redispatch`, `cursor-pagination`, `bus-fake`, `test-isolation`, `shopify`, `phase-3`
+
+- **SYMPTOM:** The Shopify catalog walk (`SyncShopifyCatalogJob` dispatches ITSELF with the
+  next cursor) behaved bizarrely under test: a page-1 `handle()` call also ran page 2, page 3
+  … to completion, so a test that then drove page 2 by hand found the run already TERMINAL
+  and asserted against a state it had not created. Side effects were confusing rather than
+  loud: `Sleep::assertSleptTimes(1)` reported **9** sleeps (the throttled page had been
+  retried by three cascaded job instances), and a "resume from the parked cursor" test proved
+  nothing because the cascade had already walked the whole catalog.
+- **CONTEXT / TRIGGER:** Any test that invokes `->handle()` directly on a job that dispatches
+  a continuation of itself (cursor pagination, poll loops, fan-out). `phpunit.xml` sets
+  `QUEUE_CONNECTION=sync`, so `Job::dispatch()` inside `handle()` runs the next job INLINE,
+  nested inside the first — the queue's boundary between units disappears.
+- **ROOT CAUSE:** The `sync` driver executes a dispatched job immediately in-process. A job
+  designed to be resumable (one unit of work per invocation, state persisted between them)
+  therefore collapses into a single recursive call in tests — exactly destroying the property
+  the test exists to prove.
+- **SOLUTION:** `Bus::fake()` in `setUp()` for any suite that drives a self-redispatching job,
+  then (a) assert the continuation was DISPATCHED with the right arguments
+  (`Bus::assertDispatched(SyncShopifyCatalogJob::class, fn ($job) => $job->cursor === 'cursor-1')`)
+  and (b) invoke the next unit by hand. Each page then runs exactly once, from persisted state
+  — which is what proves resumability. VERIFIED: `tests/Feature/Shopify/ShopifyCatalogSyncTest.php`
+  (walk, throttle-park, cursor-resume, archive-stale) — 110 Shopify tests green, full suite 1048.
+  Note `Bus::fake()` does NOT block a job you `->handle()` yourself, so the work still runs.
+- **PREVENTION:** If a job dispatches itself (or a sibling) from inside `handle()`, its test
+  MUST `Bus::fake()` — otherwise `sync` turns N independent, resumable units into one nested
+  call. Symptom to recognise: a job-count/sleep-count/attempt-count assertion off by an exact
+  multiple, or a "resume" test that passes for the wrong reason.
+- **RELATED:** [[laravel-backend]], [[TS-BUILD-004]],
+  [[app/Domain/Shopify/Products/SyncShopifyCatalogJob.php]],
+  [[tests/Feature/Shopify/ShopifyCatalogSyncTest.php]], [[phpunit.xml]]
 
 ### TS-BUILD-003 — Phase-2 `sites.free_generations_before_signup` was NOT NULL; the lead gate's `null` ("signup never required") could not be stored
 - **Date:** 2026-06-25

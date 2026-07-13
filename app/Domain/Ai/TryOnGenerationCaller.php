@@ -22,9 +22,12 @@ final class TryOnGenerationCaller
 
     // BytePlus/Seedream: image_quality -> size token, response format, defaults.
     private const BYTEPLUS_RESPONSE_FORMAT = 'b64_json';
+
     private const BYTEPLUS_DEFAULT_SIZE = '2K';
+
     // Seedream 4.x/5.x: force a SINGLE output image (no multi-image sequence) for a try-on.
     private const BYTEPLUS_SEQUENTIAL = 'disabled';
+
     private const BYTEPLUS_QUALITY_SIZE = [
         'high' => '2K',
         'standard' => '1K',
@@ -34,7 +37,12 @@ final class TryOnGenerationCaller
     // xAI/Grok images/generations is TEXT-TO-IMAGE: only model + prompt + these two are sent
     // (no size/quality/aspect/seed — xAI rejects unknown params).
     private const XAI_RESPONSE_FORMAT = 'b64_json';
+
     private const XAI_IMAGE_COUNT = 1;
+
+    // Kling-native knobs an admin may set on the operation; they ride through to Kling verbatim
+    // (image_fidelity/human_fidelity tune how strictly the try-on preserves the inputs).
+    private const KLING_PASSTHROUGH_PARAMS = ['image_fidelity', 'human_fidelity', 'image_reference', 'n'];
 
     // fal has no free-form ratio: the aspect maps onto its image_size enum (and the raw ratio is
     // also sent as aspect_ratio for the models that declare that field; extras are ignored).
@@ -118,6 +126,7 @@ final class TryOnGenerationCaller
                 ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->buildBytePlusBody($config, $model, $shopperImage, $variantImage, $vars),
                 ImageGenerationProvider::PROVIDER_XAI => $this->buildXaiBody($config, $model, $vars),
                 ImageGenerationProvider::PROVIDER_FAL => $this->buildFalBody($config, $model, $shopperImage, $variantImage, $vars),
+                ImageGenerationProvider::PROVIDER_KLING => $this->buildKlingBody($config, $model, $shopperImage, $variantImage, $vars),
                 default => $this->buildOpenRouterBody($config, $model, $shopperImage, $variantImage, $vars),
             },
         );
@@ -288,6 +297,51 @@ final class TryOnGenerationCaller
 
         if (array_key_exists('seed', $config->params)) {
             $body['seed'] = $config->params['seed'];
+        }
+
+        return $body;
+    }
+
+    /**
+     * Kling body. The SHOPPER image leads and the PRODUCT image follows — on a
+     * kolors-virtual-try-on model the client maps them onto human_image + cloth_image (Kling's
+     * dedicated try-on endpoint, the best fit for this operation by far); on a plain Kling image
+     * model the shopper photo is the reference and the prompt carries the garment. The client
+     * inlines both as raw base64. Native Kling knobs (image_fidelity, human_fidelity, …) ride
+     * along from the operation params — never a literal here.
+     *
+     * @param  array<string,string|int|float|null>  $vars
+     * @return array<string,mixed>
+     */
+    private function buildKlingBody(
+        OperationConfig $config,
+        string $model,
+        ImagePayload $shopperImage,
+        ImagePayload $variantImage,
+        array $vars,
+    ): array {
+        $prompt = $config->substituteUser($vars);
+        $system = $config->substituteSystem($vars);
+
+        if ($system !== null && $system !== '') {
+            $prompt = $system."\n\n".$prompt;
+        }
+
+        $body = [
+            KlingImageClient::KEY_MODEL => $model,
+            KlingImageClient::KEY_PROMPT => $prompt,
+            // ORDER IS THE CONTRACT: [person, garment] — the try-on endpoint's human_image + cloth_image.
+            KlingImageClient::KEY_IMAGE_URLS => [$shopperImage->url, $variantImage->url],
+        ];
+
+        if ($config->aspectRatio !== null) {
+            $body['aspect_ratio'] = $config->aspectRatio;
+        }
+
+        foreach (self::KLING_PASSTHROUGH_PARAMS as $knob) {
+            if (array_key_exists($knob, $config->params)) {
+                $body[$knob] = $config->params[$knob];
+            }
         }
 
         return $body;

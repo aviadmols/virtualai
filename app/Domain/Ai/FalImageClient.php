@@ -3,7 +3,7 @@
 namespace App\Domain\Ai;
 
 use App\Domain\Ai\Concerns\EncodesImageDataUris;
-use App\Domain\Ai\Contracts\ImageGenerationProvider;
+use App\Domain\Ai\Contracts\AsyncImageGenerationProvider;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Platform\PlatformSettings;
 use Illuminate\Http\Client\ConnectionException;
@@ -31,56 +31,84 @@ use Illuminate\Support\Sleep;
  * MONEY-SAFETY: fal returns NO per-request USD cost — parseCost uses the admin-entered per-image
  * price (the AiModel cost hint) as the authoritative flat rate, and returns UNAVAILABLE (never
  * charges) when no price is set.
+ *
+ * It ALSO implements the AsyncImageGenerationProvider seam (submitAsync/pollAsync), which
+ * exposes that same queue as SEPARATE steps for the bulk product-image pipeline: submit once,
+ * persist the request id, then poll in short ticks from a re-dispatching job. The synchronous
+ * contract above is unchanged (the shopper-facing try-on/banner paths still block).
+ *
+ * NOTE (verified 2026-07-13 against fal's queue docs): fal documents NO request-level
+ * idempotency key. Our deterministic asset key is therefore threaded through for correlation
+ * only, and the guarantee that one asset is submitted exactly once is enforced on OUR side
+ * (ShouldBeUnique on that key + a row-locked asset that never re-submits once it carries a
+ * provider_request_id).
  */
-final class FalImageClient implements ImageGenerationProvider
+final class FalImageClient implements AsyncImageGenerationProvider
 {
     use EncodesImageDataUris;
 
     // === CONSTANTS ===
     private const REQUESTS_SEGMENT = '/requests/';
+
     private const STATUS_SUFFIX = '/status';
+
     // The result lives at .../requests/{id}/response (the submit reply's response_url shape); some
     // deployments still serve the bare .../requests/{id}, kept as a one-shot fallback.
     private const RESULT_SUFFIX = '/response';
+
     private const ROUTE_MISMATCH_STATUSES = [404, 405];
 
     private const CFG_KEY = 'services.fal.api_key';
+
     private const CFG_BASE_URL = 'services.fal.base_url';
+
     private const CFG_CATALOG_URL = 'services.fal.catalog_url';
+
     private const CFG_TIMEOUT = 'services.fal.timeout';
 
     // Queue statuses (fal's own vocabulary).
     private const STATUS_COMPLETED = 'COMPLETED';
+
     private const IN_FLIGHT = ['IN_QUEUE', 'IN_PROGRESS'];
 
     // Poll budget: 2s sleeps × 40 ≈ 80s of render time; each status GET is separately capped at
     // POLL_HTTP_TIMEOUT so a hung request cannot blow the queued worker's timeout.
     private const POLL_INTERVAL_MS = 2000;
+
     private const MAX_POLLS = 40;
+
     private const POLL_HTTP_TIMEOUT = 15;
 
     // Catalog categories that take NO input images — the image keys are stripped for them.
     private const TEXT_ONLY_CATEGORIES = ['text-to-image', 'text-to-video'];
 
     private const MAX_RETRIES = 1;
+
     private const BACKOFF_BASE_MS = 400;
+
     private const BACKOFF_JITTER_MS = 250;
 
     // Body keys that may carry input-image urls (converted to data URIs before submit).
     private const IMAGE_URL_KEY = 'image_url';
+
     private const IMAGE_URLS_KEY = 'image_urls';
 
     // A no-spend key probe: any authenticated GET on the queue host answers 401 for a bad key
     // and 4xx-not-401 for a good one. A zero request id never collides with a real run.
     private const PROBE_MODEL = 'fal-ai/flux/schnell';
+
     private const PROBE_REQUEST = '00000000-0000-0000-0000-000000000000';
 
     private const STATUS_UNAUTHORIZED = 401;
+
     private const STATUS_FORBIDDEN = 403;
+
     private const STATUS_RATE_LIMITED = 429;
+
     private const STATUS_SERVER_MIN = 500;
 
     private const KEY_VISIBLE_PREFIX = 8;
+
     private const KEY_MASK = '****';
 
     public function __construct(
@@ -134,27 +162,121 @@ final class FalImageClient implements ImageGenerationProvider
         $model = (string) ($body['model'] ?? '');
         unset($body['model']);
 
-        $submitted = $this->submit($model, $this->inlineInputImages($body, $model), $operationKey);
-        $requestId = (string) $submitted['request_id'];
+        $ticket = $this->submitTicket($model, $body, $operationKey);
 
-        // The submit reply's status_url/response_url are AUTHORITATIVE (fal's own routing for this
-        // request); constructed paths are only the fallback when they are absent.
-        $requestBase = '/'.$model.self::REQUESTS_SEGMENT.$requestId;
-        $statusUrl = is_string($submitted['status_url'] ?? null) && $submitted['status_url'] !== ''
-            ? $submitted['status_url']
-            : $requestBase.self::STATUS_SUFFIX;
-        $resultUrl = is_string($submitted['response_url'] ?? null) && $submitted['response_url'] !== ''
-            ? $submitted['response_url']
-            : $requestBase.self::RESULT_SUFFIX;
+        $this->awaitCompletion((string) $ticket->statusUrl, $model, $operationKey);
 
-        $this->awaitCompletion($statusUrl, $model, $operationKey);
-
-        $result = $this->fetchResult($resultUrl, $requestBase, $model, $operationKey);
-        $result['request_id'] ??= $requestId;
+        $result = $this->fetchResult((string) $ticket->resultUrl, $this->requestBase($model, $ticket->requestId), $model, $operationKey);
+        $result['request_id'] ??= $ticket->requestId;
 
         $this->logOutcome($operationKey, $model, 'ok', 200);
 
         return $result;
+    }
+
+    /**
+     * ASYNC SEAM — submit ONE generation and hand back its ticket, without waiting. The bulk
+     * product-image pipeline persists the ticket, so a later retry can only ever poll it.
+     * $idempotencyKey is OUR asset key: fal documents no idempotency header, so it rides along
+     * for log correlation only — the submit-once guarantee is enforced on our side.
+     */
+    public function submitAsync(string $operationKey, string $model, array $body, string $idempotencyKey): AsyncImageTicket
+    {
+        unset($body['model']); // the model is the URL path on fal, never a body field
+
+        return $this->submitTicket($model, $body, $operationKey);
+    }
+
+    /**
+     * ASYNC SEAM — ONE poll tick. A transport problem THROWS (the poller retries the poll, it
+     * never re-submits); an upstream terminal-but-not-completed status is a typed failure.
+     */
+    public function pollAsync(AsyncImageTicket $ticket, string $operationKey): AsyncImagePoll
+    {
+        $requestBase = $this->requestBase($ticket->model, $ticket->requestId);
+        $statusUrl = $ticket->statusUrl ?? $requestBase.self::STATUS_SUFFIX;
+
+        try {
+            $response = $this->request()->timeout(self::POLL_HTTP_TIMEOUT)->get($statusUrl);
+        } catch (ConnectionException $e) {
+            throw OpenRouterException::make(
+                OpenRouterException::CODE_MODEL_TIMEOUT,
+                sprintf('fal status poll timed out for model %s.', $ticket->model),
+                modelUsed: $ticket->model,
+                previous: $e,
+            );
+        }
+
+        // A broken status route is a CLASSIFIED transport error — never mistaken for terminal.
+        if (! $response->successful()) {
+            $code = $this->classifyStatus($response->status());
+            $this->logOutcome($operationKey, $ticket->model, 'status_'.$code, $response->status());
+
+            throw OpenRouterException::make(
+                $code,
+                sprintf('fal status poll error (%d) for model %s.', $response->status(), $ticket->model),
+                modelUsed: $ticket->model,
+                providerStatus: $response->status(),
+            );
+        }
+
+        $status = strtoupper((string) $response->json('status'));
+
+        if (in_array($status, self::IN_FLIGHT, true)) {
+            return AsyncImagePoll::pending();
+        }
+
+        // COMPLETED (or a terminal-but-not-completed status, whose detail lives on the result
+        // endpoint): fetch the result. A provider-side failure surfaces as a typed failed poll.
+        try {
+            $result = $this->fetchResult(
+                $ticket->resultUrl ?? $requestBase.self::RESULT_SUFFIX,
+                $requestBase,
+                $ticket->model,
+                $operationKey,
+            );
+        } catch (OpenRouterException $e) {
+            if ($status !== self::STATUS_COMPLETED) {
+                return AsyncImagePoll::failed($e->getMessage()); // upstream said it is over, and it failed
+            }
+
+            throw $e; // COMPLETED but the result could not be fetched -> a transport blip; re-poll
+        }
+
+        $result['request_id'] ??= $ticket->requestId;
+
+        return AsyncImagePoll::succeeded($result);
+    }
+
+    /**
+     * Submit + build the ticket. The submit reply's status_url/response_url are AUTHORITATIVE
+     * (fal's own routing for THIS request); the constructed paths are only the fallback.
+     *
+     * @param  array<string,mixed>  $body
+     */
+    private function submitTicket(string $model, array $body, string $operationKey): AsyncImageTicket
+    {
+        $submitted = $this->submit($model, $this->inlineInputImages($body, $model), $operationKey);
+        $requestId = (string) $submitted['request_id'];
+        $requestBase = $this->requestBase($model, $requestId);
+
+        return new AsyncImageTicket(
+            provider: self::PROVIDER_FAL,
+            model: $model,
+            requestId: $requestId,
+            statusUrl: is_string($submitted['status_url'] ?? null) && $submitted['status_url'] !== ''
+                ? $submitted['status_url']
+                : $requestBase.self::STATUS_SUFFIX,
+            resultUrl: is_string($submitted['response_url'] ?? null) && $submitted['response_url'] !== ''
+                ? $submitted['response_url']
+                : $requestBase.self::RESULT_SUFFIX,
+        );
+    }
+
+    /** The per-request url base: /{model}/requests/{request_id}. */
+    private function requestBase(string $model, string $requestId): string
+    {
+        return '/'.$model.self::REQUESTS_SEGMENT.$requestId;
     }
 
     /** @return array<string,mixed> the submit reply (request_id + status_url/response_url when given) */

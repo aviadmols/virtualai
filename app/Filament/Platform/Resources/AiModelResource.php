@@ -2,6 +2,7 @@
 
 namespace App\Filament\Platform\Resources;
 
+use App\Domain\Ai\KlingCatalog;
 use App\Domain\Ai\ProviderRouter;
 use App\Domain\Credits\CreditMath;
 use App\Filament\Platform\Resources\AiModelResource\Pages\CreateAiModel;
@@ -46,13 +47,18 @@ class AiModelResource extends Resource
 
     // i18n label keys (platform.models.*).
     private const LABEL_SINGULAR = 'platform.models.singular';
+
     private const NAV_LABEL = 'platform.models.title';
 
     // Per-model "Test" action (no-spend probe) i18n + reason -> localized body map.
     private const LABEL_TEST = 'platform.models.test';
+
     private const LABEL_TEST_OK = 'platform.models.test_ok';
+
     private const LABEL_TEST_FAIL = 'platform.models.test_fail';
+
     private const TEST_RESULT_VIEW = 'filament.platform.model-test-result';
+
     private const TEST_REASON_BODY = [
         'ok' => 'platform.models.test_ok_body',
         'not_configured' => 'platform.models.test_not_configured',
@@ -86,6 +92,9 @@ class AiModelResource extends Resource
                     TextInput::make('model_id')
                         ->label(__('platform.models.field.model_id'))
                         ->helperText(__('platform.models.field.model_id_help'))
+                        // Kling publishes no catalog endpoint, so its known ids (image, try-on and
+                        // video) are offered as suggestions; any id can still be typed.
+                        ->datalist(fn (Get $get): array => self::modelSuggestions((string) $get('provider')))
                         ->required()
                         ->maxLength(255)
                         ->columnSpanFull(),
@@ -275,6 +284,19 @@ class AiModelResource extends Resource
         return AiOperation::query()->where('operation_key', $key)->value('label') ?: $key;
     }
 
+    /**
+     * Model-id suggestions for the picker. Only Kling needs them here: it has no catalog endpoint,
+     * so its image + try-on + video ids are offered inline. @return array<int,string>
+     */
+    private static function modelSuggestions(string $provider): array
+    {
+        if ($provider !== AiModel::PROVIDER_KLING) {
+            return [];
+        }
+
+        return [...KlingCatalog::imageSuggestions(), ...KlingCatalog::videoSuggestions()];
+    }
+
     /** Provider id → label (the AiModel PROVIDER_* CONSTs). */
     public static function providerOptions(): array
     {
@@ -283,16 +305,22 @@ class AiModelResource extends Resource
             AiModel::PROVIDER_BYTEPLUS => 'BytePlus (Seedream)',
             AiModel::PROVIDER_XAI => 'xAI (Grok)',
             AiModel::PROVIDER_FAL => 'fal.ai',
+            AiModel::PROVIDER_KLING => 'Kling (Kuaishou)',
         ];
     }
 
     /**
-     * A flat-rate provider (BytePlus, xAI, fal.ai) returns no inline USD cost, so a positive per-image
-     * price hint is mandatory — otherwise a generation would succeed but never charge.
+     * A flat-rate provider (BytePlus, xAI, fal.ai, Kling) returns no inline USD cost, so a positive
+     * per-image price hint is mandatory — otherwise a generation would succeed but never charge.
      */
     private static function isFlatRateProvider(?string $provider): bool
     {
-        return in_array($provider, [AiModel::PROVIDER_BYTEPLUS, AiModel::PROVIDER_XAI, AiModel::PROVIDER_FAL], true);
+        return in_array($provider, [
+            AiModel::PROVIDER_BYTEPLUS,
+            AiModel::PROVIDER_XAI,
+            AiModel::PROVIDER_FAL,
+            AiModel::PROVIDER_KLING,
+        ], true);
     }
 
     /** Cost-unit → localised label (from the AiModel UNIT_* CONSTs). */

@@ -3,6 +3,7 @@
 namespace App\Filament\Platform\Pages;
 
 use App\Domain\Ai\Contracts\ImageGenerationProvider;
+use App\Domain\Ai\KlingCatalog;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Jobs\RunPlaygroundJob;
@@ -45,7 +46,9 @@ class ModelPlayground extends Page implements HasForms
     protected static string $view = 'filament.platform.pages.model-playground';
 
     private const NAV_LABEL = 'platform.playground.nav';
+
     private const TITLE = 'platform.playground.title';
+
     private const RUN_STARTED = 'platform.playground.started';
 
     // How many recent runs the history gallery shows.
@@ -57,18 +60,23 @@ class ModelPlayground extends Page implements HasForms
     // Form defaults + limits (consts, not scattered literals). The video defaults mirror
     // BytePlusVideoClient's DEFAULT_RESOLUTION / DEFAULT_DURATION so the page + client can't drift.
     private const DEFAULT_RESOLUTION = '720p';
+
     private const DEFAULT_DURATION = 5;
+
     private const MAX_INPUT_FILES = 4;
+
     private const MAX_INPUT_KB = 5120;
+
     private const PROMPT_PREVIEW_CHARS = 140;
 
-    // Provider id → display label (image: all; video: byteplus + atlascloud + fal).
+    // Provider id → display label (image: all; video: byteplus + atlascloud + fal + kling).
     private const PROVIDER_LABELS = [
         ImageGenerationProvider::PROVIDER_OPENROUTER => 'OpenRouter',
         ImageGenerationProvider::PROVIDER_BYTEPLUS => 'BytePlus',
         ImageGenerationProvider::PROVIDER_XAI => 'xAI (Grok)',
         ImageGenerationProvider::PROVIDER_ATLASCLOUD => 'AtlasCloud',
         ImageGenerationProvider::PROVIDER_FAL => 'fal.ai',
+        ImageGenerationProvider::PROVIDER_KLING => 'Kling (Kuaishou)',
     ];
 
     // The async VIDEO-capable providers offered for a video run.
@@ -76,10 +84,12 @@ class ModelPlayground extends Page implements HasForms
         ImageGenerationProvider::PROVIDER_BYTEPLUS => 'BytePlus',
         ImageGenerationProvider::PROVIDER_ATLASCLOUD => 'AtlasCloud',
         ImageGenerationProvider::PROVIDER_FAL => 'fal.ai',
+        ImageGenerationProvider::PROVIDER_KLING => 'Kling (Kuaishou)',
     ];
 
     // Video resolution + ratio choices (only these knobs are sent to the video provider).
     private const RESOLUTIONS = ['480p', '720p', '1080p'];
+
     private const RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', 'adaptive'];
 
     // Known video model ids offered as datalist suggestions per video provider (free text — verify
@@ -100,6 +110,9 @@ class ModelPlayground extends Page implements HasForms
             'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
             'fal-ai/veo3.1/fast/image-to-video',
         ],
+        // Kling's OWN video line (native API, not via fal). Suggestions only — Kling publishes no
+        // model catalog, so verify an id against the live docs before relying on it.
+        ImageGenerationProvider::PROVIDER_KLING => KlingCatalog::VIDEO_MODELS,
     ];
 
     /** @var array<string,mixed> */
@@ -326,13 +339,17 @@ class ModelPlayground extends Page implements HasForms
             return self::VIDEO_MODEL_SUGGESTIONS[$provider] ?? self::VIDEO_MODEL_SUGGESTIONS[PlaygroundRun::PROVIDER_BYTEPLUS];
         }
 
-        return AiModel::query()
+        $catalogued = AiModel::query()
             ->where('provider', $provider !== '' ? $provider : PlaygroundRun::PROVIDER_OPENROUTER)
             ->orderBy('model_id')
             ->pluck('model_id')
-            ->unique()
-            ->values()
             ->all();
+
+        // Kling has no public catalog endpoint — offer its known image + try-on ids so they are
+        // testable before anything is catalogued.
+        $known = $provider === PlaygroundRun::PROVIDER_KLING ? KlingCatalog::imageSuggestions() : [];
+
+        return array_values(array_unique([...$catalogued, ...$known]));
     }
 
     private function formatDuration(int $ms): string

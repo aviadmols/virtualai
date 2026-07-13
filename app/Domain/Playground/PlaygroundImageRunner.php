@@ -4,6 +4,7 @@ namespace App\Domain\Playground;
 
 use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Domain\Ai\ImagePayload;
+use App\Domain\Ai\KlingImageClient;
 use App\Domain\Ai\OpenRouterException;
 use App\Domain\Ai\ProviderRouter;
 
@@ -23,9 +24,13 @@ final class PlaygroundImageRunner
     private const OP_KEY = 'playground_image';
 
     private const MODALITIES = ['image', 'text'];
+
     private const BYTEPLUS_SIZE = '2K';
+
     private const BYTEPLUS_SEQUENTIAL = 'disabled';
+
     private const RESPONSE_FORMAT = 'b64_json';
+
     private const XAI_IMAGE_COUNT = 1;
 
     // Aspect ratio → fal's image_size enum (fal has no free-form ratio; unmapped ratios use the
@@ -86,6 +91,7 @@ final class PlaygroundImageRunner
             ImageGenerationProvider::PROVIDER_BYTEPLUS => $this->bytePlusBody($model, $prompt, $inputs),
             ImageGenerationProvider::PROVIDER_XAI => $this->xaiBody($model, $prompt),
             ImageGenerationProvider::PROVIDER_FAL => $this->falBody($model, $prompt, $inputs, $aspectRatio),
+            ImageGenerationProvider::PROVIDER_KLING => $this->klingBody($model, $prompt, $inputs, $aspectRatio),
             default => $this->openRouterBody($model, $prompt, $inputs),
         };
     }
@@ -165,6 +171,34 @@ final class PlaygroundImageRunner
         if ($urls !== []) {
             $body['image_url'] = $urls[0];
             $body['image_urls'] = $urls;
+        }
+
+        return $body;
+    }
+
+    /**
+     * Kling's generic body (the client submits + polls the task behind the sync contract and
+     * inlines the inputs as raw base64). On a kolors-virtual-try-on model the client maps the
+     * first two inputs onto human_image + cloth_image — so in the Playground, attach the PERSON
+     * photo first and the GARMENT second.
+     *
+     * @param  array<int,ImagePayload>  $inputs
+     * @return array<string,mixed>
+     */
+    private function klingBody(string $model, string $prompt, array $inputs, ?string $aspectRatio): array
+    {
+        $body = [
+            KlingImageClient::KEY_MODEL => $model,
+            KlingImageClient::KEY_PROMPT => $prompt,
+        ];
+
+        $urls = array_values(array_map(static fn (ImagePayload $i): string => $i->url, $inputs));
+        if ($urls !== []) {
+            $body[KlingImageClient::KEY_IMAGE_URLS] = $urls;
+        }
+
+        if ($aspectRatio !== null && $aspectRatio !== '') {
+            $body['aspect_ratio'] = $aspectRatio;
         }
 
         return $body;

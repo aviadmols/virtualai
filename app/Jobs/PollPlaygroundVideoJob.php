@@ -18,9 +18,10 @@ use Throwable;
  *
  * Re-dispatches itself with a delay while the task is queued/running, so each firing is short and
  * fits the media-queue worker timeout no matter how long the video takes. On success it downloads
- * the MP4, stores it, and records the render time (the task's created->updated span) + the
- * flat-rate cost. Bounded by MAX_ATTEMPTS so a stuck task ends as a timeout failure — never an
- * infinite loop. Not tenant-aware, never charges.
+ * the MP4, stores it, and records the render time (the task's created->updated span) + the cost —
+ * the REAL cost the upstream billed when it returns one, else the admin flat rate. Bounded by
+ * MAX_ATTEMPTS so a stuck task ends as a timeout failure — never an infinite loop. Not
+ * tenant-aware, never charges.
  */
 final class PollPlaygroundVideoJob implements ShouldQueue
 {
@@ -31,11 +32,15 @@ final class PollPlaygroundVideoJob implements ShouldQueue
 
     // === CONSTANTS ===
     public int $tries = 1;
+
     public int $timeout = 120; // MEDIA_TIMEOUT — room to download the mp4
 
     private const MAX_ATTEMPTS = 40;   // × DELAY_SECONDS = ~10 min ceiling
+
     private const DELAY_SECONDS = 15;
+
     private const VIDEO_MIME = 'video/mp4';
+
     private const MS_PER_SECOND = 1000;
 
     public function __construct(
@@ -107,7 +112,7 @@ final class PollPlaygroundVideoJob implements ShouldQueue
 
         $stored = $media->storePlaygroundResult($run->id, $bytes, self::VIDEO_MIME);
 
-        [$cost, $source] = $this->cost($run);
+        [$cost, $source] = $this->cost($run, $task);
         $tokens = (int) (data_get($task, 'usage.total_tokens') ?? 0);
 
         $run->update([
@@ -131,12 +136,21 @@ final class PollPlaygroundVideoJob implements ShouldQueue
     }
 
     /**
-     * Video has no inline USD cost, so the displayed cost is the admin per-video flat-rate price.
+     * The REAL cost the upstream billed for this task when it returns one (Kling answers with
+     * billing[]), else the admin per-video flat-rate price, else honestly unavailable — never a
+     * guessed number.
      *
+     * @param  array<string,mixed>  $task
      * @return array{0:?int,1:string}
      */
-    private function cost(PlaygroundRun $run): array
+    private function cost(PlaygroundRun $run, array $task): array
     {
+        $real = data_get($task, VideoGenerationProvider::KEY_COST.'.'.VideoGenerationProvider::KEY_COST_MICRO_USD);
+
+        if (is_int($real) && $real > 0) {
+            return [$real, PlaygroundRun::COST_SOURCE_INLINE];
+        }
+
         $hint = $run->price_hint_micro_usd;
 
         return ($hint !== null && $hint > 0)

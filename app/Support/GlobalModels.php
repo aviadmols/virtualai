@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Models\User;
+
 /**
  * The allow-list of GLOBAL (non-tenant) models — those intentionally NOT
  * scoped by BelongsToAccount.
@@ -23,9 +25,9 @@ final class GlobalModels
     // Documented allow-list (ARCHITECTURE.md "global, non-tenant models").
     // FQCNs are listed even before the classes exist so the audit contract is stable.
     public const ALLOW_LIST = [
-        \App\Models\User::class,             // account owners are isolated by account_id but
-                                             // platform super-admins are global; auth lives
-                                             // outside the tenant global scope (see User model).
+        User::class,             // account owners are isolated by account_id but
+        // platform super-admins are global; auth lives
+        // outside the tenant global scope (see User model).
         'App\\Models\\AiModel',              // OpenRouter model catalog (ai-openrouter).
         'App\\Models\\AiOperation',          // per-operation defaults (ai-openrouter).
         'App\\Models\\Prompt',               // global/product_type-scoped prompts (ai-openrouter).
@@ -37,6 +39,17 @@ final class GlobalModels
         'App\\Models\\StoryboardFrame',
         'App\\Models\\StoryboardFrameVersion',
         'App\\Models\\StoryboardStepRun',
+        // Shopify inbound-webhook inbox — rows are created PRE-BIND (the tenant is not
+        // yet known when a webhook arrives); the same audited exception class as the
+        // SiteRouter routing lookup. Tenant data flows only through the bound handler.
+        'App\\Models\\ShopifyWebhookReceipt',
+        // Shopify install parked at the OAuth callback — created PRE-BIND for the same
+        // documented reason: an install that starts ON SHOPIFY has no Tray On account
+        // yet, so there is no tenant to bind. It holds no tenant data (encrypted token +
+        // hashed claim token + shop domain), is short-lived, and is consumed EXACTLY
+        // ONCE by an authenticated account (then deleted) — the Site/ShopifyConnection
+        // it becomes are written inside Tenant::run, fully scoped.
+        'App\\Models\\ShopifyPendingInstall',
     ];
 
     /** True if $class is on the global (non-tenant) allow-list. */

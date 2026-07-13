@@ -3,18 +3,22 @@
 namespace App\Domain\Generation;
 
 use App\Domain\Activity\ActivityRecorder;
+use App\Domain\Ai\AiOperationResolver;
 use App\Domain\Ai\ImagePayload;
 use App\Domain\Ai\OpenRouterException;
 use App\Domain\Ai\OperationConfig;
 use App\Domain\Ai\TryOnGenerationCaller;
 use App\Domain\Ai\TryOnResult;
+use App\Domain\Credits\CreditDenied;
 use App\Domain\Credits\CreditGate;
 use App\Domain\Credits\CreditLedgerService;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Credits\Reservation;
 use App\Domain\Credits\ReservationManager;
+use App\Domain\Leads\LeadDecision;
 use App\Domain\Leads\LeadGate;
 use App\Domain\Media\MediaStorage;
+use App\Domain\Media\StoredMedia;
 use App\Jobs\TenantAwareJob;
 use App\Models\ActivityEvent;
 use App\Models\EndUser;
@@ -68,9 +72,14 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
     // with strtr by the caller (OperationConfig::substituteUser) — NEVER Blade::render.
     // Keys mirror the seeded global try_on_generation prompt ({{product_name}},
     // {{variant}}, {{height}}); an unknown placeholder is simply left literal.
+    // ProductFacts adds the REAL product data ({{description}}, {{materials}},
+    // {{options}}, {{dimensions}} and the composed {{product_details}}).
     private const VAR_PRODUCT_NAME = 'product_name';
+
     private const VAR_PRODUCT_TYPE = 'product_type';
+
     private const VAR_VARIANT = 'variant';
+
     private const VAR_HEIGHT = 'height';
 
     // The actionable message stamped on an AI_COST_NOT_CONFIGURED failure — names the
@@ -257,7 +266,7 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         }
 
         // The reason maps 1:1 to a failure code; the widget renders the signup form.
-        $code = $decision->reason === \App\Domain\Leads\LeadDecision::REASON_POST_SIGNUP_LIMIT
+        $code = $decision->reason === LeadDecision::REASON_POST_SIGNUP_LIMIT
             ? GenerationFailureCode::POST_SIGNUP_LIMIT
             : GenerationFailureCode::SIGNUP_REQUIRED;
 
@@ -282,7 +291,7 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
             return true;
         }
 
-        $code = $decision->reason === \App\Domain\Credits\CreditDenied::REASON_ACCOUNT_INACTIVE
+        $code = $decision->reason === CreditDenied::REASON_ACCOUNT_INACTIVE
             ? GenerationFailureCode::ACCOUNT_INACTIVE
             : GenerationFailureCode::INSUFFICIENT_CREDITS;
 
@@ -357,12 +366,16 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         $shopper = $this->loadSourceImage($generation);
         $variantImage = ImagePayload::fromUrl($variant?->image_url ?: $product->main_image_url);
 
+        // The real product data (description / materials / options / measurements) the
+        // prompt may reference — persisted since the scan, and now finally used.
+        $facts = ProductFacts::for($product, $variant);
+
         $vars = [
             self::VAR_PRODUCT_NAME => (string) $product->name,
             self::VAR_PRODUCT_TYPE => (string) $product->product_type,
             self::VAR_VARIANT => $this->variantLabel($generation),
             self::VAR_HEIGHT => (string) ($generation->meta[Generation::META_HEIGHT] ?? ''),
-        ];
+        ] + $facts->toVars();
 
         // Snapshot exactly what we asked the model to render (audit of the resolver output).
         $generation->forceFill([
@@ -414,7 +427,7 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         EndUser $endUser,
         OperationConfig $config,
         TryOnResult $result,
-        \App\Domain\Media\StoredMedia $stored,
+        StoredMedia $stored,
         Reservation $reservation,
         int $durationMs = 0,
     ): void {
@@ -544,9 +557,9 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         return app(ReservationManager::class);
     }
 
-    private function resolver(): \App\Domain\Ai\AiOperationResolver
+    private function resolver(): AiOperationResolver
     {
-        return app(\App\Domain\Ai\AiOperationResolver::class);
+        return app(AiOperationResolver::class);
     }
 
     private function estimator(): CreditEstimator

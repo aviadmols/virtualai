@@ -18,6 +18,9 @@
         </include>
     </source>
     <php>
+        <!-- The suite peaks above PHP's 128M default (media/image fixtures); pin it here
+             so `artisan test` (which spawns PHP with the plain ini) does not OOM. -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

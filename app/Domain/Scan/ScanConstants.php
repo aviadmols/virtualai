@@ -83,8 +83,13 @@ final class ScanConstants
 
     public const SOURCE_MODEL_INFERRED = 'model_inferred';
 
+    // The merchant's own store record (Shopify Admin API). Nothing was guessed, so it
+    // is the highest-trust source there is — a field from it is never "low confidence".
+    public const SOURCE_SHOPIFY = 'shopify';
+
     // Confidence weight per source — a high-trust source lifts a field's score.
     public const SOURCE_WEIGHT = [
+        self::SOURCE_SHOPIFY => 1.0,
         self::SOURCE_JSONLD => 1.0,
         self::SOURCE_OG => 0.9,
         self::SOURCE_MICRODATA => 0.9,

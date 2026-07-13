@@ -32,7 +32,9 @@ final class ReservationManager
 {
     // === CONSTANTS ===
     private const CACHE_PREFIX = 'credit:reservation:';
+
     private const RESERVED_COLUMN = 'reserved_micro_usd';
+
     private const TTL_CONFIG_KEY = 'trayon.credits.reservation_ttl';
 
     public function __construct(
@@ -107,6 +109,33 @@ final class ReservationManager
         if ($account !== null) {
             $this->adjustReserved($account, -(int) $held);
         }
+    }
+
+    /**
+     * RENEW an in-flight hold: re-stamp the cache key with the held amount and a FULL fresh
+     * TTL. Used by a long-running ASYNC generation (the bulk product-image poller) on every
+     * poll tick, so a render that outlives the TTL can never let the hold silently lapse.
+     *
+     * It deliberately does NOT touch accounts.reserved_micro_usd — and that is what makes it
+     * safe in both directions:
+     *  - key still present  -> the column already holds the estimate; we only extend the TTL.
+     *  - key already lapsed -> the column STILL holds the estimate (only a release() ever
+     *    decrements it, and no release ran), so re-stamping the key merely restores the
+     *    invariant "key present <=> column holds this estimate". Without it, the later
+     *    release() would pull null, skip the decrement, and the reservation would be stranded
+     *    on the account FOREVER (spendable credit permanently lost).
+     *
+     * CALL CONTRACT: only while the asset is still non-terminal, under its row lock — the same
+     * lock the terminal release runs under. That serialises renew against release, so a renew
+     * can never resurrect a key that a release has already claimed (which would double-decrement).
+     */
+    public function renew(Reservation $reservation): void
+    {
+        $this->cache->put(
+            $this->cacheKey($reservation->id),
+            $reservation->estimateMicroUsd,
+            $this->ttl(),
+        );
     }
 
     /** True while the in-flight reservation is still held (the cache key exists). */

@@ -35,9 +35,13 @@ class CreditLedger extends Model
     // The five row types (ARCHITECTURE.md). grant/purchase/refund are positive;
     // charge is negative; adjustment is either sign.
     public const TYPE_GRANT = 'grant';
+
     public const TYPE_PURCHASE = 'purchase';
+
     public const TYPE_CHARGE = 'charge';
+
     public const TYPE_REFUND = 'refund';
+
     public const TYPE_ADJUSTMENT = 'adjustment';
 
     public const TYPES = [
@@ -50,7 +54,13 @@ class CreditLedger extends Model
 
     // Reference subjects a row can point at.
     public const REFERENCE_GENERATION = 'generation';
+
     public const REFERENCE_BANNER_ASSET = 'banner_asset';
+
+    // One bulk product-image transform (a packshot / on-model render) — the Product Image
+    // Studio money path. reference_id = product_assets.id.
+    public const REFERENCE_PRODUCT_ASSET = 'product_asset';
+
     public const REFERENCE_PURCHASE = 'purchase';
 
     private const APPEND_ONLY_MESSAGE = 'credit_ledger is append-only: a %s row cannot be %s. Write a new compensating row instead.';

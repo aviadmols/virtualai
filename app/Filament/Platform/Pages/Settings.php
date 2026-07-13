@@ -4,6 +4,7 @@ namespace App\Filament\Platform\Pages;
 
 use App\Domain\Ai\BytePlusImageClient;
 use App\Domain\Ai\FalImageClient;
+use App\Domain\Ai\KlingImageClient;
 use App\Domain\Ai\OpenRouterClient;
 use App\Domain\Ai\XaiImageClient;
 use App\Domain\Platform\PlatformMailConfig;
@@ -47,7 +48,9 @@ class Settings extends Page implements HasForms
     protected static string $view = 'filament.platform.pages.settings';
 
     private const NAV_LABEL = 'platform.settings.nav';
+
     private const TITLE = 'platform.settings.title';
+
     private const SAVED = 'platform.settings.saved';
 
     // SMTP encryption choices (UI value → the smtp `scheme` PlatformMailConfig maps).
@@ -59,6 +62,9 @@ class Settings extends Page implements HasForms
         'byteplus_api_key' => PlatformSettings::BYTEPLUS_API_KEY,
         'xai_api_key' => PlatformSettings::XAI_API_KEY,
         'fal_api_key' => PlatformSettings::FAL_API_KEY,
+        'kling_api_key' => PlatformSettings::KLING_API_KEY,
+        'kling_access_key' => PlatformSettings::KLING_ACCESS_KEY,
+        'kling_secret_key' => PlatformSettings::KLING_SECRET_KEY,
         'payplus_api_key' => PlatformSettings::PAYPLUS_API_KEY,
         'payplus_secret_key' => PlatformSettings::PAYPLUS_SECRET_KEY,
         'payplus_page_uid' => PlatformSettings::PAYPLUS_PAGE_UID,
@@ -124,6 +130,10 @@ class Settings extends Page implements HasForms
             $this->testAction('testByteplus', 'byteplus_api_key', 'platform.settings.byteplus', fn (?string $k) => app(BytePlusImageClient::class)->checkConnection($k)),
             $this->testAction('testXai', 'xai_api_key', 'platform.settings.xai', fn (?string $k) => app(XaiImageClient::class)->checkConnection($k)),
             $this->testAction('testFal', 'fal_api_key', 'platform.settings.fal', fn (?string $k) => app(FalImageClient::class)->checkConnection($k)),
+            // Kling takes the static API key (typed value) OR the legacy access+secret pair. The
+            // pair's secret always comes from storage (a write-only secret is never round-tripped
+            // to the browser), so a pair must be SAVED before the test can pass.
+            $this->testAction('testKling', 'kling_api_key', 'platform.settings.kling', fn (?string $k) => app(KlingImageClient::class)->checkConnection($k)),
             $this->sendTestEmailAction(),
         ];
     }
@@ -243,6 +253,16 @@ class Settings extends Page implements HasForms
                     ->description(__('platform.settings.fal.sub'))
                     ->schema([
                         $this->secretField('fal_api_key', 'platform.settings.fal.api_key', PlatformSettings::FAL_API_KEY),
+                    ]),
+                Section::make(__('platform.settings.kling.title'))
+                    ->description(__('platform.settings.kling.sub'))
+                    ->columns(2)
+                    ->schema([
+                        // The API key alone is enough; the pair below is the legacy alternative.
+                        $this->secretField('kling_api_key', 'platform.settings.kling.api_key', PlatformSettings::KLING_API_KEY)
+                            ->columnSpanFull(),
+                        $this->secretField('kling_access_key', 'platform.settings.kling.access_key', PlatformSettings::KLING_ACCESS_KEY),
+                        $this->secretField('kling_secret_key', 'platform.settings.kling.secret_key', PlatformSettings::KLING_SECRET_KEY),
                     ]),
                 Section::make(__('platform.settings.smtp.title'))
                     ->description(__('platform.settings.smtp.sub'))

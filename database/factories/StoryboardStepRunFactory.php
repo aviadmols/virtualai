@@ -18,7 +18,7 @@ class StoryboardStepRunFactory extends Factory
     {
         return [
             'project_id' => StoryboardProject::factory(),
-            'step_key' => AiOperation::KEY_STORYBOARD_READ_IDEA,
+            'step_key' => AiOperation::KEY_STORYBOARD_STORY_DIRECTOR,
             'status' => StoryboardStepRun::STATUS_PENDING,
         ];
     }
