@@ -107,16 +107,28 @@ final class PlatformSettings
      */
     public function resolve(string $key): ?string
     {
-        $stored = $this->get($key);
+        $stored = self::clean((string) $this->get($key));
 
-        if (filled($stored)) {
+        if ($stored !== null) {
             return $stored;
         }
 
         $configKey = self::CONFIG_FALLBACK[$key] ?? null;
         $fallback = $configKey !== null ? config($configKey) : null;
 
-        return $fallback !== null ? (string) $fallback : null;
+        return $fallback !== null ? self::clean((string) $fallback) : null;
+    }
+
+    /**
+     * Credential/header-safe value: control characters stripped, edges trimmed, blank
+     * → null. Keys and names are pasted by hand ("Vsio\n", "sk-… ") and Guzzle
+     * hard-rejects any header containing CR/LF — a paying call must never die on that.
+     */
+    private static function clean(string $value): ?string
+    {
+        $value = trim((string) preg_replace('/[\x00-\x1F\x7F]/', '', $value));
+
+        return $value !== '' ? $value : null;
     }
 
     /** The DB-stored (decrypted) value for a key, or null if not stored. */
@@ -145,7 +157,7 @@ final class PlatformSettings
 
         PlatformSetting::updateOrCreate(
             [PlatformSetting::COLUMN_KEY => $key],
-            ['value' => $value !== null && $value !== '' ? $value : null, 'is_secret' => $secret],
+            ['value' => $value !== null ? self::clean($value) : null, 'is_secret' => $secret],
         );
     }
 

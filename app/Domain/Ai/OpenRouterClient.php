@@ -351,16 +351,28 @@ final class OpenRouterClient implements ImageGenerationProvider
      */
     private function request(?string $overrideKey = null): PendingRequest
     {
+        $key = $overrideKey !== null && $overrideKey !== '' ? $overrideKey : $this->apiKey();
+
         return $this->http
             ->baseUrl((string) config(self::CFG_BASE_URL))
             ->timeout((int) config(self::CFG_TIMEOUT))
-            ->withToken($overrideKey !== null && $overrideKey !== '' ? $overrideKey : $this->apiKey())
+            ->withToken(self::headerValue($key))
             ->withHeaders([
-                self::HEADER_REFERER => (string) config(self::CFG_REFERER),
-                self::HEADER_TITLE => (string) config(self::CFG_TITLE),
+                self::HEADER_REFERER => self::headerValue((string) config(self::CFG_REFERER)),
+                self::HEADER_TITLE => self::headerValue((string) config(self::CFG_TITLE)),
             ])
             ->acceptJson()
             ->asJson();
+    }
+
+    /**
+     * A header-safe string: control characters stripped, edges trimmed. Env values are
+     * pasted by hand ("Vsio\n", a key with a trailing space) and Guzzle hard-rejects any
+     * header containing CR/LF — a paying generation must never fail on that.
+     */
+    private static function headerValue(string $raw): string
+    {
+        return trim((string) preg_replace('/[\x00-\x1F\x7F]/', '', $raw));
     }
 
     /**
