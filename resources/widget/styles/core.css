@@ -131,9 +131,10 @@
   --ton-dir: 1;
 
   /* ---- Per-site config (set as CSS vars by shell.js/button.js). They paint the CLASSIC
-     button only; the on-image trigger is glass by definition and ignores them. ---- */
-  --ton-button-bg: var(--ton-ink);
-  --ton-button-text: var(--ton-surface);
+     button only; the on-image trigger is glass by definition and ignores them. The DEFAULT
+     (no merchant override) is the mock's glass-white trigger, everywhere. ---- */
+  --ton-button-bg: var(--ton-glass-trigger);
+  --ton-button-text: var(--ton-ink);
 
   all: initial;
   font-family: var(--ton-font-system);
@@ -196,16 +197,19 @@
   gap: var(--ton-space-2);
   width: 100%;
   margin-block-start: var(--ton-space-3);
-  padding: 15px 22px;
+  padding: 12px 24px;
   border: 0;
   border-radius: var(--ton-radius-control);
   background: var(--ton-button-bg);
+  backdrop-filter: blur(var(--ton-blur-trigger));
+  -webkit-backdrop-filter: blur(var(--ton-blur-trigger));
   color: var(--ton-button-text);
   font-family: var(--ton-font-system);
   font-size: var(--ton-fs-trigger);
   font-weight: var(--ton-fw-semibold);
   line-height: var(--ton-lh-body);
   cursor: pointer;
+  box-shadow: var(--ton-shadow-trigger);
   transition: transform var(--ton-t), background-color var(--ton-t), box-shadow var(--ton-t);
 }
 
@@ -458,6 +462,8 @@
   width: 100%;
   max-width: var(--ton-modal-max-w);
   max-height: var(--ton-modal-max-h);
+  /* dvh tracks the REAL visible viewport on mobile (URL bar); older engines keep the vh cap. */
+  max-height: min(var(--ton-modal-max-h), 95dvh);
   overflow-y: auto;
   padding: var(--ton-modal-pad);
   border: 0;
@@ -481,6 +487,13 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* The whole flow must FIT the viewport — no internal scrolling. Every section keeps its
+   height; the PREVIEW is the one flexible box that gives ground (see .ton-preview).
+   overflow-y:auto above stays only as the can't-happen failsafe. */
+.ton-modal > * {
+  flex-shrink: 0;
 }
 
 .ton-modal__close {

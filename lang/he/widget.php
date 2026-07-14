@@ -5,7 +5,7 @@
 
 return [
     'button' => [
-        'label' => 'מדדו את זה',
+        'label' => 'מדדו עם Vsio',
         'loading' => 'טוען…',
         'busy' => 'יוצרים…',
     ],

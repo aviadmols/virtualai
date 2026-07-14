@@ -87,7 +87,7 @@
 
   var ghost = null;
   var lastSelector = null;
-  var currentLabel = 'Vsio';
+  var currentLabel = 'Try it with Vsio';
   var mode = MODE_PLACEMENT; // default: the existing placement flow
   var currentRole = null; // which detail role a 'role' pick targets
 

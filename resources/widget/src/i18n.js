@@ -17,7 +17,7 @@ const MESSAGES = {
   en: {
     // A brand name is not translated — the wordmark is Latin in both locales.
     'brand.wordmark': 'TRAY ON',
-    'button.label': 'Try it on',
+    'button.label': 'Try it with Vsio',
     'button.loading': 'Loading…',
     'button.busy': 'Creating…',
     'hud.idle_title': 'Your Vsio looks',
@@ -34,7 +34,7 @@ const MESSAGES = {
   },
   he: {
     'brand.wordmark': 'TRAY ON',
-    'button.label': 'מדדו את זה',
+    'button.label': 'מדדו עם Vsio',
     'button.loading': 'טוען…',
     'button.busy': 'יוצרים…',
     'hud.idle_title': 'הלוקים שלכם ב-Vsio',

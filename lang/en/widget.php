@@ -5,7 +5,7 @@
 
 return [
     'button' => [
-        'label' => 'Vsio',
+        'label' => 'Try it with Vsio',
         'loading' => 'Loading…',
         'busy' => 'Creating…',
     ],

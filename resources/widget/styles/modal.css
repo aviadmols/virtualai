@@ -98,6 +98,14 @@
   overflow: hidden;
 }
 
+/* The ONE flexible box in the modal column: when the flow is taller than the viewport the
+   preview shrinks below its preferred aspect height (the image letterboxes) so the strip,
+   the consent and the actions stay on screen with NO scrolling. min-height keeps it usable. */
+.ton-modal .ton-preview {
+  flex-shrink: 1;
+  min-height: 140px;
+}
+
 /* ---- Empty state: the dropzone IS the invitation (there is no separate empty panel) ---- */
 .ton-upload {
   display: flex;
