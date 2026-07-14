@@ -5,7 +5,7 @@ namespace App\Domain\Shopify\Products;
 use App\Domain\Products\ProductOrigin;
 
 /**
- * ShopifyProductRef — how one Shopify product is identified on the Tray On side:
+ * ShopifyProductRef — how one Shopify product is identified on the Vsio side:
  * the product GID (the upsert key), its storefront handle, its storefront url, and
  * whether the STORE still offers it (status ACTIVE vs DRAFT/ARCHIVED).
  *

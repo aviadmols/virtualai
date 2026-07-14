@@ -35,7 +35,7 @@ use Illuminate\Database\Seeder;
 class KlingCatalogSeeder extends Seeder
 {
     // === CONSTANTS ===
-    // IMAGE hints (micro-USD per image) — the IMAGE-TO-IMAGE figure, because every Tray On rail
+    // IMAGE hints (micro-USD per image) — the IMAGE-TO-IMAGE figure, because every Vsio rail
     // sends input images and Kling prices I2I at double T2I ($0.028 vs $0.014).
     private const IMAGE_MODELS = [
         'kling-v3' => ['label' => 'Kling Image 3.0', 'cost' => 28_000],

@@ -102,7 +102,7 @@ return [
         ],
     ],
     'place' => [
-        'sub' => 'Now place the Tray On button exactly where you want it on this page.',
+        'sub' => 'Now place the Vsio button exactly where you want it on this page.',
         'cta' => 'Place the button visually',
     ],
     'firstgen' => [

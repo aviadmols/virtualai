@@ -28,14 +28,12 @@ import {
   STORAGE_CLUB_MEMBER_PREFIX,
   STORAGE_CLUB_DISMISS_PREFIX,
   TRACK_INTERACTION_CLUB_JOIN,
-} from './constants.js';
-import { state } from './state.js';
-import { t } from './i18n.js';
-import { el, warn } from './dom.js';
-import { getNotificationMount, getOverlayMount } from './shell.js';
-import * as api from './api.js';
+  CHUNK,
+} from '../constants.js';
+import { state, api, track, shell, chunks, t } from './bridge.js';
+import { el, warn } from '../dom.js';
 import * as pricing from './pricing.js';
-import * as track from './track.js';
+
 
 // Time multipliers (dismissal is stored as an absolute epoch-ms expiry; the delay trigger is
 // configured in whole seconds). Named so no bare magic number appears below.
@@ -161,7 +159,7 @@ export function isMember() {
 function showBanner() {
   clearScheduled(); // a delay/scroll trigger that fired -> stop any remaining timer/listener
   if (banner) return; // never duplicate
-  const mount = getNotificationMount();
+  const mount = shell.getNotificationMount();
   if (!mount) return; // no shell yet -> nothing to attach to (fail-soft)
 
   const percent = Number(clubConfig[CLUB_CONFIG.discountPercent]) || 0;
@@ -224,8 +222,19 @@ function dismissBanner() {
 // The login modal (email -> code), rendered in the shared overlay mount. Reuses the modal /
 // lead-form structural classes so it inherits the widget's premium skin with no new CSS.
 // ---------------------------------------------------------------------------
-function openLogin() {
+async function openLogin() {
   draft = { email: '' };
+
+  // The login modal reuses the modal chunk's stylesheet (.ton-modal / .ton-input / .ton-cta live
+  // there, not in the core sheet — a shopper who never engages must not pay for them). Warm it
+  // first so the panel never paints unstyled. A failed fetch still renders: the markup is correct,
+  // the tokens are in the core sheet, and a plain-looking login beats no login at all.
+  try {
+    await chunks.load(CHUNK.modal);
+  } catch {
+    warn('the modal chunk did not load; the club login renders on the core sheet alone');
+  }
+
   renderStep(CLUB_STEP.email);
 }
 
@@ -249,7 +258,7 @@ function mountPanel(panelEl) {
     },
     [panelEl],
   );
-  const host = getOverlayMount();
+  const host = shell.getOverlayMount();
   if (!host) return; // fail-soft
   host.appendChild(overlay);
 }

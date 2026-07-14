@@ -8,6 +8,7 @@ use App\Jobs\TenantAwareJob;
 use App\Models\ActivityEvent;
 use App\Models\Product;
 use App\Models\ProductAsset;
+use App\Models\ShopifyMediaMint;
 use App\Models\ShopifyMediaSnapshot;
 use App\Models\Site;
 use App\Support\Tenant;
@@ -29,6 +30,19 @@ use Throwable;
  *   - the SNAPSHOT ITSELF IS KEPT (restored_at / restore_count are stamped, nothing is dropped),
  *     which is what makes a second undo a clean no-op instead of a second, emptier "restore".
  *
+ * IT REMOVES EVERY MEDIA WE EVER MINTED — NOT JUST THE LAST ONE AN ASSET REMEMBERS. The delete list
+ * comes from shopify_media_mints (append-only, never nulled), not from product_assets
+ * .shopify_media_id, which is a MUTABLE POINTER that three paths drop or overwrite (undo nulls it,
+ * a Shopify-FAILED media clears it, a reclaimed push overwrites it). Driving the sweep off that
+ * column meant an ORPHAN — a media of ours the row had forgotten — stayed live in the merchant's
+ * storefront forever, and "restore my original images" quietly lied. The mint ledger forgets
+ * nothing, so what we put in, we can always take out.
+ *
+ * AND IT EVICTS AN IN-FLIGHT PUSH FIRST. Undoing a product while a push of that product is still
+ * talking to Shopify would race a media into a gallery we are in the middle of cleaning. Dropping
+ * the push lease makes that worker stand down at its claim re-check (the last thing it does before
+ * minting), so it never mints into a store the merchant just asked us to leave.
+ *
  * IDEMPOTENT: re-running finds the originals already live (nothing to re-upload), reorders them
  * into the same order (a no-op), and finds nothing of ours left to delete.
  *
@@ -48,6 +62,18 @@ final class UndoProductMediaJob extends TenantAwareJob implements ShouldBeUnique
     private const UNIQUE_FOR_SECONDS = 900;
 
     private const PARK_SECONDS = 30;
+
+    // The push states whose asset may still be carrying an image INTO (or IN) the merchant's live
+    // gallery. `pushed` is the obvious one — but a push that died AFTER productCreateMedia left our
+    // media LIVE with the asset at `push_failed`, and one that is still in flight is `pushing`.
+    // Filtering on `pushed` alone left those images in the store with no way to ever remove them.
+    private const RESET_STATUSES = [
+        ProductAsset::PUSH_PUSHED,
+        ProductAsset::PUSH_FAILED,
+        ProductAsset::PUSH_PUSHING,
+    ];
+
+    private const REASON_UNDO = 'undo';
 
     public int $tries = 1;
 
@@ -94,10 +120,21 @@ final class UndoProductMediaJob extends TenantAwareJob implements ShouldBeUnique
             return; // nothing was ever destroyed on this product — there is nothing to undo
         }
 
-        $pushed = $this->pushedAssets();
+        $inStore = $this->assetsInStore();
+
+        // Evict any live push FIRST: a worker mid-flight re-proves its claim immediately before it
+        // mints, so dropping the lease makes it stand down instead of racing a new media into the
+        // gallery we are about to clean.
+        foreach ($inStore as $asset) {
+            $asset->releasePushLease();
+        }
+
+        // WHAT LEAVES THE STORE IS THE MINT LEDGER'S ANSWER, NOT AN ASSET COLUMN'S: every media we
+        // ever minted on this product, including the orphans the columns forgot.
+        $ourMediaIds = ShopifyMediaMint::mediaIdsForProduct($this->productId);
 
         try {
-            $removed = $this->pusher()->restore($snapshot, $product, $site, $pushed);
+            $removed = $this->pusher()->restore($snapshot, $product, $site, $ourMediaIds);
         } catch (ShopifyApiException $e) {
             if ($e->isThrottled() && $this->parks < $this->maxParks()) {
                 $this->park($e);
@@ -110,7 +147,7 @@ final class UndoProductMediaJob extends TenantAwareJob implements ShouldBeUnique
 
         // The store no longer shows our images -> the assets are not_pushed again. Their bytes are
         // still ours, so the merchant can push any of them again, for free.
-        foreach ($pushed as $asset) {
+        foreach ($inStore as $asset) {
             $asset->forceFill([
                 'shopify_media_id' => null,
                 'push_error' => null,
@@ -118,9 +155,10 @@ final class UndoProductMediaJob extends TenantAwareJob implements ShouldBeUnique
                 'push_placement' => null,
                 'push_position' => null,
                 'push_replaced_media_id' => null,
+                'push_claim_id' => null,
             ])->save();
 
-            $asset->pushTransitionTo(ProductAsset::PUSH_NOT_PUSHED, ['reason' => 'undo']);
+            $asset->pushTransitionTo(ProductAsset::PUSH_NOT_PUSHED, ['reason' => self::REASON_UNDO]);
         }
 
         $snapshot->recordRestore();
@@ -149,17 +187,26 @@ final class UndoProductMediaJob extends TenantAwareJob implements ShouldBeUnique
     }
 
     /**
-     * Every asset of this product that is currently IN the store — the images undo removes. A
-     * push_failed asset that never got a media id is left alone.
+     * Every asset of this product whose image may be IN the merchant's live gallery right now — the
+     * rows undo has to close.
+     *
+     * NOT just `pushed`. A push that died AFTER productCreateMedia (the reorder threw, the READY
+     * poll ran out, the worker was killed) leaves our media LIVE in the store with the asset at
+     * `push_failed` or `pushing`. Undo used to skip those rows entirely: it took the image out of
+     * the store (the mint ledger sees it) but left the asset claiming a media id that no longer
+     * existed, so a later re-push would "resume" a dead media forever.
+     *
+     * An asset that never got a media id at all (a snapshot refusal, a staged-upload failure) has
+     * nothing in the store and is left alone.
      *
      * @return array<int,ProductAsset>
      */
-    private function pushedAssets(): array
+    private function assetsInStore(): array
     {
         return ProductAsset::query()
             ->where('site_id', $this->siteId)
             ->where('product_id', $this->productId)
-            ->where('push_status', ProductAsset::PUSH_PUSHED)
+            ->whereIn('push_status', self::RESET_STATUSES)
             ->whereNotNull('shopify_media_id')
             ->get()
             ->all();

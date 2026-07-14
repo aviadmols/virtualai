@@ -38,7 +38,7 @@ Route::middleware(MW_SHOPIFY_WEB)->group(function (): void {
     Route::get(PATH_SHOPIFY_INSTALL, [OAuthController::class, 'install'])
         ->name(ROUTE_SHOPIFY_INSTALL);
 
-    // connect_existing_site — the "Connect" click inside the Tray On merchant panel.
+    // connect_existing_site — the "Connect" click inside the Vsio merchant panel.
     Route::get(PATH_SHOPIFY_OAUTH_START, [OAuthController::class, 'start'])
         ->name(ROUTE_SHOPIFY_OAUTH_START);
 

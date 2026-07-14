@@ -1,16 +1,27 @@
 // === CONSTANTS ===
-// The entry script. Does ZERO synchronous work on the host's main thread at load: it reads
-// the data-site-key, derives the API base from its OWN script origin, schedules boot on
-// idle, and exits cleanly on any problem (bad key / non-allowed origin / non-PDP) — never
-// throwing into the host page. The modal/result code is lazy-imported on first button click
-// so the entry bundle stays under budget. The only window pollution is one namespaced
-// object (window.__TrayOn).
+// The entry script (the CORE bundle). It does ZERO synchronous work on the host's main thread
+// at load: it reads the tag's data-* context, derives the asset base from its OWN script src,
+// schedules boot on idle, and exits cleanly on any problem (bad key / non-allowed origin /
+// non-PDP) — never throwing into the host page.
+//
+// What ships here is only what the merchant's LCP/CLS/SEO must pay for on every page view:
+// PDP detect, the trigger, the floating HUD, the modal skeleton, and the cross-page resume.
+// The modal (and the club) are fetched only when the shopper actually engages.
+//
+// The only window pollution is one namespaced object (window.__TrayOn).
 
 import {
   NAMESPACE,
   SITE_KEY_ATTR,
+  PLATFORM_ATTR,
+  PRODUCT_ID_ATTR,
+  PRODUCT_HANDLE_ATTR,
+  VARIANT_ID_ATTR,
   STORAGE_ANON_TOKEN,
   BOOT_IDLE_TIMEOUT_MS,
+  CHUNK,
+  CHUNK_SHELL_DELAY_MS,
+  HUD,
 } from './constants.js';
 import { warn, uuid, onIdle } from './dom.js';
 import { setLocale } from './i18n.js';
@@ -19,12 +30,14 @@ import * as api from './api.js';
 import { isProductPage } from './pdp.js';
 import * as shell from './shell.js';
 import * as mount from './mount.js';
-import * as modal from './modal.js';
+import * as hud from './hud.js';
+import * as skeleton from './skeleton.js';
+import * as chunks from './chunks.js';
+import * as button from './button.js';
 import * as pending from './pending.js';
 import * as resume from './resume.js';
 import * as track from './track.js';
-import * as club from './club.js';
-import * as banners from './banners.js';
+import { publish } from './kernel.js';
 
 (function boot() {
   // The namespaced global: a double-boot guard + a teardown hook for SPA navigation.
@@ -39,15 +52,27 @@ import * as banners from './banners.js';
     return;
   }
 
-  // The API base = the origin that served widget.js (so the widget always talks home).
-  const apiBase = scriptOrigin(script);
-  api.configure(apiBase, siteKey);
+  // The asset base = the DIRECTORY that served widget.js. Everything we fetch for ourselves
+  // (the lazy chunks, the self-hosted font) hangs off it, and the API talks back to that origin.
+  const base = assetBase(script);
+  api.configure(new URL(base, location.href).origin, siteKey);
+  shell.setAssetBase(base);
+  chunks.configure(base);
 
-  // Scope the cross-page/cross-tab persistence to THIS site_key (two Tray On sites on one
+  // The host-platform context the Theme App Extension stamps. Without it the widget holds only
+  // our internal DB variant key and cannot add the right line to the merchant's own cart.
+  state.platform = script.getAttribute(PLATFORM_ATTR) || null;
+  state.externalVariantId = script.getAttribute(VARIANT_ID_ATTR) || null;
+  const hostProductId = script.getAttribute(PRODUCT_ID_ATTR);
+  const hostHandle = script.getAttribute(PRODUCT_HANDLE_ATTR);
+  if (hostProductId || hostHandle) state.hostProduct = { id: hostProductId, handle: hostHandle };
+
+  // Scope the cross-page/cross-tab persistence to THIS site_key (two Vsio sites on one
   // origin never collide). Cheap + synchronous — just sets the key/channel names.
   pending.configure(siteKey);
-  club.configure(siteKey); // site-scoped member flag (like the anon token / pending entry)
-  banners.configure(siteKey); // site-scoped seen flag + per-session impression counters
+
+  // The lazy chunks read the core's live singletons from here (never a second copy).
+  publish({ siteKey, openModal });
 
   ns.booted = true;
   ns.state = state; // exposed for the verification harness (read-only inspection)
@@ -57,10 +82,9 @@ import * as banners from './banners.js';
 })();
 
 async function run() {
-  const anonToken = ensureAnonToken();
-  state.anonToken = anonToken;
+  state.anonToken = ensureAnonToken();
 
-  const res = await api.getBootstrap(location.href, anonToken);
+  const res = await api.getBootstrap(location.href, state.anonToken);
 
   // Fail soft: a bad key (401) / non-allowed origin (403) / any non-OK -> quietly do nothing.
   if (!res.ok || !res.data || res.data.ok !== true) {
@@ -72,117 +96,153 @@ async function run() {
 
   const data = res.data;
 
-  // Locale is known even on a non-PDP page — the cross-page notification uses it.
-  setLocale(data.site?.locale || 'en');
-  state.locale = data.site?.locale || 'en'; // banner locale targeting reads this
+  // The locale is known even on a non-PDP page — the HUD speaks it there too.
+  const locale = data.site?.locale || 'en';
+  setLocale(locale);
+  state.locale = locale;
 
-  // Merchant banners apply SITE-WIDE (PDP or not); stash for the idle-path init below.
+  // The club + merchant banners apply SITE-WIDE (PDP or not) and ride the lazy club chunk.
+  state.club = data.club || null;
   state.banners = data.banners || null;
 
   const onPdp = isProductPage(data);
-
-  // Per-site tracking flag (privacy/consent). Absent => on, per the ingest contract.
   const trackingEnabled = data.site?.tracking_enabled;
 
-  // The Customer Club (floating banner + email OTP login + display-only member pricing) applies
-  // SITE-WIDE — PDP or not. Stash the club config so a teardown/re-init can reuse it.
-  state.club = data.club || null;
+  state.lead = normalizeLead(data.lead);
 
   if (onPdp) {
-    // Stash the boot config.
     state.config = {
       appearance: data.site.appearance,
       selectors: data.site.selectors,
-      locale: data.site.locale,
+      locale,
       privacy: data.site.privacy,
       gallery: data.site.gallery,
     };
     state.product = data.product;
-    state.lead = data.lead || null;
 
     // Build the Shadow shell, then start the self-healing mount engine.
     shell.create(state.config.appearance);
-    mount.start(openModal);
+    mount.start(openModal, prefetchModal);
 
-    // Behavioral tracking (page_view + product_view + variant/open/cart interactions), on the
-    // same idle tick — never a sync hook. Needs the shell's overlay mount for the variant event.
     track.init({ trackingEnabled, hasProduct: true });
 
-    // Expose teardown so a host SPA (or our own future route watcher) can clean up.
     window[NAMESPACE].teardown = combinedTeardown;
   } else {
-    // Non-PDP page: no button. But if the shopper has a try-on generating (started elsewhere),
-    // keep the minimal appearance around so the resumer can theme the notification.
+    // Non-PDP page: no trigger. But if the shopper has a look generating (started elsewhere),
+    // keep the minimal appearance around so the resumer can theme the HUD.
     if (data.site?.appearance) state.config = { appearance: data.site.appearance };
 
-    // A non-PDP page still records a single page_view (no product / interactions to bind).
     track.init({ trackingEnabled, hasProduct: false });
 
     window[NAMESPACE].teardown = nonPdpTeardown;
   }
 
   // Cross-page / cross-tab resume: runs on EVERY authorized page load (PDP or not). Reconnects
-  // the shopper to a try-on they started elsewhere and shows the "ready" popup here on finish.
+  // the shopper to a look they started elsewhere and shows the HUD here when it finishes.
   await resume.resumeOnLoad(onPdp);
 
-  // The Customer Club (banner + member pricing) — site-wide, on the same idle tick. Needs the
-  // Shadow shell for its floating banner + login modal; ensure a minimal one exists on a non-PDP
-  // page (the resumer may already have built it; shell.create is idempotent).
-  initClub(onPdp);
-
-  // Merchant banners — site-wide, same idle tick. They inject into the HOST DOM with their OWN
-  // per-spot shadow root (no widget shell needed), so this works on any page.
-  initBanners();
+  // The club + merchant banners: a SEPARATE chunk, fetched on IDLE (never on the first-paint
+  // path). A site with neither configured never fetches it at all.
+  initClubChunk(onPdp);
 }
 
-/** Wire the merchant banner runtime on the idle path (a no-op unless the bootstrap shipped any). */
-function initBanners() {
-  if (! state.banners || ! state.banners.length) return;
+/** Fetch the club chunk on idle, and only when this site actually uses it. */
+function initClubChunk(onPdp) {
+  const wantsClub = !!(state.club && state.club.enabled);
+  const wantsBanners = !!(state.banners && state.banners.length);
+  if (!wantsClub && !wantsBanners) return;
 
-  try {
-    banners.init(state.banners);
-  } catch {
-    warn('failed to initialise merchant banners');
-  }
-}
-
-/** Wire the Customer Club on the idle path (a no-op unless the bootstrap says it's enabled). */
-function initClub(onPdp) {
-  if (!state.club || !state.club.enabled) return; // club off => never build a shell for it
-
-  // Ensure a shell exists so the banner + login modal + member-price re-apply have their mounts.
-  // On a PDP the loader already built it; on a non-PDP page build a minimal one (default look).
-  if (!onPdp) {
+  onIdle(async () => {
     try {
-      shell.create(state.config?.appearance || {});
+      const club = await chunks.load(CHUNK.club);
+      club.init({ onPdp });
     } catch {
-      warn('failed to build the minimal club shell');
-      return;
+      warn('the club chunk did not load; the storefront is unaffected');
     }
+  }, BOOT_IDLE_TIMEOUT_MS);
+}
+
+/**
+ * The trigger was tapped. §6.3, precisely:
+ *   t=0        the TRIGGER becomes the spinner (feedback where the finger is, zero CLS);
+ *   t<250ms    the chunk lands and the modal opens — one instant tap, no skeleton flash;
+ *   t>=250ms   the wait is real, so the skeleton opens in the box the modal will land in;
+ *   t>=8s/err  nothing half-drawn: the shell closes and the HUD offers a retry.
+ */
+async function openModal() {
+  track.trackOpen(); // meaningful interaction: the shopper opened the Vsio flow
+
+  const warm = chunks.ready(CHUNK.modal);
+  if (warm) {
+    safeOpen(warm);
+    return;
   }
 
+  button.setLoading(true);
+  const shellTimer = setTimeout(() => skeleton.show(cancelChunkWait), CHUNK_SHELL_DELAY_MS);
+
   try {
-    club.init(state.club);
+    const modal = await chunks.load(CHUNK.modal);
+    clearTimeout(shellTimer);
+    button.setLoading(false);
+    skeleton.release(); // the modal takes the overlay over; do not double-clear it
+    safeOpen(modal);
   } catch {
-    warn('failed to initialise the customer club');
+    clearTimeout(shellTimer);
+    button.setLoading(false);
+    skeleton.hide();
+    hud.show(HUD.unavailable, { onClick: openModal });
   }
 }
 
-/** Teardown the mount engine, tracking, club, banners, and the cross-tab channel (SPA nav away). */
+/** The shopper closed the skeleton while waiting: stop pretending, give them the page back. */
+function cancelChunkWait() {
+  skeleton.hide();
+  button.setLoading(false);
+}
+
+function safeOpen(modal) {
+  try {
+    modal.open();
+  } catch {
+    warn('failed to open the try-on modal');
+    skeleton.hide();
+    hud.show(HUD.unavailable, { onClick: openModal });
+  }
+}
+
+/** A hint, never a promise: warm the modal chunk on hover/focus/touch so the click finds it here. */
+function prefetchModal() {
+  chunks.prefetch(CHUNK.modal);
+}
+
+/** The bootstrap's snake_case lead block -> the shape the widget reads everywhere. */
+function normalizeLead(lead) {
+  if (!lead) return null;
+  return {
+    registered: !!lead.registered,
+    freeRemaining: lead.free_remaining ?? null,
+    signupRequired: !!lead.signup_required,
+  };
+}
+
+/** Teardown the mount engine, tracking, the club chunk and the cross-tab channel (SPA nav away). */
 function combinedTeardown() {
   safeTeardown(track.teardown);
-  safeTeardown(club.teardown);
-  safeTeardown(banners.teardown);
+  teardownClub();
   safeTeardown(resume.teardown);
   mount.teardown();
 }
 
-/** Non-PDP teardown: flush + drop tracking + club + banners, then the resume channel. */
 function nonPdpTeardown() {
   safeTeardown(track.teardown);
-  safeTeardown(club.teardown);
-  safeTeardown(banners.teardown);
+  teardownClub();
   resume.teardown();
+}
+
+function teardownClub() {
+  const club = chunks.ready(CHUNK.club);
+  if (club && club.teardown) safeTeardown(club.teardown);
 }
 
 /** Run one teardown step without letting a failure abort the rest / leak into the host. */
@@ -191,18 +251,6 @@ function safeTeardown(fn) {
     fn();
   } catch {
     warn('teardown step failed');
-  }
-}
-
-/** Open the modal on button click. (The modal is bundled in the single IIFE; the panel
- *  DOM + the result/loading screens are only constructed on demand, so first paint stays
- *  cheap and the host main thread is never touched until the shopper clicks.) */
-function openModal() {
-  track.trackOpen(); // meaningful interaction: the shopper opened the Tray On flow
-  try {
-    modal.open();
-  } catch {
-    warn('failed to open the try-on modal');
   }
 }
 
@@ -230,11 +278,12 @@ function currentScript() {
   return null;
 }
 
-/** The origin (scheme://host:port) that served the widget.js bundle. */
-function scriptOrigin(script) {
+/** The absolute DIRECTORY that served widget.js (the chunks + the font sit beside it). */
+function assetBase(script) {
   try {
-    return new URL(script.src, location.href).origin;
+    const src = new URL(script.src, location.href);
+    return src.href.slice(0, src.href.lastIndexOf('/') + 1);
   } catch {
-    return location.origin;
+    return location.origin + '/';
   }
 }

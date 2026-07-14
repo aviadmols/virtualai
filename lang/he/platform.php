@@ -447,11 +447,21 @@ return [
             'domain' => 'דומיין',
             'no_domain' => 'לא הוגדר דומיין',
             'state' => 'התקנה',
+            'shopify' => 'שופיפיי',
             'created' => 'נוצר',
         ],
         'state' => [
             'ready' => 'מוכן',
             'pending' => 'ממתין להתקנה',
+        ],
+
+        // חיבור שופיפיי כפי שרשימת האתרים של הפלטפורמה רואה אותו. "none" = מעולם לא חובר
+        // (חנות מותאמת/סרוקה); השאר משקפים את ShopifyConnection::STATUS_*.
+        'shopify' => [
+            'none' => 'לא מחובר',
+            'installed' => 'מחובר',
+            'uninstalled' => 'נותק',
+            'needs_reauth' => 'נדרש חיבור מחדש',
         ],
         'empty' => 'אין עדיין אתרים',
         'empty_sub' => 'חנויות הסוחרים יופיעו כאן מכל החשבונות.',
@@ -497,7 +507,7 @@ return [
         'verify' => [
             'label' => 'בדיקת הגדרה',
             'heading' => 'סטטוס הגדרה',
-            'sub' => 'מה צריך להיות מוגדר כדי שכפתור Tray On יופיע באתר הזה.',
+            'sub' => 'מה צריך להיות מוגדר כדי שכפתור Vsio יופיע באתר הזה.',
             'close' => 'סגירה',
             'check' => [
                 'openrouter' => 'מפתח API של OpenRouter',
@@ -860,16 +870,16 @@ return [
             'from_address' => 'כתובת השולח',
             'from_address_placeholder' => 'noreply@example.com',
             'from_name' => 'שם השולח',
-            'from_name_placeholder' => 'Tray On',
+            'from_name_placeholder' => 'Vsio',
             'test' => 'שליחת דוא"ל בדיקה',
             'test_recipient' => 'שליחה אל',
             'test_ok' => 'דוא"ל הבדיקה נשלח',
             'test_ok_body' => 'הודעת בדיקה נשלחה אל :email דרך ה-SMTP המוגדר.',
             'test_fail' => 'שליחת דוא"ל הבדיקה נכשלה',
             'test_fail_body' => 'שרת ה-SMTP דחה את השליחה — פתחו "קרא את השגיאה המלאה" למטה לפרטים.',
-            'test_mail_subject' => 'Tray On — בדיקת SMTP',
+            'test_mail_subject' => 'Vsio — בדיקת SMTP',
             'test_mail_heading' => 'ה-SMTP שלך עובד',
-            'test_mail_body' => 'זו הודעת בדיקה מהגדרות הפלטפורמה של Tray On. אם אתם קוראים זאת, דוא"ל יוצא מוגדר כראוי.',
+            'test_mail_body' => 'זו הודעת בדיקה מהגדרות הפלטפורמה של Vsio. אם אתם קוראים זאת, דוא"ל יוצא מוגדר כראוי.',
             'test_mail_dir' => 'rtl',
         ],
         'payplus' => [

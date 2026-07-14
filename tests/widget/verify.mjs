@@ -15,23 +15,37 @@
 
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import { deflateSync, crc32 } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, join } from 'node:path';
 
 // === CONSTANTS ===
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..', '..');
-const WIDGET_JS = resolve(ROOT, 'public', 'widget', 'v1', 'widget.js');
+const DIST = resolve(ROOT, 'public', 'widget', 'v1');
+const WIDGET_JS = join(DIST, 'widget.js');
 const MOCK_HTML = resolve(HERE, 'mock-pdp.html');
+const MOCK_SHOPIFY_HTML = resolve(HERE, 'mock-pdp-shopify.html');
 const EMBED_BLADE = resolve(ROOT, 'resources', 'views', 'components', 'to', 'embed-code.blade.php');
 const SIZE_BUDGET = resolve(ROOT, 'resources', 'widget', 'size-budget.json');
 const OUT = resolve(HERE, 'screenshots');
 const PORT = 4599;
 const ORIGIN = `http://localhost:${PORT}`;
+const SHOPIFY_PATH = '/shopify';
 const SENTINEL = 'data-trayon-mounted';
+
+// The split bundle: the CORE is measured against maxGzipBytes, EVERY lazy chunk against
+// maxLazyGzipBytes. Both are enforced by the build too — this gate makes a regression visible
+// in the harness output as well as at the build step.
+const CORE_BUNDLE = 'widget.js';
+const LAZY_BUNDLES = ['widget.modal.js', 'widget.club.js'];
+
+// The Shopify numeric variant ids the mock storefront + the stubbed ProductPayload agree on.
+const SHOPIFY_VARIANT_S = '1111111111';
+const SHOPIFY_VARIANT_M = '2222222222';
+const TRAYON_LINE_PROPERTY = '_trayon';
 
 // Perf gate: the total layout shift the widget may cause on the host page must stay well
 // under Google's "good" CLS threshold (0.1). The widget renders in a Shadow DOM + reserves
@@ -40,17 +54,39 @@ const CLS_BUDGET = 0.02;
 
 mkdirSync(OUT, { recursive: true });
 
-// --- A tiny static server: serves the mock PDP + the built widget.js (real origin). ---
+// --- A tiny static server: serves the mock PDPs + the built bundles/fonts (a real origin). ---
+// The lazy chunks are fetched with a plain <script src>, and the webfont with a CSS url(), both
+// against the origin that served widget.js — so they must be served here exactly as production
+// serves them out of public/widget/v1/.
 function startServer() {
   return new Promise((resolveServer) => {
     const server = createServer((req, res) => {
-      if (req.url.startsWith('/widget/v1/widget.js')) {
+      const path = req.url.split('?')[0];
+
+      if (path.startsWith('/widget/v1/') && path.endsWith('.js')) {
+        const file = join(DIST, path.slice('/widget/v1/'.length));
+        if (!existsSync(file)) {
+          res.writeHead(404).end('missing bundle: ' + path);
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/javascript' });
-        res.end(readFileSync(WIDGET_JS));
+        res.end(readFileSync(file));
         return;
       }
+
+      if (path.startsWith('/widget/v1/fonts/')) {
+        const file = join(DIST, path.slice('/widget/v1/'.length));
+        if (!existsSync(file)) {
+          res.writeHead(404).end('missing font');
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'font/woff2' });
+        res.end(readFileSync(file));
+        return;
+      }
+
       res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(readFileSync(MOCK_HTML));
+      res.end(readFileSync(path.startsWith(SHOPIFY_PATH) ? MOCK_SHOPIFY_HTML : MOCK_HTML));
     });
     server.listen(PORT, () => resolveServer(server));
   });
@@ -96,12 +132,73 @@ function bootstrapBody(locale) {
       currency: 'USD',
       main_image_url: null,
       images: [],
+      // ProductPayload's `source` (scan | shopify). A scanned product has no external ids.
+      source: 'scan',
       variants: [
-        { id: 1, options: { size: 'S' }, price_minor: 8900, image_url: null, sku: 'TEE-S', available: true },
-        { id: 2, options: { size: 'M' }, price_minor: 8900, image_url: null, sku: 'TEE-M', available: true },
+        { id: 1, external_id: null, options: { size: 'S' }, price_minor: 8900, image_url: null, sku: 'TEE-S', available: true },
+        { id: 2, external_id: null, options: { size: 'M' }, price_minor: 8900, image_url: null, sku: 'TEE-M', available: true },
       ],
     },
   };
+}
+
+/**
+ * The bootstrap for a SHOPIFY-sourced product: ProductPayload ships `source: 'shopify'` and the
+ * NUMERIC Shopify variant id on every variant (`external_id`) — the id /cart/add.js actually
+ * speaks. Our internal `id` stays our DB key; confusing the two is precisely the bug this gate
+ * exists to prevent.
+ */
+function shopifyBootstrapBody(locale) {
+  const body = bootstrapBody(locale);
+  body.site.selectors.product_image = { primary: '.product__image' };
+  body.product.source = 'shopify';
+  body.product.variants = [
+    { id: 1, external_id: SHOPIFY_VARIANT_S, options: { size: 'S' }, price_minor: 8900, image_url: null, sku: 'TEE-S', available: true },
+    { id: 2, external_id: SHOPIFY_VARIANT_M, options: { size: 'M' }, price_minor: 8900, image_url: null, sku: 'TEE-M', available: true },
+  ];
+  return body;
+}
+
+/**
+ * A working stand-in for the merchant's Ajax cart. `add.js` records what the widget POSTed and
+ * appends the line; `cart.js` reports what is actually IN the cart. The whole point of the gate is
+ * that a 200 from add.js proves nothing — only /cart.js does.
+ */
+function installMockCart(target, { addStatus = 200 } = {}) {
+  const cart = { items: [], adds: [] };
+
+  target.route('**/cart/add.js', (route) => {
+    const body = route.request().postDataJSON();
+    cart.adds.push(body);
+
+    if (addStatus !== 200) {
+      route.fulfill({
+        status: addStatus,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: addStatus, message: 'Cart Error', description: 'sold out' }),
+      });
+      return;
+    }
+
+    for (const item of (body && body.items) || []) {
+      cart.items.push({
+        variant_id: item.id,
+        quantity: item.quantity,
+        properties: item.properties || {},
+      });
+    }
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: cart.items }) });
+  });
+
+  target.route('**/cart.js', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ item_count: cart.items.length, items: cart.items }),
+    }),
+  );
+
+  return cart;
 }
 
 // --- Club bootstrap helpers -------------------------------------------------
@@ -205,6 +302,33 @@ async function waitForBoot(page) {
   await page.waitForFunction(() => !!document.querySelector('[data-trayon-mounted]'), { timeout: 8000 });
 }
 
+/**
+ * Tap the trigger and wait for the REAL modal (not the skeleton shell). The modal body now lives
+ * in a lazily fetched chunk, so a fixed timeout here would be a flake generator: we wait on the
+ * setup form's own CTA instead.
+ */
+async function openModal(page) {
+  await page.evaluate(
+    (sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(),
+    SENTINEL,
+  );
+  await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
+  await page.locator('.ton-cta').waitFor({ timeout: 8000 });
+}
+
+/** Fill the setup form (photo + height + consent) and start the generation. */
+async function startGeneration(page) {
+  await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
+  await page.locator('.ton-preview__img').waitFor({ timeout: 6000 }).catch(async () => {
+    const err = await page.locator('.ton-error').first().textContent().catch(() => '');
+    throw new Error('photo not accepted by prepare(); error box="' + (err || '').trim() + '"');
+  });
+  await page.locator('.ton-input').first().fill('175');
+  await page.locator('.ton-consent__box').check();
+  await page.locator('.ton-cta').click({ timeout: 6000 });
+  await page.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
+}
+
 // A real 64x64 RGB PNG for the file upload — big enough that the widget's client-side
 // decode+downscale (createImageBitmap + canvas re-encode) succeeds (a 1x1 pixel fails it).
 function pngChunk(type, data) {
@@ -259,24 +383,10 @@ async function asyncNotificationGate(browser) {
     await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
     await waitForBoot(page);
 
-    // Open the modal via the injected button.
-    await page.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
-    await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
-
-    // Fill the form: photo + height + consent (Playwright CSS locators pierce open shadow DOM;
-    // .click() auto-waits for the CTA to become enabled once all three are valid).
-    await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
-    // Wait for the photo to be accepted (preview shows) — surfaces a prepare() failure early.
-    await page.locator('.ton-preview__img').waitFor({ timeout: 6000 }).catch(async () => {
-      const err = await page.locator('.ton-error').first().textContent().catch(() => '');
-      throw new Error('photo not accepted by prepare(); error box="' + (err || '').trim() + '"');
-    });
-    await page.locator('.ton-input').first().fill('175');
-    await page.locator('.ton-consent__box').check();
+    await openModal(page);
 
     // Generate -> loading; the Tray On button enters its "thinking" state.
-    await page.locator('.ton-cta').click({ timeout: 6000 });
-    await page.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
+    await startGeneration(page);
     await page.locator('.ton-button--busy').waitFor({ timeout: 5000 });
     assert(true, 'Tray On button shows the "thinking" state during generation');
 
@@ -285,7 +395,11 @@ async function asyncNotificationGate(browser) {
     await page.locator('.ton-overlay').waitFor({ state: 'detached', timeout: 5000 });
     assert(true, 'popup closed while generation still in flight');
 
-    // The background poll completes -> an on-page notification appears (modal stays closed).
+    // The HUD picks the generation up and says so, with the modal closed.
+    await page.locator('.ton-notification--thinking').waitFor({ timeout: 5000 });
+    assert(true, 'the HUD carries the generation after the modal is closed (--thinking)');
+
+    // The background poll completes -> the HUD flips to "ready" (the modal stays closed).
     await page.locator('.ton-notification--ready').waitFor({ timeout: 8000 });
     assert(true, 'on-page "ready" notification appeared after the popup was closed');
 
@@ -329,10 +443,9 @@ async function galleryGate(browser) {
   try {
     await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
     await waitForBoot(page);
-    await page.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
-    await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
+    await openModal(page);
 
-    // The gallery strip appears atop the form with the shopper's past try-ons.
+    // The strip appears under the preview with the shopper's past looks.
     await page.locator('.ton-gallery__thumb').first().waitFor({ timeout: 6000 });
     const thumbs = await page.locator('.ton-gallery__thumb').count();
     assert(thumbs === 2, `gallery shows the shopper's past try-ons (${thumbs})`);
@@ -442,14 +555,8 @@ async function crossPageResumeGate(browser) {
     await waitForBoot(page);
 
     // Start a try-on.
-    await page.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
-    await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
-    await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
-    await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
-    await page.locator('.ton-input').first().fill('175');
-    await page.locator('.ton-consent__box').check();
-    await page.locator('.ton-cta').click({ timeout: 6000 });
-    await page.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
+    await openModal(page);
+    await startGeneration(page);
 
     // The pending generation is persisted, site-scoped by the site_key (written once the
     // create-generation response returns the id — poll for it rather than racing the fetch).
@@ -535,14 +642,8 @@ async function crossTabGate(browser) {
     await waitForBoot(tab2);
 
     // Start + finish a try-on in tab 1 (close the popup mid-generation so it completes in the bg).
-    await tab1.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
-    await tab1.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
-    await tab1.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
-    await tab1.locator('.ton-preview__img').waitFor({ timeout: 6000 });
-    await tab1.locator('.ton-input').first().fill('175');
-    await tab1.locator('.ton-consent__box').check();
-    await tab1.locator('.ton-cta').click({ timeout: 6000 });
-    await tab1.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
+    await openModal(tab1);
+    await startGeneration(tab1);
     await tab1.locator('.ton-modal__close').click();
     await tab1.locator('.ton-overlay').waitFor({ state: 'detached', timeout: 5000 });
 
@@ -591,11 +692,23 @@ function staticPerfGates() {
     console.error('  FAIL:', e.message);
   }
 
+  // The SPLIT budget: the core is what every page view pays for, so it has its own ceiling; each
+  // lazy chunk has its own. Raising one must never silently pay for the other.
   try {
     const budget = JSON.parse(readFileSync(SIZE_BUDGET, 'utf8'));
-    const gz = gzipEntry();
-    assert(gz <= budget.maxGzipBytes, `entry bundle within gzip budget (${gz} <= ${budget.maxGzipBytes})`);
-    console.log(`  -> widget.js gzipped: ${gz} bytes (budget ${budget.maxGzipBytes})`);
+
+    const core = gzipBundle(CORE_BUNDLE);
+    assert(core <= budget.maxGzipBytes, `CORE bundle within gzip budget (${core} <= ${budget.maxGzipBytes})`);
+
+    for (const name of LAZY_BUNDLES) {
+      const gz = gzipBundle(name);
+      assert(gz <= budget.maxLazyGzipBytes, `LAZY ${name} within gzip budget (${gz} <= ${budget.maxLazyGzipBytes})`);
+    }
+
+    // The modal chunk must actually BE lazy: the core may not contain the modal's markup/copy.
+    const coreSource = readFileSync(WIDGET_JS, 'utf8');
+    assert(!coreSource.includes('ton-consent__box'), 'the core bundle does NOT contain the modal body (it is genuinely lazy)');
+    assert(!coreSource.includes('cart/add.js'), 'the core bundle does NOT contain the cart bridge (it is genuinely lazy)');
   } catch (e) {
     failures++;
     console.error('  FAIL:', e.message);
@@ -604,9 +717,9 @@ function staticPerfGates() {
   return failures;
 }
 
-/** Gzip the built entry bundle (zlib deflate + a gzip header/trailer) to size it like the CDN. */
-function gzipEntry() {
-  const raw = readFileSync(WIDGET_JS);
+/** Gzip a built bundle (zlib deflate + a gzip header/trailer) to size it like the CDN would. */
+function gzipBundle(name) {
+  const raw = readFileSync(join(DIST, name));
   const body = deflateSync(raw, { level: 9 });
   // gzip = 10-byte header + raw deflate + CRC32 + ISIZE (mtime/os zeroed — size is what matters).
   const header = Buffer.from([0x1f, 0x8b, 0x08, 0, 0, 0, 0, 0, 0, 0xff]);
@@ -681,8 +794,7 @@ async function perfTrackingGate(browser) {
     await page.selectOption('#variant', 'TEE-S');
     await page.waitForTimeout(400);
 
-    await page.evaluate((sentinel) => document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
-    await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
+    await openModal(page);
 
     // Run a full try-on so the add-to-cart interaction fires (its own funnel + track signal).
     await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
@@ -1275,8 +1387,410 @@ async function bannerRuntimeGate(browser) {
   return failures;
 }
 
+/**
+ * THE REAL CART. The old bridge did a blind anchor.click() on the host's button and never checked
+ * whether anything reached the cart. This gate proves the three things that were broken:
+ *   1. the widget reads the platform context the Theme App Extension stamps on the tag;
+ *   2. it POSTs /cart/add.js with the NUMERIC Shopify variant id (not our internal DB key) and
+ *      the `_trayon` line-item property (the hook Phase 6 attributes the purchase with);
+ *   3. it VERIFIES via /cart.js — a 200 from add.js is not proof — before saying "Added to cart".
+ * Then: a 422 (sold out) surfaces its own honest message, not "something went wrong".
+ */
+async function realCartGate(browser) {
+  console.log('\n=== REAL add-to-cart (shopify ajax + /cart.js verify + _trayon property) ===');
+  let failures = 0;
+
+  // (A) The happy path: the line really lands in the cart.
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  await stubApi(page, 'en');
+  await page.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(shopifyBootstrapBody('en')) }));
+  const cart = installMockCart(page);
+
+  try {
+    await page.goto(ORIGIN + SHOPIFY_PATH, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+
+    // The tag's platform context reached the widget.
+    const context = await page.evaluate(() => ({
+      platform: window.__TrayOn.state.platform,
+      externalVariantId: window.__TrayOn.state.externalVariantId,
+      variantExternal: window.__TrayOn.state.variant && window.__TrayOn.state.variant.externalId,
+    }));
+    assert(context.platform === 'shopify', `data-platform reached the widget (${context.platform})`);
+    assert(context.externalVariantId === SHOPIFY_VARIANT_M, `data-variant-id reached the widget (${context.externalVariantId})`);
+    assert(context.variantExternal === SHOPIFY_VARIANT_M, 'the selected variant carries the NUMERIC Shopify id, not our DB key');
+
+    await openModal(page);
+    await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
+    await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
+    await page.locator('.ton-input').first().fill('175');
+    await page.locator('.ton-consent__box').check();
+    await page.locator('.ton-cta').click({ timeout: 6000 });
+    await page.locator('.ton-result__img').waitFor({ timeout: 8000 });
+
+    await page.locator('.ton-action--primary').click();
+    await page.waitForFunction(
+      () => {
+        const btn = document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-action--primary');
+        return btn && /Added/i.test(btn.textContent);
+      },
+      { timeout: 8000 },
+    );
+
+    // What the widget actually POSTed.
+    assert(cart.adds.length === 1, `exactly one /cart/add.js POST (${cart.adds.length})`);
+    const line = cart.adds[0].items[0];
+    assert(String(line.id) === SHOPIFY_VARIANT_M, `add.js carried the REAL numeric variant id (${line.id})`);
+    assert(line.quantity === 1, 'add.js carried quantity 1');
+    assert(line.properties && line.properties[TRAYON_LINE_PROPERTY], `the ${TRAYON_LINE_PROPERTY} line-item property is attached (${line.properties[TRAYON_LINE_PROPERTY]})`);
+
+    // What the CART actually contains (the only proof that counts).
+    const inCart = await page.evaluate(async () => {
+      const res = await fetch('/cart.js');
+      return res.json();
+    });
+    const found = inCart.items.find((i) => String(i.variant_id) === SHOPIFY_VARIANT_M);
+    assert(!!found, '/cart.js really contains the line for the selected variant');
+    assert(!!(found && found.properties && found.properties._trayon), '/cart.js line carries the _trayon attribution property');
+
+    await page.screenshot({ path: resolve(OUT, 'widget-cart.en.png'), fullPage: false });
+    console.log('  -> screenshot: widget-cart.en.png');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, 'widget-cart-FAIL.png') }).catch(() => {});
+  }
+  await page.close();
+
+  // (B) Sold out (422): an honest, distinct message — and the button comes back.
+  const p2 = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  await stubApi(p2, 'en');
+  await p2.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(shopifyBootstrapBody('en')) }));
+  installMockCart(p2, { addStatus: 422 });
+
+  try {
+    await p2.goto(ORIGIN + SHOPIFY_PATH, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(p2);
+    await openModal(p2);
+    await p2.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
+    await p2.locator('.ton-preview__img').waitFor({ timeout: 6000 });
+    await p2.locator('.ton-input').first().fill('175');
+    await p2.locator('.ton-consent__box').check();
+    await p2.locator('.ton-cta').click({ timeout: 6000 });
+    await p2.locator('.ton-result__img').waitFor({ timeout: 8000 });
+    await p2.locator('.ton-action--primary').click();
+
+    await p2.waitForFunction(
+      () => {
+        const toast = document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-toast');
+        return toast && !toast.hasAttribute('hidden') && /available/i.test(toast.textContent);
+      },
+      { timeout: 8000 },
+    );
+    assert(true, 'a 422 renders the honest "that option isn\'t available" message');
+
+    const enabled = await p2.evaluate(
+      () => !document.querySelector('#trayon-host').shadowRoot.querySelector('.ton-action--primary').disabled,
+    );
+    assert(enabled, 'after a failed add the button returns (the shopper can retry)');
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+  }
+  await p2.close();
+
+  return failures;
+}
+
+/**
+ * Variant sync FROM THE THEME EXTENSION. The extension keeps data-variant-id truthful across
+ * swatch clicks / ?variant= / popstate / DOM mutation and dispatches `trayon:variant-change`
+ * (note: NOT our internal `trayon:variant-changed`). If the widget ignores it, the shopper tries
+ * on one variant and buys another. This proves the new id reaches BOTH state and the cart call.
+ */
+async function variantSyncGate(browser) {
+  console.log('\n=== variant sync from the Theme Extension (trayon:variant-change) ===');
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  let failures = 0;
+
+  await stubApi(page, 'en');
+  await page.route('**/widget/v1/bootstrap*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(shopifyBootstrapBody('en')) }));
+  const cart = installMockCart(page);
+
+  try {
+    await page.goto(ORIGIN + SHOPIFY_PATH, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+
+    // The shopper switches to S: the theme rewrites the tag and fires the extension's event.
+    // The sync is debounced (one sync per burst of host signals), so wait for the mapped variant,
+    // not just the raw attribute.
+    await page.selectOption('#variant', SHOPIFY_VARIANT_S);
+    await page.waitForFunction(
+      (id) => window.__TrayOn.state.variant && window.__TrayOn.state.variant.externalId === id,
+      SHOPIFY_VARIANT_S,
+      { timeout: 5000 },
+    );
+    const after = await page.evaluate(() => ({
+      key: window.__TrayOn.state.variant.key,
+      external: window.__TrayOn.state.variant.externalId,
+    }));
+    assert(after.external === SHOPIFY_VARIANT_S, `trayon:variant-change updated the external id (${after.external})`);
+    assert(after.key === '1', `and it re-mapped onto the right confirmed variant (key=${after.key})`);
+
+    // ...and the cart call for the NEW variant carries the NEW id.
+    await openModal(page);
+    await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
+    await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
+    await page.locator('.ton-input').first().fill('175');
+    await page.locator('.ton-consent__box').check();
+    await page.locator('.ton-cta').click({ timeout: 6000 });
+    await page.locator('.ton-result__img').waitFor({ timeout: 8000 });
+    await page.locator('.ton-action--primary').click();
+    await page.waitForFunction(() => window.__TrayOn && true, { timeout: 1000 });
+
+    for (let i = 0; i < 30 && cart.adds.length === 0; i++) await page.waitForTimeout(100);
+    assert(cart.adds.length === 1, 'the cart was called once');
+    assert(String(cart.adds[0].items[0].id) === SHOPIFY_VARIANT_S,
+      `the cart add used the NEWLY selected variant (${cart.adds[0].items[0].id})`);
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, 'widget-variant-FAIL.png') }).catch(() => {});
+  }
+
+  await page.close();
+  return failures;
+}
+
+/**
+ * The lazy-chunk UX (§6.3). Two halves:
+ *  - a SLOW chunk: the trigger becomes the spinner immediately, and past 250 ms the skeleton shell
+ *    opens in the very box the modal will land in (never an empty modal flashed for 200 ms);
+ *  - a FAILED chunk: no half-drawn modal, no exception into the host page — the trigger comes back
+ *    and the HUD offers a retry.
+ */
+async function lazyChunkGate(browser) {
+  console.log('\n=== lazy chunk UX (trigger spinner -> skeleton -> retryable HUD) ===');
+  let failures = 0;
+
+  // (A) Slow chunk -> the skeleton shell.
+  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  await stubApi(page, 'en');
+  await page.route('**/widget/v1/widget.modal.js', async (route) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    route.continue();
+  });
+
+  try {
+    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+
+    await page.evaluate((s) => document.querySelector('[' + s + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
+
+    await page.locator('.ton-button--loading').waitFor({ timeout: 2000 });
+    assert(true, 'the trigger itself becomes the progress indicator the moment it is tapped');
+
+    await page.locator('.ton-skeleton').waitFor({ timeout: 3000 });
+    assert(true, 'past 250 ms the skeleton shell opens (the wait is real, so we acknowledge it)');
+
+    await page.locator('.ton-cta').waitFor({ timeout: 8000 });
+    assert((await page.locator('.ton-skeleton').count()) === 0, 'the real modal replaces the skeleton when the chunk lands');
+    await page.screenshot({ path: resolve(OUT, 'widget-skeleton.en.png'), fullPage: false }).catch(() => {});
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+  }
+  await page.close();
+
+  // (B) Failed chunk -> the retryable HUD, and nothing broken on the merchant's page.
+  const p2 = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  const pageErrors = [];
+  p2.on('pageerror', (e) => pageErrors.push(e.message));
+  await stubApi(p2, 'en');
+  await p2.route('**/widget/v1/widget.modal.js', (route) => route.abort());
+
+  try {
+    await p2.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(p2);
+    await p2.evaluate((s) => document.querySelector('[' + s + ']').shadowRoot.querySelector('.ton-button').click(), SENTINEL);
+
+    await p2.locator('.ton-notification--error').waitFor({ timeout: 8000 });
+    assert(true, 'a failed chunk surfaces the retryable HUD (--error)');
+    assert((await p2.locator('.ton-modal').count()) === 0, 'no half-drawn modal is left on the merchant page');
+    assert((await p2.locator('.ton-button--loading').count()) === 0, 'the trigger returns to its default state');
+    assert(pageErrors.length === 0, `no exception thrown into the host page (${pageErrors.join(' | ') || 'none'})`);
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+  }
+  await p2.close();
+
+  return failures;
+}
+
+/**
+ * The ON-IMAGE trigger (the one new placement enum value). It renders INSIDE the merchant's
+ * product-image container, exactly once, with zero host layout shift — and when the product_image
+ * selector does not resolve it FALLS BACK to below add-to-cart, because the button must never
+ * vanish from a live PDP.
+ */
+async function onImagePlacementGate(browser) {
+  console.log('\n=== on-image trigger placement (+ its fallback, + zero CLS) ===');
+  let failures = 0;
+
+  const openPage = async (appearance) => {
+    const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await page.addInitScript(() => {
+      window.__cls = 0;
+      try {
+        new PerformanceObserver((list) => {
+          for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
+        }).observe({ type: 'layout-shift', buffered: true });
+      } catch { /* unsupported -> tolerates 0 */ }
+    });
+    await stubApi(page, 'en');
+    await page.route('**/widget/v1/bootstrap*', (route) => {
+      const body = shopifyBootstrapBody('en');
+      Object.assign(body.site.appearance, appearance);
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    });
+    return page;
+  };
+
+  // (1) The trigger sits inside the product-image container.
+  try {
+    const page = await openPage({ button_placement: 'on_product_image' });
+    await page.goto(ORIGIN + SHOPIFY_PATH, { waitUntil: 'load' });
+    await waitForBoot(page);
+
+    const placed = await page.evaluate((sentinel) => {
+      const media = document.querySelector('.product__media');
+      const btn = document.querySelector('[' + sentinel + ']');
+      return {
+        inside: !!(btn && media && media.contains(btn)),
+        count: document.querySelectorAll('[' + sentinel + ']').length,
+        containerPosition: getComputedStyle(media).position,
+        glass: !!btn.shadowRoot.querySelector('.ton-button--on-image'),
+      };
+    }, SENTINEL);
+
+    assert(placed.inside, 'the trigger renders INSIDE the product-image container');
+    assert(placed.count === 1, 'exactly once (no duplicate)');
+    assert(placed.glass, 'and it wears the glass on-image skin (it ignores button_bg by design)');
+    assert(placed.containerPosition === 'relative', 'the one host style write (position: relative) was made');
+
+    const cls = await page.evaluate(() => window.__cls || 0);
+    assert(cls < CLS_BUDGET, `on-image placement caused no host layout shift (CLS ${cls.toFixed(4)} < ${CLS_BUDGET})`);
+
+    await page.screenshot({ path: resolve(OUT, 'widget-on-image.en.png'), fullPage: false });
+    console.log('  -> screenshot: widget-on-image.en.png');
+    await page.close();
+  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+
+  // (2) An unresolvable product_image selector -> fall back to below add-to-cart.
+  try {
+    const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+    await stubApi(page, 'en');
+    await page.route('**/widget/v1/bootstrap*', (route) => {
+      const body = shopifyBootstrapBody('en');
+      body.site.appearance.button_placement = 'on_product_image';
+      body.site.selectors.product_image = { primary: '#nope-not-here' };
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    });
+    await page.goto(ORIGIN + SHOPIFY_PATH, { waitUntil: 'domcontentloaded' });
+    await waitForBoot(page);
+
+    const fellBack = await page.evaluate((sentinel) => {
+      const atc = document.querySelector('#add-to-cart');
+      const btn = document.querySelector('[' + sentinel + ']');
+      return !!btn && !!(atc.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING) && btn.parentNode === atc.parentNode;
+    }, SENTINEL);
+    assert(fellBack, 'an unresolvable product_image selector falls back to below add-to-cart');
+    await page.close();
+  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+
+  return failures;
+}
+
+/**
+ * The visual record of the rebuild, EN and HE. Not an assertion — a receipt. Every surface the
+ * redesign touches, in both directions, so a reviewer can see that Hebrew mirrors (the trigger
+ * moves to the image's bottom-RIGHT, the HUD slides in from the right, the CTA drops its
+ * letter-spacing) without opening a browser.
+ */
+async function designScreenshotGate(browser, locale) {
+  console.log(`\n=== design screenshots (${locale}) ===`);
+  const page = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+  let failures = 0;
+  let polls = 0;
+
+  await stubApi(page, locale);
+  await page.route('**/widget/v1/bootstrap*', (route) => {
+    const body = shopifyBootstrapBody(locale);
+    body.site.appearance.button_placement = 'on_product_image';
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  // Hold `processing` for a few polls so the thinking states are actually photographable.
+  await page.route('**/widget/v1/generations/7*', (route) => {
+    polls++;
+    const status = polls >= 4 ? 'succeeded' : 'processing';
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, generation: { id: 7, status, failure_code: null, result_url: status === 'succeeded' ? RESULT_PNG : null, created_at: null } }),
+    });
+  });
+  installMockCart(page);
+
+  try {
+    await page.goto(ORIGIN + SHOPIFY_PATH, { waitUntil: 'domcontentloaded' });
+    if (locale === 'he') await page.evaluate(() => document.documentElement.setAttribute('dir', 'rtl'));
+    await waitForBoot(page);
+
+    await page.screenshot({ path: resolve(OUT, `design-trigger.${locale}.png`) });
+
+    await openModal(page);
+    await page.screenshot({ path: resolve(OUT, `design-setup.${locale}.png`) });
+
+    await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
+    await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
+    await page.locator('.ton-input').first().fill('175');
+    await page.locator('.ton-consent__box').check();
+    await page.screenshot({ path: resolve(OUT, `design-setup-ready.${locale}.png`) });
+
+    await page.locator('.ton-cta').click({ timeout: 6000 });
+    await page.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
+    await page.screenshot({ path: resolve(OUT, `design-thinking.${locale}.png`) });
+
+    // Close mid-generation: the HUD picks the look up and carries it.
+    await page.locator('.ton-modal__close').click();
+    await page.locator('.ton-notification--thinking').waitFor({ timeout: 5000 });
+    await page.screenshot({ path: resolve(OUT, `design-hud-thinking.${locale}.png`) });
+
+    await page.locator('.ton-notification--ready').waitFor({ timeout: 10000 });
+    await page.screenshot({ path: resolve(OUT, `design-hud-ready.${locale}.png`) });
+
+    await page.locator('.ton-notification__main').click();
+    await page.locator('.ton-result__img').waitFor({ timeout: 8000 });
+    await page.screenshot({ path: resolve(OUT, `design-result.${locale}.png`) });
+
+    assert(true, `design screenshots captured (trigger / setup / thinking / HUD / result) — ${locale}`);
+    console.log(`  -> design-{trigger,setup,setup-ready,thinking,hud-thinking,hud-ready,result}.${locale}.png`);
+  } catch (e) {
+    failures++;
+    console.error('  FAIL:', e.message);
+    await page.screenshot({ path: resolve(OUT, `design-FAIL.${locale}.png`) }).catch(() => {});
+  }
+
+  await page.close();
+  return failures;
+}
+
 async function run() {
-  // Static perf gates first (no browser needed): async snippet + gzip budget.
+  // Static perf gates first (no browser needed): async snippet + the SPLIT gzip budget.
   let failures = staticPerfGates();
 
   const server = await startServer();
@@ -1369,11 +1883,7 @@ async function run() {
         const w = document.querySelector('[' + sentinel + ']');
         return !!(w && w.shadowRoot && w.shadowRoot.querySelector('.ton-button'));
       }, SENTINEL, { timeout: 5000 });
-      await page.evaluate((sentinel) => {
-        document.querySelector('[' + sentinel + ']').shadowRoot.querySelector('.ton-button').click();
-      }, SENTINEL);
-      await page.waitForFunction(() => !!document.querySelector('#trayon-host'), { timeout: 5000 });
-      await page.waitForTimeout(400);
+      await openModal(page);
 
       const modalState = await page.evaluate(() => {
         const host = document.querySelector('#trayon-host');
@@ -1445,6 +1955,12 @@ async function run() {
 
   // --- perf + tracking gate (no sync work / CLS / meaningful-events-only) ---
   failures += await perfTrackingGate(browser);
+
+  // --- THE REBUILD's new gates -------------------------------------------------
+  failures += await realCartGate(browser); // the cart is real, verified, and attributed
+  failures += await variantSyncGate(browser); // the extension's variant reaches state AND the cart
+  failures += await lazyChunkGate(browser); // the split bundle's UX, including its failure mode
+  failures += await onImagePlacementGate(browser); // the one new placement + its fallback
 
   // --- Customer Club: banner visibility (EN + HE), login flow, typed failures, member pricing ---
   failures += await clubBannerGate(browser, 'en');

@@ -34,7 +34,8 @@ land on the wrong variant.
 1. Create the app in the **Partner Dashboard** → copy `client_id` into `shopify.app.toml`.
 2. Put the client secret in `SHOPIFY_CLIENT_SECRET` (or the Super-Admin → Settings page —
    it is stored encrypted and wins over the env var). It is also the webhook HMAC key.
-3. Replace `REPLACE_WITH_APP_HOST` with the deployed app host (it must match `APP_URL`).
+3. The app host in `shopify.app.toml` is `go.vsio.app` — it must match the deployed
+   `APP_URL`. If the domain ever changes, update every URL in that file together.
 4. `shopify app deploy` from this directory, then install on a **development store**.
 
 Scopes, API version and the webhook topics are pinned in `config/shopify.php` and

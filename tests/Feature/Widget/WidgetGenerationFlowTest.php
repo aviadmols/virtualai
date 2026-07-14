@@ -4,13 +4,17 @@ namespace Tests\Feature\Widget;
 
 use App\Domain\Generation\GenerateTryOnJob;
 use App\Models\Account;
+use App\Models\CreditLedger;
 use App\Models\EndUser;
 use App\Models\Generation;
 use App\Models\Product;
 use App\Models\Site;
 use App\Support\Tenant;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
+use Mockery;
 use Tests\TestCase;
 
 /**
@@ -217,6 +221,45 @@ final class WidgetGenerationFlowTest extends TestCase
             ->assertJson(['ok' => false, 'error' => ['code' => 'photo_invalid']]);
 
         Queue::assertNothingPushed();
+    }
+
+    /**
+     * A MEDIA DISK THAT WILL NOT TAKE THE PHOTO IS OURS TO OWN, AND IT IS NOT A 500.
+     *
+     * The write gateway refuses to hand back a path it could not verify (the put() boolean, and a
+     * readback that must equal the bytes we handed the disk). That typed MediaWriteException used to
+     * escape the widget door as an untyped 500 — the shopper saw a crash. It is a transient storage
+     * problem, and the whole start ran in ONE transaction, so nothing survives it: no generation
+     * row, no job, no reservation, no charge.
+     *
+     * Delete the MediaWriteException catch in GenerationController::store() -> RED (a 500).
+     */
+    public function test_a_media_disk_that_refuses_the_photo_is_a_typed_error_not_a_500(): void
+    {
+        Queue::fake();
+        $ctx = $this->makeSiteContext();
+
+        // The disk refuses every write the way a real one does with `throw => false`: put() -> FALSE.
+        $broken = Mockery::mock(Filesystem::class);
+        $broken->shouldReceive('put')->andReturnFalse();
+        $broken->shouldReceive('exists')->andReturnFalse();
+        $broken->shouldReceive('size')->andReturnFalse();
+        $broken->shouldReceive('delete')->andReturnTrue();
+
+        Storage::set('s3', $broken);
+
+        $this->withHeaders($this->widgetHeaders($ctx['site'], $ctx['origin']))
+            ->postJson('/widget/v1/generations', $this->body($ctx))
+            ->assertStatus(503)
+            ->assertJson(['ok' => false, 'error' => ['code' => 'storage_failed']]);
+
+        // The transaction rolled back: nothing started, nothing queued, nothing charged.
+        Queue::assertNothingPushed();
+
+        $this->assertSame(0, Tenant::run($ctx['account'], fn (): int => Generation::query()->count()));
+        $this->assertSame(0, Tenant::run($ctx['account'], fn (): int => CreditLedger::query()
+            ->where('type', CreditLedger::TYPE_CHARGE)
+            ->count()));
     }
 
     /** Run the worker money path for a started generation (the job auto-binds the tenant). */

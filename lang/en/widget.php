@@ -5,12 +5,12 @@
 
 return [
     'button' => [
-        'label' => 'Tray On',
+        'label' => 'Vsio',
         'loading' => 'Loading…',
         'busy' => 'Creating…',
     ],
     'modal' => [
-        'title' => 'Tray On',
+        'title' => 'Vsio',
         'close' => 'Close',
     ],
     'upload' => [
@@ -41,7 +41,7 @@ return [
         'angle' => 'Photo angle',
     ],
     'consent' => [
-        'photo' => 'I agree to let Tray On use my photo to generate a virtual try-on of this product.',
+        'photo' => 'I agree to let Vsio use my photo to generate a virtual try-on of this product.',
         'privacy_link' => 'How we handle your photo',
         'retention' => 'Your photo is kept for :days days, then deleted.',
         'required' => 'Please agree before we generate your try-on',

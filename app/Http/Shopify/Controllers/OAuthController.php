@@ -19,10 +19,10 @@ use Illuminate\Support\Facades\Log;
 /**
  * OAuthController — the two install origins (docs/shopify/DECISIONS.md §2).
  *
- *  - start()    connect_existing_site: the merchant clicks Connect in the Tray On panel.
+ *  - start()    connect_existing_site: the merchant clicks Connect in the Vsio panel.
  *               The signed state carries {account_id, site_id}; the callback attaches the
  *               store to THAT site.
- *  - install()  install_new_shop: the merchant arrives from Shopify with no Tray On
+ *  - install()  install_new_shop: the merchant arrives from Shopify with no Vsio
  *               account. The state carries only the flow; the callback parks the token.
  *  - callback() shared: verify HMAC + state + shop regex -> exchange the code for an
  *               OFFLINE token -> persist via ShopifyInstaller (the ONE persist path), or
@@ -80,7 +80,7 @@ final class OAuthController
     ) {}
 
     /**
-     * connect_existing_site — the merchant is signed in to Tray On and connects a store
+     * connect_existing_site — the merchant is signed in to Vsio and connects a store
      * to an existing site. The site is resolved through the FAIL-CLOSED tenant scope, so
      * another account's site id simply does not exist here (403, never a cross-account
      * connect).

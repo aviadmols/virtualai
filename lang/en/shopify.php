@@ -9,7 +9,7 @@ return [
 
     'connected' => [
         'heading' => 'Connected store',
-        'sub' => 'Tray On reads this store\'s products through the Shopify Admin API and can push AI-generated images back to product media.',
+        'sub' => 'Vsio reads this store\'s products through the Shopify Admin API and can push AI-generated images back to product media.',
         'shop' => 'Store domain',
         'installed_at' => 'Connected on',
         'scopes' => 'Granted permissions',
@@ -41,7 +41,7 @@ return [
     'disconnect' => [
         'action' => 'Disconnect',
         'confirm_heading' => 'Disconnect this Shopify store?',
-        'confirm_sub' => 'Tray On stops syncing products and can no longer push images to this store. The access token is deleted. Your existing products, try-ons and gallery stay intact — reconnect any time.',
+        'confirm_sub' => 'Vsio stops syncing products and can no longer push images to this store. The access token is deleted. Your existing products, try-ons and gallery stay intact — reconnect any time.',
         'confirm_cta' => 'Disconnect',
         'done' => 'Store disconnected',
     ],
@@ -59,7 +59,7 @@ return [
 
     'webhooks' => [
         'heading' => 'Live updates',
-        'sub' => 'Shopify notifies Tray On when a product changes, an order is paid, or the app is removed.',
+        'sub' => 'Shopify notifies Vsio when a product changes, an order is paid, or the app is removed.',
         'registered' => 'Subscribed topics',
         'none' => 'No topics are subscribed yet — they are registered right after connecting.',
         'last_event' => 'Last event received',
@@ -75,13 +75,13 @@ return [
 
         'not_connected' => [
             'heading' => 'Connect your Shopify store first',
-            'sub' => 'Once the store is connected, Tray On can import its products straight from Shopify — no page scanning needed.',
+            'sub' => 'Once the store is connected, Vsio can import its products straight from Shopify — no page scanning needed.',
         ],
 
         'import_all' => [
             'action' => 'Import all products',
             'heading' => 'Import the whole catalog?',
-            'sub' => 'Tray On will import :count products from your store. They arrive as drafts for you to confirm — nothing goes live on its own.',
+            'sub' => 'Vsio will import :count products from your store. They arrive as drafts for you to confirm — nothing goes live on its own.',
             'capped' => 'Your store has :count products, more than the :cap this app imports in one go. Import the first :cap now, or pick specific products instead.',
             'cta' => 'Start import',
         ],
@@ -89,7 +89,7 @@ return [
         'import_selected' => [
             'action' => 'Pick products',
             'field' => 'Products',
-            'help' => 'Search your Shopify catalog and pick the products you want on Tray On.',
+            'help' => 'Search your Shopify catalog and pick the products you want on Vsio.',
             'cta' => 'Import selected',
             'empty' => 'Pick at least one product to import.',
         ],

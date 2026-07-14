@@ -1,5 +1,5 @@
 // === CONSTANTS ===
-// Keeps the Tray On script tag's data-variant-id truthful as the shopper switches variants.
+// Keeps the Vsio script tag's data-variant-id truthful as the shopper switches variants.
 //
 // Liquid can only stamp the variant that was selected when the page RENDERED. From then on the
 // theme swaps variants client-side, so without this the widget would generate a try-on for — and
@@ -11,7 +11,7 @@
 //
 // Whatever moves first wins; the attribute is the single source of truth the widget reads, and a
 // namespaced CustomEvent lets the widget react without polling. No dependencies, no globals, and
-// nothing runs unless the Tray On tag is actually on the page.
+// nothing runs unless the Vsio tag is actually on the page.
 
 (function () {
   'use strict';
@@ -26,7 +26,7 @@
 
   var tag = document.querySelector('script[' + SITE_KEY_ATTR + ']');
 
-  if (!tag || !tag.getAttribute(PRODUCT_ATTR)) return; // not a Tray On product page
+  if (!tag || !tag.getAttribute(PRODUCT_ATTR)) return; // not a Vsio product page
 
   function publish(variantId) {
     var id = String(variantId || '').trim();

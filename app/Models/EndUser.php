@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use RuntimeException;
 
 /**
- * EndUser — the lead / "Tray On user". Tenant-owned (BelongsToAccount) +
+ * EndUser — the lead / "Vsio user". Tenant-owned (BelongsToAccount) +
  * site-scoped. One row per (site_id, anon_token) so the free-tries counter
  * survives navigation between a site's PDPs.
  *

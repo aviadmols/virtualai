@@ -83,6 +83,9 @@ final class ShopifyMediaClient
 
     private const KEY_PRODUCT = 'product';
 
+    // The targeted single-media read (the READY poll) — cost 1, instead of a whole gallery walk.
+    private const KEY_NODE = 'node';
+
     private const KEY_NODES = 'nodes';
 
     private const KEY_PAGE_INFO = 'pageInfo';
@@ -209,11 +212,16 @@ final class ShopifyMediaClient
     }
 
     /**
-     * Poll the product's gallery until this media is READY.
+     * Poll until this media is READY.
      *
      * THIS IS THE GATE EVERY DESTRUCTIVE STEP WAITS BEHIND. A replaced image is deleted only
      * after its replacement returns from here; a FAILED media, or an exhausted budget, is a typed
      * exception — so the delete NEVER runs on an image that is not actually in the store.
+     *
+     * IT POLLS ONE NODE, NOT THE WHOLE GALLERY. Re-reading the paginated gallery on each of 20
+     * attempts cost up to 200 cost-weighted GraphQL calls per media on a large product — on the one
+     * rail that must not throttle (a throttle here parks the push and makes the merchant wait
+     * another 30 seconds). node(id:) asks for exactly the thing we are waiting on.
      *
      * @throws ShopifyMediaException
      */
@@ -222,7 +230,7 @@ final class ShopifyMediaClient
         $attempts = $this->readyAttempts();
 
         for ($attempt = 1; $attempt <= $attempts; $attempt++) {
-            $item = $this->find($connection, $productGid, $mediaId);
+            $item = $this->node($connection, $mediaId);
 
             if ($item !== null && $item->isFailed()) {
                 throw ShopifyMediaException::processingFailed($mediaId);
@@ -240,7 +248,27 @@ final class ShopifyMediaClient
         throw ShopifyMediaException::notReady($mediaId, $attempts);
     }
 
-    /** One media of a product, or null when it is no longer in the gallery. */
+    /**
+     * ONE media by id — a single cheap lookup, with no position (the caller that needs a position
+     * reads the gallery). Null when Shopify no longer holds it.
+     */
+    public function node(ShopifyConnection $connection, string $mediaId): ?ShopifyMediaItem
+    {
+        $data = $this->client->query($connection, ShopifyMediaQueries::mediaNode(), ['id' => $mediaId]);
+
+        $node = (array) ($data[self::KEY_NODE] ?? []);
+
+        if ((string) ($node['id'] ?? '') === '') {
+            return null;
+        }
+
+        return ShopifyMediaItem::fromNode($node, MediaPlacement::FIRST_POSITION);
+    }
+
+    /**
+     * One media of a product WITH ITS POSITION — the only thing the gallery walk is still needed
+     * for (place() has to know which slot the replaced image occupies). Null when it is gone.
+     */
     public function find(ShopifyConnection $connection, string $productGid, string $mediaId): ?ShopifyMediaItem
     {
         foreach ($this->gallery($connection, $productGid) as $item) {

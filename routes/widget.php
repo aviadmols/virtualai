@@ -8,6 +8,7 @@ use App\Http\Controllers\Widget\ClubVerifyCodeController;
 use App\Http\Controllers\Widget\EventController;
 use App\Http\Controllers\Widget\GalleryController;
 use App\Http\Controllers\Widget\GenerationController;
+use App\Http\Controllers\Widget\GenerationImageController;
 use App\Http\Controllers\Widget\LeadController;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Route;
 defined('ROUTE_WIDGET_BOOTSTRAP') || define('ROUTE_WIDGET_BOOTSTRAP', 'widget.v1.bootstrap');
 defined('ROUTE_WIDGET_GEN_STORE') || define('ROUTE_WIDGET_GEN_STORE', 'widget.v1.generations.store');
 defined('ROUTE_WIDGET_GEN_SHOW') || define('ROUTE_WIDGET_GEN_SHOW', 'widget.v1.generations.show');
+defined('ROUTE_WIDGET_GEN_IMAGE') || define('ROUTE_WIDGET_GEN_IMAGE', 'widget.v1.generations.image');
 defined('ROUTE_WIDGET_LEADS') || define('ROUTE_WIDGET_LEADS', 'widget.v1.leads');
 defined('ROUTE_WIDGET_GALLERY') || define('ROUTE_WIDGET_GALLERY', 'widget.v1.gallery');
 defined('ROUTE_WIDGET_ADD_TO_CART') || define('ROUTE_WIDGET_ADD_TO_CART', 'widget.v1.events.add_to_cart');
@@ -41,6 +43,14 @@ Route::post('/generations', [GenerationController::class, 'store'])->name(ROUTE_
 Route::get('/generations/{id}', [GenerationController::class, 'show'])
     ->whereNumber('id')
     ->name(ROUTE_WIDGET_GEN_SHOW);
+
+// The SAME-ORIGIN result bytes (Share): navigator.share({files}) needs a File, and the media
+// origin (S3/R2/CDN) is not CORS-readable from a storefront. Same ownership rule as the poll
+// (site + anon_token + bound account); anything else — including another shopper's look on the
+// same site — is a flat 404. No credit, no write, private + no-store.
+Route::get('/generations/{id}/image', GenerationImageController::class)
+    ->whereNumber('id')
+    ->name(ROUTE_WIDGET_GEN_IMAGE);
 
 // Signup (lead capture) — re-opens the LeadGate.
 Route::post('/leads', LeadController::class)->name(ROUTE_WIDGET_LEADS);

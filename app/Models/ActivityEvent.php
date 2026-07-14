@@ -69,7 +69,7 @@ class ActivityEvent extends Model
     // specific shop's merchant workspace. Explicit + logged (canAccessTenant permits it).
     public const KIND_PLATFORM_SHOP_DRILL_IN = 'platform_shop_drill_in';
 
-    // Shopify app lifecycle (a store connected/disconnected the Tray On app).
+    // Shopify app lifecycle (a store connected/disconnected the Vsio app).
     public const KIND_SHOPIFY_INSTALLED = 'shopify_installed';
 
     public const KIND_SHOPIFY_UNINSTALLED = 'shopify_uninstalled';

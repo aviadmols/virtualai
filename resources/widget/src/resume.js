@@ -1,19 +1,24 @@
 // === CONSTANTS ===
-// The cross-page / cross-tab RESUMER. Runs on EVERY page load — including NON-PDP pages where
-// no button mounts — to reconnect the shopper to a try-on they started elsewhere. On init it
-// checks localStorage for a FRESH pending generation; if present it ensures a minimal shell +
-// notification mount exist and RESUMES polling in the background (reusing generation.poll), then
-// shows the existing on-page "ready" popup and clears the entry. It also joins the cross-tab
+// The cross-page / cross-tab RESUMER. Runs on EVERY page load — including NON-PDP pages where no
+// trigger mounts — to reconnect the shopper to a look they started elsewhere. On init it checks
+// localStorage for a FRESH pending generation; if present it ensures a minimal shell exists and
+// RESUMES polling in the background, then shows the floating HUD. It also joins the cross-tab
 // channel so a completion detected by ANY tab notifies the others and stops their redundant poll.
-// Fully lazy/async: never blocks page render, never throws on a page with no product.
+//
+// This is the whole reason the HUD is CORE: on a page with no product there is no trigger to
+// click, and the HUD is the shopper's only tether to the look being made for them.
+//
+// Fully lazy/async: never blocks page render, never throws on a page with no product. Tapping the
+// HUD is the ONLY thing that fetches the modal chunk — we never auto-open a modal on a stranger's
+// page, and we never pay for the modal on a page the shopper is just passing through.
 
-import { GEN_STATUS, PENDING_PHASE, PENDING_MSG } from './constants.js';
+import { NAMESPACE, KERNEL_KEY, GEN_STATUS, PENDING_PHASE, PENDING_MSG, HUD } from './constants.js';
 import { state } from './state.js';
 import { warn } from './dom.js';
 import { pollOnce, cancelResumePoll } from './generation.js';
 import * as pending from './pending.js';
 import * as shell from './shell.js';
-import * as modal from './modal.js';
+import * as hud from './hud.js';
 
 let resuming = false; // guards our own background poll (only one per page)
 
@@ -28,39 +33,39 @@ export async function resumeOnLoad(booted) {
   const entry = pending.readFresh();
   if (!entry) return; // nothing pending (or already viewed / expired)
 
-  // Make sure the anon token is available to the poll + a later reopen (the loader sets it on a
-  // PDP; on a non-PDP page we take it from the persisted handle).
+  // The anon token must be available to the poll + a later reopen (the loader sets it on a PDP;
+  // on a non-PDP page we take it from the persisted handle).
   if (!state.anonToken) state.anonToken = entry.anonToken || null;
 
-  // Ensure a shell exists so the notification has a mount. On a PDP the loader already built it;
-  // on a non-PDP page we build a MINIMAL one (default appearance) that only hosts the popup.
+  // Ensure a shell exists so the HUD has a mount. On a PDP the loader already built it; on a
+  // non-PDP page we build a MINIMAL one that only hosts the HUD. shell.create is idempotent.
   if (!booted) ensureMinimalShell();
 
   // Already finished (this tab left mid-generation and the poll completed elsewhere, or another
-  // tab wrote the result): show the popup straight away — do NOT re-poll.
+  // tab wrote the result): show the HUD straight away — do NOT re-poll.
   if (entry.phase === PENDING_PHASE.done) {
     showReady(entry);
     return;
   }
   if (entry.phase === PENDING_PHASE.failed) {
-    modal.notifyOutcomeFromResume(false, entry.generationId);
+    showFailed();
     return;
   }
 
-  // Still active: resume polling in the background.
+  // Still active: the look is being made right now. Say so, and poll in the background.
+  hud.show(HUD.thinking, { onClick: openModal });
   void backgroundPoll(entry);
 }
 
-/** Build a minimal shell (default appearance) used only to host the cross-page notification. */
 function ensureMinimalShell() {
   try {
     shell.create(state.config?.appearance || {});
   } catch {
-    warn('failed to build the minimal notification shell');
+    warn('failed to build the minimal HUD shell');
   }
 }
 
-/** Poll the status endpoint to a terminal state, then persist + notify. Bounded by poll(). */
+/** Poll the status endpoint to a terminal state, then persist + surface the HUD. */
 async function backgroundPoll(entry) {
   if (resuming) return;
   resuming = true;
@@ -82,21 +87,36 @@ async function backgroundPoll(entry) {
     showReady({ generationId: entry.generationId, resultUrl: outcome.resultUrl });
   } else {
     pending.markFailed(entry.generationId);
-    modal.notifyOutcomeFromResume(false, entry.generationId);
+    showFailed();
   }
 }
 
-/** Show the on-page "ready" popup for a completed entry (seeds lastResult so a click reopens it). */
+/**
+ * The look is ready. Seed lastResult from the persisted handle so a tap can reopen it — the
+ * captured signed URL may have passed its ~10-minute TTL, so the modal re-fetches a fresh one.
+ * It NEVER auto-opens the modal: hijacking a stranger's page is unforgivable.
+ */
 function showReady(entry) {
   state.lastResult = {
     generationId: entry.generationId,
     resultUrl: entry.resultUrl || null,
-    variant: null, // a cross-page resume has no live variant; add-to-cart is offered on the PDP only
+    variant: null, // a cross-page resume has no live variant; add-to-cart is offered on the PDP
   };
-  modal.notifyOutcomeFromResume(true, entry.generationId);
+  state.looksCount += 1;
+  hud.show(HUD.ready, { onClick: openModal });
 }
 
-/** React to a message from ANOTHER tab (done/failed → notify + stop our poll; viewed/dismissed → clear). */
+function showFailed() {
+  hud.show(HUD.failed, { onClick: openModal });
+}
+
+/** Tapping the HUD is what fetches the modal chunk. The core never does it on its own. */
+function openModal() {
+  const kernel = window[NAMESPACE] && window[NAMESPACE][KERNEL_KEY];
+  if (kernel && kernel.openModal) kernel.openModal();
+}
+
+/** React to a message from ANOTHER tab (done/failed → HUD + stop our poll; viewed/dismissed → clear). */
 function onRemoteMessage(type) {
   if (type === PENDING_MSG.done) {
     cancelResumePoll(); // stop our redundant poll: the other tab already resolved it
@@ -108,13 +128,12 @@ function onRemoteMessage(type) {
   if (type === PENDING_MSG.failed) {
     cancelResumePoll();
     resuming = false;
-    const entry = pending.read();
-    if (entry) modal.notifyOutcomeFromResume(false, entry.generationId);
+    showFailed();
     return;
   }
   if (type === PENDING_MSG.viewed || type === PENDING_MSG.dismissed) {
-    // The shopper saw/dismissed it in another tab — clear this tab's popup, no zombie notices.
-    modal.clearNotificationFromResume();
+    // The shopper saw/dismissed it in another tab — clear this tab's HUD. No zombie badges.
+    hud.clear();
   }
 }
 

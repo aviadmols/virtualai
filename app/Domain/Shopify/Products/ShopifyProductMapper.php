@@ -97,7 +97,7 @@ final class ShopifyProductMapper
         );
     }
 
-    /** The identity of this product on the Tray On side (GID + handle + storefront url). */
+    /** The identity of this product on the Vsio side (GID + handle + storefront url). */
     public function origin(array $node, string $shopDomain): ShopifyProductRef
     {
         return new ShopifyProductRef(

@@ -50,6 +50,7 @@ Definition of Done.
 | [`flows.md`](flows.md) | The three end-to-end flows with **every** state per screen: the try-on flow, the lead-gate flow, the merchant scan-review flow. |
 | [`i18n-catalog.md`](i18n-catalog.md) | The canonical `en`/`he` key catalog for **all** user-facing strings (incl. empty/loading/error/consent/low-credit/out-of-credit/signup). The `lang/en/*` + `lang/he/*` files mirror this 1:1. |
 | [`definition-of-done.md`](definition-of-done.md) | Per-pillar DoD + a per-feature checklist `widget-embed` and `admin-design-system` must satisfy (incl. RTL parity + the < 20 KB widget budget as a UX constraint). |
+| [`widget-redesign-2026-07.md`](widget-redesign-2026-07.md) | **The storefront widget's full visual rebuild** (glass + gradient, Outfit, on-image trigger, floating status HUD, Save Look → lead gate, Share, real add-to-cart, the split bundle). **Supersedes the widget half of `design-tokens.md` + `component-inventory.md`**; the widget's token layer is `--ton-*` (as implemented), not `--tow-*`. The admin `--toa-*` family is untouched. |
 
 ---
 
@@ -93,6 +94,7 @@ Status legend: `draft` · `data-pending` (awaiting a backend contract) · `ready
 | **Widget**: gallery slider | widget | generation | data-pending | gallery persistence across reload (Q-GALLERY) |
 | **Widget**: lead-signup + free-tries | widget | leads | ready | phone required? (Q-PHONE — answered, see flows) |
 | **Widget**: out-of-credit (shopper) | widget | credits | ready | — |
+| **Widget: 2026-07 REBUILD** (trigger on-image · status HUD · glass modal · Save/Share/Cart · split bundle) | widget | generation + leads | **ready** | Q-SHARE-CORS (blocks Share only), Q-LEAD-ATTACH (blocks Save copy only) — see [`widget-redesign-2026-07.md`](widget-redesign-2026-07.md) §8 |
 
 Open product/contract questions are tracked at the foot of [`flows.md`](flows.md)
 (`Q-*`). They are deferred-not-blocking: the spec states the default behavior and

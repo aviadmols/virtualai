@@ -25,7 +25,7 @@ return [
         'queued_body' => 'This takes a few moments — the product appears below to review when it is ready.',
     ],
     'empty' => 'Add your first site to get started',
-    'empty_sub' => 'A site is one storefront where the Tray On widget runs.',
+    'empty_sub' => 'A site is one storefront where the Vsio widget runs.',
     'field' => [
         'domain' => 'Domain',
         'domain_placeholder' => 'https://shop.example.com',
@@ -69,7 +69,7 @@ return [
             'sub' => 'Everything for this shop in one place.',
             'placement' => [
                 'title' => 'Button placement',
-                'sub' => 'Pick where the Tray On button sits on your product page.',
+                'sub' => 'Pick where the Vsio button sits on your product page.',
             ],
             'history' => [
                 'title' => 'Try-on history',

@@ -3,10 +3,12 @@
 namespace App\Domain\Media;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * MediaStorage — the single gateway for try-on image bytes.
@@ -225,6 +227,30 @@ final class MediaStorage
         $path = implode('/', [self::PATH_STORYBOARD, $projectId, 'final-'.Str::random(24).'.'.$extension]);
 
         return $this->write($path, $bytes, $mime, self::VISIBILITY_PRIVATE);
+    }
+
+    /**
+     * Stream a stored object's BYTES back through the app (the same-origin door).
+     *
+     * The signed URL points at the media origin (S3/R2/CDN), which is a DIFFERENT origin from
+     * the storefront and answers no CORS — so a page can render it in an <img> but can never
+     * fetch() it into a Blob. navigator.share({files}) needs a File, i.e. the bytes. This is the
+     * one read that hands them over, through an app route that already carries the caller's CORS.
+     *
+     * It authorizes NOTHING: ownership is the caller's business (the widget door resolves the
+     * generation against site + anon_token + the bound account first). A missing/empty path or a
+     * purged object returns NULL so the caller answers 404 rather than raising a 500.
+     */
+    public function stream(?string $path, array $headers = []): ?StreamedResponse
+    {
+        if (! $this->exists($path)) {
+            return null;
+        }
+
+        /** @var FilesystemAdapter $disk */
+        $disk = $this->disk();
+
+        return $disk->response((string) $path, headers: $headers);
     }
 
     /** Read a stored object's raw bytes (used to feed source frames to ffmpeg). Null if absent. */

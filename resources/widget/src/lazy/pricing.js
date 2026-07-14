@@ -30,10 +30,10 @@ import {
   PRICING_ORIGINAL_ATTR,
   PRICING_BADGE_CLASS,
   EVENTS,
-} from './constants.js';
-import { warn, onIdle } from './dom.js';
-import { t } from './i18n.js';
-import * as shell from './shell.js';
+} from '../constants.js';
+import { warn, onIdle } from '../dom.js';
+import { t, shell } from './bridge.js';
+
 
 // Grouping/decimal separators a store may use: dot, comma, ASCII space, NBSP, narrow NBSP.
 const SEP_CLASS = '[.,\\u0020\\u00a0\\u202f]';

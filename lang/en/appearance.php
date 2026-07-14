@@ -11,7 +11,7 @@ return [
     'empty_sub' => 'Create a site to customise its try-on button and popup.',
     'button' => [
         'title' => 'Button',
-        'sub' => 'Where the Tray On button appears on your product page, and how it looks.',
+        'sub' => 'Where the Vsio button appears on your product page, and how it looks.',
         'placement' => 'Button placement',
         'label' => 'Button text',
         'bg' => 'Button colour',
@@ -27,7 +27,7 @@ return [
     ],
     'placement' => [
         'section' => 'Button placement',
-        'section_sub' => 'Load a preview of your product page and click exactly where the Tray On button should go.',
+        'section_sub' => 'Load a preview of your product page and click exactly where the Vsio button should go.',
         'after_add_to_cart' => 'After “Add to cart”',
         'before_add_to_cart' => 'Before “Add to cart”',
         'fixed_bottom_right' => 'Fixed — bottom right',

@@ -44,7 +44,7 @@ final class GlobalModels
         // SiteRouter routing lookup. Tenant data flows only through the bound handler.
         'App\\Models\\ShopifyWebhookReceipt',
         // Shopify install parked at the OAuth callback — created PRE-BIND for the same
-        // documented reason: an install that starts ON SHOPIFY has no Tray On account
+        // documented reason: an install that starts ON SHOPIFY has no Vsio account
         // yet, so there is no tenant to bind. It holds no tenant data (encrypted token +
         // hashed claim token + shop domain), is short-lived, and is consumed EXACTLY
         // ONCE by an authenticated account (then deleted) — the Site/ShopifyConnection

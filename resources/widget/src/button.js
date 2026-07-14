@@ -1,54 +1,86 @@
 // === CONSTANTS ===
-// The injected "Tray On" button. It must sit in the HOST DOM (under add-to-cart) so its
-// placement honors the merchant config — but it must stay style-isolated. So the button is
-// rendered inside its OWN small shadow root attached to a host-DOM wrapper: host CSS can't
+// The injected trigger. It must sit in the HOST DOM (under add-to-cart, or ON the product
+// image) so its placement honors the merchant config — but it must stay style-isolated. So it
+// is rendered inside its OWN small shadow root attached to a host-DOM wrapper: host CSS can't
 // reach the button, and the button's CSS can't leak onto the host. The wrapper carries the
 // MOUNT_SENTINEL_ATTR so injection is idempotent (never duplicated).
+//
+// The label is locked to the SYSTEM font forever. It renders before Outfit exists and would
+// otherwise visibly re-flow the instant the modal chunk loads the webfont — a flicker sitting
+// on top of the merchant's product photo. The modal is the jewelry; the trigger is a 15px string.
 
-import widgetCss from '../styles/widget.css';
-import { MOUNT_SENTINEL_ATTR, APPEARANCE, PLACEMENT, POSITION } from './constants.js';
+import coreCss from '../styles/core.css';
+import {
+  MOUNT_SENTINEL_ATTR,
+  APPEARANCE,
+  PLACEMENT,
+  POSITION,
+  ON_IMAGE_WRAPPER_STYLE,
+  HOST_POSITION_STATIC,
+  HOST_POSITION_RELATIVE,
+  SELECTOR_ROLES,
+} from './constants.js';
 import { t } from './i18n.js';
-import { el, safeQuery } from './dom.js';
-
-const GLYPH = '✦';
+import { el, safeQuery, warn, selectorString, setStyles, restoreStyles } from './dom.js';
+import { ICON_SPARKLE, gradientDefs } from './icons.js';
+import { resolveCss } from './shell.js';
 
 let onClickHandler = null;
+let onHoverHandler = null; // the chunk prefetch hint (pointerenter / focus / touchstart)
 
-// Busy state: a try-on is generating. Shown on the LIVE button even after the popup is closed
-// (background polling), and re-applied if the theme re-injects the button mid-generation.
+// Busy = a generation is in flight (shown even after the popup is closed, re-applied if the
+// theme re-injects the button). Loading = the modal chunk is being fetched.
 let busy = false;
+let loading = false;
 let currentButton = null;
 let currentGlyph = null;
-let currentLabelNode = null;
+let currentLabel = null;
 let currentLabelText = '';
 
-/** Register the click handler (opens the modal). Called once at mount.start. */
-export function onClick(handler) {
+// The one host node we ever write a style onto (the product-image container), and what it had.
+let positioned = null;
+let positionedPrev = null;
+
+/** Register the click handler (opens the modal) + the prefetch hint. Called once at mount.start. */
+export function onClick(handler, hover) {
   onClickHandler = handler;
+  onHoverHandler = hover;
 }
 
-/** Toggle the button's "thinking" indicator. Safe before the button exists; re-applied on build. */
+/** A try-on is generating. Safe before the button exists; re-applied when it is rebuilt. */
 export function setBusy(on) {
   busy = !!on;
-  applyBusy(busy);
+  apply();
 }
 
-function applyBusy(on) {
+/** The modal chunk is in flight: the trigger IS the progress indicator (§6.3). */
+export function setLoading(on) {
+  loading = !!on;
+  apply();
+}
+
+function apply() {
   if (!currentButton) return;
-  currentButton.classList.toggle('ton-button--busy', on);
-  currentButton.setAttribute('aria-busy', on ? 'true' : 'false');
-  if (currentGlyph) {
-    currentGlyph.classList.toggle('ton-button__glyph--busy', on);
-    currentGlyph.textContent = on ? '' : GLYPH; // spinner (via CSS) while busy, else the mark
-  }
-  if (currentLabelNode) {
-    currentLabelNode.nodeValue = on ? t('button.busy') : currentLabelText;
+  const spinning = busy || loading;
+
+  currentButton.classList.toggle('ton-button--busy', busy);
+  currentButton.classList.toggle('ton-button--loading', loading);
+  currentButton.setAttribute('aria-busy', spinning ? 'true' : 'false');
+
+  if (currentGlyph) currentGlyph.classList.toggle('ton-button__glyph--busy', spinning);
+  if (currentLabel) {
+    currentLabel.textContent = loading
+      ? t('button.loading')
+      : busy
+        ? t('button.busy')
+        : currentLabelText;
   }
 }
 
 /**
- * Build the host-DOM button wrapper (a span carrying the sentinel) with its own shadow root
- * holding the styled button. The appearance config drives label + colors via CSS vars.
+ * Build the host-DOM wrapper (a span carrying the sentinel) with its own shadow root holding
+ * the styled button. The appearance config drives label + colors (classic placement only — the
+ * on-image trigger is glass by definition and ignores button_bg / button_text_color).
  */
 export function build(appearance) {
   const wrapper = el('span', { attrs: { [MOUNT_SENTINEL_ATTR]: '1' } });
@@ -59,24 +91,30 @@ export function build(appearance) {
   const shadow = wrapper.attachShadow({ mode: 'open' });
 
   const style = document.createElement('style');
-  style.textContent = widgetCss;
+  style.textContent = resolveCss(coreCss);
   shadow.appendChild(style);
 
   const root = el('div', { class: 'ton-root' });
   applyButtonVars(root, appearance);
   shadow.appendChild(root);
 
+  // Every shadow root that renders the sparkle needs its OWN gradient def — the id is scoped.
+  root.appendChild(gradientDefs());
+
   const placement = appearance[APPEARANCE.placement];
-  const fixedClass = fixedPlacementClass(placement);
   const label = appearance[APPEARANCE.label] || t('button.label');
 
-  const glyph = el('span', { class: 'ton-button__glyph', text: GLYPH });
-  const labelNode = document.createTextNode(label);
+  const glyph = el('span', {
+    class: 'ton-button__glyph',
+    html: ICON_SPARKLE,
+    attrs: { 'aria-hidden': 'true' },
+  });
+  const labelNode = el('span', { class: 'ton-button__label', text: label });
 
   const button = el(
     'button',
     {
-      class: 'ton-button' + fixedClass,
+      class: 'ton-button' + modifierClass(placement),
       attrs: { type: 'button', 'aria-label': label },
       on: {
         click: (e) => {
@@ -84,6 +122,9 @@ export function build(appearance) {
           e.stopPropagation();
           if (onClickHandler) onClickHandler();
         },
+        pointerenter: hint,
+        focus: hint,
+        touchstart: hint,
       },
     },
     [glyph, labelNode],
@@ -91,28 +132,30 @@ export function build(appearance) {
 
   root.appendChild(button);
 
-  // Track the live button so setBusy reflects an in-flight generation on it — and re-apply the
-  // busy state here in case the theme re-injected the button mid-generation.
   currentButton = button;
   currentGlyph = glyph;
-  currentLabelNode = labelNode;
+  currentLabel = labelNode;
   currentLabelText = label;
-  applyBusy(busy);
+  apply();
 
   return wrapper;
 }
 
-/** The fixed-corner modifier classes, or '' for the inline (after/before ATC) placements. */
-function fixedPlacementClass(placement) {
+/** Warm the modal chunk on a hint. Most clicks then find it already here. */
+function hint() {
+  if (onHoverHandler) onHoverHandler();
+}
+
+function modifierClass(placement) {
   if (placement === PLACEMENT.fixedBR) return ' ton-button--fixed ton-button--fixed-end';
   if (placement === PLACEMENT.fixedBL) return ' ton-button--fixed ton-button--fixed-start';
+  if (placement === PLACEMENT.onImage) return ' ton-button--on-image';
   return '';
 }
 
 function applyButtonVars(root, appearance) {
   setVar(root, '--ton-button-bg', appearance[APPEARANCE.buttonBg]);
   setVar(root, '--ton-button-text', appearance[APPEARANCE.buttonText]);
-  setVar(root, '--ton-accent', appearance[APPEARANCE.popupAccent]);
 }
 
 function setVar(root, name, value) {
@@ -120,23 +163,24 @@ function setVar(root, name, value) {
 }
 
 /**
- * Place the wrapper per the placement config. Fixed placements append to <body> (a screen
- * corner); CUSTOM places relative to the merchant-picked host anchor (visual picker); inline
- * placements insert after/before the add-to-cart anchor (default: after — below add-to-cart).
+ * Place the wrapper per the placement config.
+ *  - fixed            -> a screen corner (appended to <body>);
+ *  - on_product_image -> absolutely, inside the merchant's product-image container;
+ *  - custom           -> relative to the merchant-picked host anchor (visual picker);
+ *  - inline           -> after/before the add-to-cart anchor (default: after — below it).
  *
- * `custom` = { selector, position } (only for PLACEMENT.custom). If the custom anchor no longer
- * resolves on the live page, we FALL BACK to the add-to-cart anchor so the button never vanishes.
+ * Every path FALLS BACK to the add-to-cart anchor when its own target does not resolve: the
+ * button must never vanish from a live PDP.
  */
-export function place(wrapper, anchor, placement, custom) {
+export function place(wrapper, anchor, placement, custom, selectors) {
   if (placement === PLACEMENT.fixedBR || placement === PLACEMENT.fixedBL) {
     document.body.appendChild(wrapper);
     return;
   }
 
-  // Custom anchor wins when it resolves; otherwise fall through to the add-to-cart placement.
-  if (placement === PLACEMENT.custom && custom && placeCustom(wrapper, custom)) {
-    return;
-  }
+  if (placement === PLACEMENT.onImage && placeOnImage(wrapper, selectors)) return;
+
+  if (placement === PLACEMENT.custom && custom && placeCustom(wrapper, custom)) return;
 
   const parent = anchor && anchor.parentNode;
   if (!parent) return;
@@ -144,8 +188,40 @@ export function place(wrapper, anchor, placement, custom) {
   if (placement === PLACEMENT.beforeAtc) {
     parent.insertBefore(wrapper, anchor);
   } else {
-    // Default after_add_to_cart (and the custom fallback): insert AFTER the anchor (below it).
+    // Default after_add_to_cart (and every fallback): insert AFTER the anchor (below it).
     parent.insertBefore(wrapper, anchor.nextSibling);
+  }
+}
+
+/**
+ * The glass trigger, laid over the product photo. It anchors to the element the existing
+ * `product_image` selector role resolves (no new config, no new scan field). A bare <img> is
+ * not a positioning context, so we climb to its parent block.
+ *
+ * Vsio makes EXACTLY ONE style write on a node it does not own: `position: relative` on that
+ * container, and only when its computed position is `static`. Reverted on teardown. Absolute
+ * positioning inside an existing box shifts nothing — the CLS gate proves it.
+ */
+function placeOnImage(wrapper, selectors) {
+  const target = safeQuery(selectorString(selectors, SELECTOR_ROLES.productImage));
+  if (!target) return false;
+
+  const container = target.tagName === 'IMG' || target.tagName === 'PICTURE'
+    ? target.parentElement
+    : target;
+  if (!container || container === document.body) return false;
+
+  try {
+    if (getComputedStyle(container).position === HOST_POSITION_STATIC) {
+      positioned = container;
+      positionedPrev = setStyles(container, { position: HOST_POSITION_RELATIVE });
+    }
+    setStyles(wrapper, ON_IMAGE_WRAPPER_STYLE);
+    container.appendChild(wrapper);
+    return true;
+  } catch {
+    warn('on-image placement failed; falling back to add-to-cart');
+    return false;
   }
 }
 
@@ -170,7 +246,7 @@ function placeCustom(wrapper, custom) {
   }
 
   const parent = target.parentNode;
-  if (!parent) return false; // before/after need a parent (e.g. anchor is <html>)
+  if (!parent) return false; // before/after need a parent (e.g. the anchor is <html>)
 
   if (position === POSITION.before) {
     parent.insertBefore(wrapper, target);
@@ -178,4 +254,14 @@ function placeCustom(wrapper, custom) {
     parent.insertBefore(wrapper, target.nextSibling); // after (default)
   }
   return true;
+}
+
+/** Give the merchant's DOM back exactly as we found it (the one style write we ever made). */
+export function releaseHostStyles() {
+  if (positioned) restoreStyles(positioned, positionedPrev);
+  positioned = null;
+  positionedPrev = null;
+  currentButton = null;
+  currentGlyph = null;
+  currentLabel = null;
 }

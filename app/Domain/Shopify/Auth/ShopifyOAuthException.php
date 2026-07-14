@@ -83,7 +83,7 @@ final class ShopifyOAuthException extends RuntimeException
 
     public static function shopOwnedByAnotherAccount(string $shop): self
     {
-        return new self(self::CODE_SHOP_OWNED_BY_ANOTHER_ACCOUNT, 'This Shopify store is already connected to another Tray On account.', $shop);
+        return new self(self::CODE_SHOP_OWNED_BY_ANOTHER_ACCOUNT, 'This Shopify store is already connected to another Vsio account.', $shop);
     }
 
     public static function noAccount(): self

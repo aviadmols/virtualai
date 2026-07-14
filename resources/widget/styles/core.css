@@ -1,0 +1,647 @@
+/*
+  Vsio storefront widget — CORE stylesheet.
+
+  Inlined into BOTH shadow roots (the trigger's own root and the shell's root), so it carries
+  the whole `--ton-*` token layer plus only the surfaces that exist before the shopper
+  interacts: the trigger, the floating status HUD, the modal SHELL + its shimmering skeleton.
+  Everything else (preview area, upload, strip, actions, result, signup) ships in the LAZY
+  modal stylesheet, which references these tokens and never re-declares one.
+
+  Rules that hold everywhere in this file:
+   - tokens are declared here ONCE; component rules reference var(--ton-*) and never a literal;
+   - logical properties only (inset-inline, margin-block, text-align: start) — HE mirrors for
+     free, and there is no `left`/`right`/`margin-left` anywhere;
+   - the trigger + HUD are locked to the SYSTEM font forever: they render before Outfit exists
+     and would otherwise visibly re-flow on a merchant's product image when the chunk lands;
+   - prefers-reduced-motion stops every loop and drops every transform.
+*/
+
+:host {
+  /* ---- Brand gradient (fixed — never merchant-configurable) ---- */
+  --ton-grad-1: #f472b6;
+  --ton-grad-2: #fda4af;
+  --ton-grad-3: #fdba74;
+  --ton-gradient: linear-gradient(60deg, var(--ton-grad-1), var(--ton-grad-2), var(--ton-grad-3));
+  --ton-accent: var(--ton-grad-1);
+
+  /* ---- Ink ---- */
+  --ton-ink: #111111;
+  --ton-ink-2: #222222;
+  --ton-ink-muted: #666666;
+  --ton-ink-subtle: #888888;
+  --ton-danger: #dc2626;
+
+  /* ---- Glass surfaces ---- */
+  --ton-glass-trigger: rgba(255, 255, 255, 0.9);
+  --ton-glass-modal: rgba(255, 255, 255, 0.9);
+  --ton-glass-hud: rgba(255, 255, 255, 0.95);
+  --ton-glass-preview: rgba(255, 255, 255, 0.7);
+  --ton-glass-control: rgba(240, 240, 240, 0.8);
+  --ton-surface: #ffffff;
+  --ton-overlay: rgba(0, 0, 0, 0.4);
+  --ton-scrim-text: rgba(255, 255, 255, 0.9);
+  --ton-scrim-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  --ton-spinner-track: rgba(244, 114, 182, 0.15);
+  --ton-skeleton-sweep: rgba(255, 255, 255, 0.55);
+
+  --ton-blur-trigger: 8px;
+  --ton-blur-modal: 20px;
+  --ton-blur-hud: 10px;
+
+  /* ---- Radius / shadow / elevation ---- */
+  --ton-radius-modal: 24px;
+  --ton-radius-image: 16px;
+  --ton-radius-control: 10px;
+  --ton-radius-pill: 999px;
+  --ton-radius-dot: 50%;
+  --ton-shadow-modal: 0 30px 60px rgba(0, 0, 0, 0.15);
+  --ton-shadow-trigger: 0 10px 30px rgba(0, 0, 0, 0.08);
+  --ton-shadow-hud: 0 10px 30px rgba(0, 0, 0, 0.1);
+  --ton-shadow-cta: 0 6px 20px rgba(244, 114, 182, 0.25);
+  --ton-shadow-cta-hover: 0 8px 25px rgba(244, 114, 182, 0.4);
+  --ton-ring-active: 0 0 0 2px var(--ton-accent);
+  --ton-z: 2147483000;
+  --ton-z-hud: 2147482990;
+
+  /* ---- Type: ONE swappable stack. Components never name a family. ---- */
+  --ton-font-latin: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ton-font-he: 'Segoe UI', 'Arial Hebrew', 'Noto Sans Hebrew', system-ui, sans-serif;
+  --ton-font-system: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ton-font: var(--ton-font-latin);
+
+  --ton-fs-logo: 16px;
+  --ton-fs-title: 28px;
+  --ton-fs-cta: 18px;
+  --ton-fs-trigger: 15px;
+  --ton-fs-button: 14px;
+  --ton-fs-body: 14px;
+  --ton-fs-hud-title: 13px;
+  --ton-fs-hud-sub: 11px;
+  --ton-fs-loader: 13px;
+  --ton-fs-upload: 11px;
+  --ton-fs-chip: 11px;
+  --ton-fs-disclaimer: 10px;
+
+  --ton-fw-light: 300;
+  --ton-fw-regular: 400;
+  --ton-fw-medium: 500;
+  --ton-fw-semibold: 600;
+
+  --ton-track-logo: 4px;
+  --ton-track-cta: 3px;
+  --ton-track-loader: 1px;
+  --ton-track-disclaimer: 0.5px;
+  --ton-lh-body: 1.5;
+
+  /* ---- Spacing / sizing ---- */
+  --ton-space-1: 4px;
+  --ton-space-2: 8px;
+  --ton-space-3: 12px;
+  --ton-space-4: 16px;
+  --ton-space-5: 20px;
+  --ton-space-6: 24px;
+  --ton-space-8: 32px;
+  --ton-space-10: 40px;
+
+  --ton-modal-pad: var(--ton-space-10);
+  --ton-modal-max-w: 500px;
+  --ton-modal-max-h: 95vh;
+  --ton-preview-ratio: 3 / 4;
+  --ton-preview-max-h: 60vh;
+  --ton-thumb-w: 70px;
+  --ton-thumb-h: 85px;
+  --ton-hud-inset: 24px;
+  --ton-spinner-size: 44px;
+  --ton-spinner-stroke: 2px;
+  --ton-dot-size: 12px;
+  --ton-close-size: 36px;
+  --ton-icon: 20px;
+  --ton-icon-sm: 18px;
+  --ton-icon-lg: 24px;
+
+  /* ---- Motion ---- */
+  --ton-t-fast: 0.15s ease;
+  --ton-t: 0.2s ease;
+  --ton-t-overlay: 0.25s ease;
+  --ton-ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ton-t-modal: 0.3s var(--ton-ease-out-expo);
+  --ton-ease-hud: cubic-bezier(0.19, 1, 0.22, 1);
+  --ton-t-hud: 0.4s var(--ton-ease-hud);
+  --ton-t-image: 0.3s ease;
+  --ton-dir: 1;
+
+  /* ---- Per-site config (set as CSS vars by shell.js/button.js). They paint the CLASSIC
+     button only; the on-image trigger is glass by definition and ignores them. ---- */
+  --ton-button-bg: var(--ton-ink);
+  --ton-button-text: var(--ton-surface);
+
+  all: initial;
+  font-family: var(--ton-font-system);
+  line-height: var(--ton-lh-body);
+}
+
+/* Dark popup theme — an existing merchant setting. The gradient is unchanged in both themes. */
+.ton-root[data-theme='dark'] {
+  --ton-glass-modal: rgba(17, 17, 17, 0.85);
+  --ton-glass-hud: rgba(17, 17, 17, 0.92);
+  --ton-glass-preview: rgba(255, 255, 255, 0.06);
+  --ton-glass-control: rgba(255, 255, 255, 0.08);
+  --ton-surface: #111111;
+  --ton-ink: #fafafa;
+  --ton-ink-2: #f4f4f5;
+  --ton-ink-muted: #a1a1aa;
+  --ton-ink-subtle: #71717a;
+}
+
+/* RTL: one direction multiplier + the tracking that shatters Hebrew goes to zero. The brand
+   gradient is NOT mirrored (it carries no directional semantics) and the Latin wordmark keeps
+   its tracking. Nothing else needs a rule — every inset/margin is already logical. */
+[dir='rtl'] {
+  --ton-dir: -1;
+  --ton-font: var(--ton-font-he);
+  --ton-track-cta: 0;
+  --ton-track-loader: 0;
+  --ton-track-disclaimer: 0;
+}
+
+/* Where backdrop-filter is unsupported every glass token falls back to an OPAQUE surface —
+   nothing may become unreadable. The scrim is not a glass token and never falls back. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :host {
+    --ton-glass-trigger: var(--ton-surface);
+    --ton-glass-modal: var(--ton-surface);
+    --ton-glass-hud: var(--ton-surface);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* The per-root <linearGradient id="ton-grad"> def carrier: present, sized zero, never painted. */
+.ton-grad-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ---- The trigger (both placements) ------------------------------------------------- */
+.ton-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ton-space-2);
+  width: 100%;
+  margin-block-start: var(--ton-space-3);
+  padding: 15px 22px;
+  border: 0;
+  border-radius: var(--ton-radius-control);
+  background: var(--ton-button-bg);
+  color: var(--ton-button-text);
+  font-family: var(--ton-font-system);
+  font-size: var(--ton-fs-trigger);
+  font-weight: var(--ton-fw-semibold);
+  line-height: var(--ton-lh-body);
+  cursor: pointer;
+  transition: transform var(--ton-t), background-color var(--ton-t), box-shadow var(--ton-t);
+}
+
+.ton-button:hover {
+  transform: translateY(-2px);
+}
+
+.ton-button:focus-visible {
+  outline: none;
+  box-shadow: var(--ton-ring-active);
+}
+
+/* The on-image trigger: glass, blurred, laid over the merchant's product photo. It ignores the
+   merchant's button colours on purpose — a green slab on a product photo is not a feature. */
+.ton-button--on-image {
+  width: auto;
+  margin: 0;
+  padding: var(--ton-space-3) var(--ton-space-6);
+  background: var(--ton-glass-trigger);
+  backdrop-filter: blur(var(--ton-blur-trigger));
+  -webkit-backdrop-filter: blur(var(--ton-blur-trigger));
+  color: var(--ton-ink);
+  box-shadow: var(--ton-shadow-trigger);
+}
+
+.ton-button--on-image:hover {
+  background: var(--ton-surface);
+}
+
+.ton-button--fixed {
+  position: fixed;
+  inset-block-end: var(--ton-space-5);
+  width: auto;
+  margin: 0;
+  box-shadow: var(--ton-shadow-trigger);
+  z-index: var(--ton-z);
+}
+
+.ton-button--fixed-end {
+  inset-inline-end: var(--ton-space-5);
+}
+
+.ton-button--fixed-start {
+  inset-inline-start: var(--ton-space-5);
+}
+
+.ton-button__glyph {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--ton-icon);
+  height: var(--ton-icon);
+}
+
+.ton-button__glyph svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ton-button__label {
+  font-weight: var(--ton-fw-semibold);
+}
+
+/* Two spinner states on the same control:
+   --loading = the modal chunk is being fetched (the tap is answered where the finger is);
+   --busy    = a generation is in flight (survives a theme re-inject and a closed modal). */
+.ton-button--loading,
+.ton-button--busy {
+  cursor: progress;
+}
+
+.ton-button--loading {
+  pointer-events: none;
+}
+
+.ton-button__glyph--busy svg {
+  display: none;
+}
+
+.ton-button__glyph--busy {
+  border: var(--ton-spinner-stroke) solid var(--ton-spinner-track);
+  border-top-color: var(--ton-accent);
+  border-radius: var(--ton-radius-dot);
+  animation: ton-spin 0.8s linear infinite;
+}
+
+/* ---- The floating status HUD (the restyled .ton-notification) ----------------------- */
+.ton-notification {
+  position: fixed;
+  inset-block-end: var(--ton-hud-inset);
+  inset-inline-start: var(--ton-hud-inset);
+  z-index: var(--ton-z-hud);
+  display: flex;
+  align-items: center;
+  gap: var(--ton-space-4);
+  max-width: 320px;
+  padding: var(--ton-space-4) var(--ton-space-6);
+  border: 0;
+  border-radius: var(--ton-radius-control);
+  background: var(--ton-glass-hud);
+  backdrop-filter: blur(var(--ton-blur-hud));
+  -webkit-backdrop-filter: blur(var(--ton-blur-hud));
+  color: var(--ton-ink);
+  font-family: var(--ton-font-system);
+  box-shadow: var(--ton-shadow-hud);
+  /* Enters from the INLINE-START edge. Never animate `left` — that is how an LTR-only widget
+     ships. The direction multiplier flips the slide in Hebrew. */
+  animation: ton-hud-in var(--ton-t-hud);
+  transition: transform var(--ton-t);
+}
+
+.ton-notification:hover {
+  transform: translateY(-2px);
+}
+
+@keyframes ton-hud-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--ton-dir) * -120%));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.ton-notification__main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--ton-space-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+/* The status dot / ring. Idle + ready pulse; thinking spins as a gradient-lit ring. */
+.ton-notification__icon {
+  display: block;
+  flex: none;
+  width: var(--ton-dot-size);
+  height: var(--ton-dot-size);
+  border-radius: var(--ton-radius-dot);
+  background: var(--ton-gradient);
+}
+
+.ton-notification--idle .ton-notification__icon,
+.ton-notification--ready .ton-notification__icon {
+  animation: ton-pulse 2s infinite;
+}
+
+.ton-notification--thinking .ton-notification__icon {
+  width: var(--ton-icon-sm);
+  height: var(--ton-icon-sm);
+  border: var(--ton-spinner-stroke) solid var(--ton-spinner-track);
+  border-top-color: var(--ton-accent);
+  background: none;
+  animation: ton-spin 0.8s linear infinite;
+}
+
+.ton-notification--error .ton-notification__icon {
+  background: var(--ton-danger);
+}
+
+.ton-notification__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ton-notification__title {
+  font-size: var(--ton-fs-hud-title);
+  font-weight: var(--ton-fw-medium);
+  color: var(--ton-ink);
+}
+
+.ton-notification__sub {
+  font-size: var(--ton-fs-hud-sub);
+  font-weight: var(--ton-fw-light);
+  color: var(--ton-ink-muted);
+}
+
+.ton-notification__close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--ton-icon-lg);
+  height: var(--ton-icon-lg);
+  padding: 0;
+  border: 0;
+  border-radius: var(--ton-radius-dot);
+  background: transparent;
+  color: var(--ton-ink-subtle);
+  font-family: inherit;
+  font-size: var(--ton-fs-hud-title);
+  cursor: pointer;
+  transition: color var(--ton-t), transform var(--ton-t);
+}
+
+.ton-notification__close:hover {
+  color: var(--ton-accent);
+  transform: scale(1.1);
+}
+
+/* ---- Customer-Club banner corner (merchant-chosen). It reuses the HUD skin, so only the
+   LOGICAL anchoring changes; each modifier sets both axes to override the HUD's default. ---- */
+.ton-club-banner--bottom-end {
+  inset-block: auto var(--ton-hud-inset);
+  inset-inline: auto var(--ton-hud-inset);
+}
+
+.ton-club-banner--bottom-start {
+  inset-block: auto var(--ton-hud-inset);
+  inset-inline: var(--ton-hud-inset) auto;
+}
+
+.ton-club-banner--top-end {
+  inset-block: var(--ton-hud-inset) auto;
+  inset-inline: auto var(--ton-hud-inset);
+}
+
+.ton-club-banner--top-start {
+  inset-block: var(--ton-hud-inset) auto;
+  inset-inline: var(--ton-hud-inset) auto;
+}
+
+/* ---- Modal shell (core: the skeleton opens in it before the chunk lands) ------------- */
+.ton-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ton-space-4);
+  background: var(--ton-overlay);
+  z-index: var(--ton-z);
+  animation: ton-fade var(--ton-t-overlay);
+}
+
+.ton-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--ton-modal-max-w);
+  max-height: var(--ton-modal-max-h);
+  overflow-y: auto;
+  padding: var(--ton-modal-pad);
+  border: 0;
+  border-radius: var(--ton-radius-modal);
+  background: var(--ton-glass-modal);
+  backdrop-filter: blur(var(--ton-blur-modal));
+  -webkit-backdrop-filter: blur(var(--ton-blur-modal));
+  color: var(--ton-ink);
+  font-family: var(--ton-font);
+  box-shadow: var(--ton-shadow-modal);
+  text-align: start;
+  animation: ton-modal-in var(--ton-t-modal);
+}
+
+@keyframes ton-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ton-modal__close {
+  position: absolute;
+  inset-block-start: var(--ton-space-5);
+  inset-inline-end: var(--ton-space-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ton-close-size);
+  height: var(--ton-close-size);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ton-ink-subtle);
+  font: inherit;
+  cursor: pointer;
+  z-index: 1;
+  transition: color var(--ton-t-fast), transform var(--ton-t);
+}
+
+.ton-modal__close:hover {
+  color: var(--ton-accent);
+  transform: scale(1.1);
+}
+
+.ton-modal__close svg {
+  width: var(--ton-icon-lg);
+  height: var(--ton-icon-lg);
+}
+
+/* ---- Brand header (wordmark + product title with its last word gradient-filled) ------ */
+.ton-brand {
+  margin-block-end: var(--ton-space-6);
+  text-align: center;
+}
+
+.ton-brand__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ton-space-2);
+  font-size: var(--ton-fs-logo);
+  font-weight: var(--ton-fw-semibold);
+  letter-spacing: var(--ton-track-logo);
+  text-transform: uppercase;
+  color: var(--ton-ink);
+}
+
+.ton-brand__mark svg {
+  width: var(--ton-icon-lg);
+  height: var(--ton-icon-lg);
+}
+
+.ton-brand__title {
+  margin: var(--ton-space-3) 0 0;
+  font-size: var(--ton-fs-title);
+  font-weight: var(--ton-fw-light);
+  line-height: 1.2;
+  color: var(--ton-ink-2);
+  /* Two lines, then an ellipsis — a long merchant title never blows the modal out. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ton-brand__accent {
+  background: var(--ton-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  font-weight: inherit;
+}
+
+/* ---- Skeleton (shown only when the modal chunk takes longer than CHUNK_SHELL_DELAY_MS) --- */
+.ton-skeleton {
+  width: 100%;
+  aspect-ratio: var(--ton-preview-ratio);
+  max-height: var(--ton-preview-max-h);
+  border-radius: var(--ton-radius-image);
+  background: var(--ton-glass-preview);
+  background-image: linear-gradient(
+    115deg,
+    transparent 35%,
+    var(--ton-skeleton-sweep) 50%,
+    transparent 65%
+  );
+  background-size: 220% 100%;
+  animation: ton-shimmer 1.9s linear infinite;
+}
+
+/* ---- Keyframes (the exact set the spec names) ---------------------------------------- */
+@keyframes ton-spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ton-pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ton-shimmer {
+  0% {
+    background-position: 220% 0;
+  }
+  100% {
+    background-position: -220% 0;
+  }
+}
+
+@keyframes ton-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Directional glyph mirroring for RTL (a back arrow). The sparkle/upload/share icons are NOT
+   directional and are never flipped. */
+[dir='rtl'] .ton-glyph--directional {
+  transform: scaleX(-1);
+}
+
+/* Nobody else will remember this one: every loop stops, the spinner becomes a static ring and
+   the copy carries the meaning; the modal and HUD appear with opacity only. */
+@media (prefers-reduced-motion: reduce) {
+  .ton-button,
+  .ton-notification,
+  .ton-modal,
+  .ton-modal__close,
+  .ton-button__glyph--busy,
+  .ton-notification__icon,
+  .ton-skeleton {
+    animation: none;
+    transition: none;
+  }
+
+  .ton-button:hover,
+  .ton-notification:hover,
+  .ton-modal__close:hover {
+    transform: none;
+  }
+
+  .ton-modal,
+  .ton-notification {
+    animation: ton-fade var(--ton-t-overlay);
+  }
+}

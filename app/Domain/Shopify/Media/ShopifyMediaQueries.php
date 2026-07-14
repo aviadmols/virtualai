@@ -93,6 +93,24 @@ final class ShopifyMediaQueries
         GRAPHQL);
     }
 
+    /**
+     * ONE media, by id — the READY poll.
+     *
+     * IT IS TARGETED ON PURPOSE. The poll used to re-read the WHOLE paginated gallery on every
+     * attempt: 20 attempts x N pages of cost-weighted reads, per media, on the one rail that must
+     * not be throttled (a throttle mid-push parks the job and drags the merchant's image through
+     * another 30-second wait). `node(id:)` is a single cheap lookup of exactly the thing we are
+     * waiting on. The gallery walk stays where it is genuinely needed: reading the whole gallery.
+     */
+    public static function mediaNode(): string
+    {
+        return self::withFragment(<<<'GRAPHQL'
+        query TrayOnMediaNode($id: ID!) {
+          node(id: $id) { ...MediaFields }
+        }
+        GRAPHQL);
+    }
+
     /** Move media into position. Shopify's newPosition is ZERO-based (slot 1 = newPosition 0). */
     public static function productReorderMedia(): string
     {

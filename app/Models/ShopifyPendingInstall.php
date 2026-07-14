@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * ShopifyPendingInstall — an install that started ON SHOPIFY, parked until a Tray On
+ * ShopifyPendingInstall — an install that started ON SHOPIFY, parked until a Vsio
  * account exists to own it (docs/shopify/DECISIONS.md §2, `install_new_shop`).
  *
  * PLATFORM-level (GlobalModels::ALLOW_LIST): the row is created PRE-BIND — at OAuth

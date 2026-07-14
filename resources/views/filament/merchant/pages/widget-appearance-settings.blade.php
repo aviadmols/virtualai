@@ -1,6 +1,6 @@
 @php
     use App\Domain\Sites\WidgetAppearance;
-    $buttonLabel = $data['button_label'] ?? 'Tray On';
+    $buttonLabel = $data['button_label'] ?? 'Vsio';
 @endphp
 
 <x-filament-panels::page>

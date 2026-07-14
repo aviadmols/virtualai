@@ -30,7 +30,11 @@ final class ShopifyMediaException extends RuntimeException
 
     public const CODE_GALLERY_UNREAD = 'gallery_unread';       // we could not read the WHOLE gallery
 
+    public const CODE_DELETE_UNCONFIRMED = 'delete_unconfirmed'; // Shopify did not confirm the delete
+
     private const JOIN = ' | ';
+
+    private const JOIN_IDS = ', ';
 
     /**
      * @param  array<int,string>  $errors  the verbatim mediaUserErrors messages
@@ -89,6 +93,26 @@ final class ShopifyMediaException extends RuntimeException
         $reason = 'Shopify accepted the mutation but returned no media object.';
 
         return new self(self::CODE_NO_MEDIA, $reason, [$reason]);
+    }
+
+    /**
+     * WE ASKED SHOPIFY TO DELETE MEDIA AND IT DID NOT SAY IT DID.
+     *
+     * productDeleteMedia answers with `deletedMediaIds`. Trusting the CALL instead of the ANSWER
+     * meant an id Shopify silently kept was treated as gone: the asset link was cleared, and our
+     * image stayed LIVE in the merchant's storefront with nothing pointing at it any more. A delete
+     * is only real when the id we asked for comes back in the confirmation.
+     *
+     * @param  array<int,string>  $missing
+     */
+    public static function deleteNotConfirmed(array $missing): self
+    {
+        $reason = sprintf(
+            'Shopify did not confirm the deletion of media %s; the store may still be showing them.',
+            implode(self::JOIN_IDS, $missing),
+        );
+
+        return new self(self::CODE_DELETE_UNCONFIRMED, $reason, [$reason]);
     }
 
     /**

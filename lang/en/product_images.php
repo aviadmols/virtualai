@@ -83,7 +83,7 @@ return [
         'push' => 'Add to store',
         'repush' => 'Try again',
         'undo' => 'Restore original images',
-        'undo_confirm' => 'Restore this product\'s original images? Everything Tray On added to this product is removed from your store, the original photos come back, and the original main image is restored. Nothing is charged.',
+        'undo_confirm' => 'Restore this product\'s original images? Everything Vsio added to this product is removed from your store, the original photos come back, and the original main image is restored. Nothing is charged.',
     ],
 
     // Pushing an approved image into the store's product media. It is FREE — the AI was already
@@ -102,7 +102,7 @@ return [
         'replace_help' => 'The image you pick is removed from your store once the new one is live.',
         'replace_option' => ':n — :alt',
         'replace_option_untitled' => ':n — (no description)',
-        'warning' => 'This changes the product page shoppers see. Tray On first saves a copy of your original images, so you can always press “Restore original images”.',
+        'warning' => 'This changes the product page shoppers see. Vsio first saves a copy of your original images, so you can always press “Restore original images”.',
         'gallery_empty' => 'This product has no images in Shopify yet, so the new image can only be added at the end.',
         'status' => 'In store',
         'error' => 'Could not add to store',
@@ -147,6 +147,6 @@ return [
         'push_not_shopify' => 'This product did not come from Shopify, so it cannot be pushed to a store.',
         'repushing' => 'Trying again — only the upload is retried. The image is not generated again and nothing is charged.',
         'undoing' => 'Restoring your original images — the product page will be back to how it was in a moment.',
-        'undo_nothing' => 'Nothing to restore: this product\'s images were never changed by Tray On.',
+        'undo_nothing' => 'Nothing to restore: this product\'s images were never changed by Vsio.',
     ],
 ];

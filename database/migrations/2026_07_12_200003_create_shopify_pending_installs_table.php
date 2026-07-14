@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * shopify_pending_installs — the PRE-BIND parking spot for an install that started on
- * Shopify (`install_new_shop`), before a Tray On account exists.
+ * Shopify (`install_new_shop`), before a Vsio account exists.
  *
  * PLATFORM-level (no account_id) by necessity: at callback time there is no tenant to
  * bind — the merchant has not registered/logged in yet. The row is short-lived

@@ -4,7 +4,7 @@
 
 return [
     'title' => 'Install code',
-    'sub' => 'Add Tray On to your store in one line.',
+    'sub' => 'Add Vsio to your store in one line.',
     'key_label' => 'Site key',
     'copy' => 'Copy',
     'copied' => 'Copied',

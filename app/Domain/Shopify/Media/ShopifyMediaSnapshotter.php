@@ -5,8 +5,8 @@ namespace App\Domain\Shopify\Media;
 use App\Domain\Media\MediaStorage;
 use App\Domain\Shopify\Api\ShopifyApiException;
 use App\Models\Product;
-use App\Models\ProductAsset;
 use App\Models\ShopifyConnection;
+use App\Models\ShopifyMediaMint;
 use App\Models\ShopifyMediaSnapshot;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -28,9 +28,11 @@ use Throwable;
  *  1. IT HOLDS THE MERCHANT'S TRUE ORIGINALS — never OUR OWN media. An append is not destructive
  *     and takes no snapshot, so the FIRST destructive push can find a gallery that already
  *     contains images we pushed. Snapshotting those as "originals" made undo re-upload OUR AI
- *     image into the live storefront on a second run, where it would stay forever. Every media
- *     this product's assets minted (ProductAsset.shopify_media_id) is therefore EXCLUDED, and
- *     the original positions are rebased over what remains.
+ *     image into the live storefront on a second run, where it would stay forever. Every media we
+ *     EVER minted on this product is therefore EXCLUDED — read from the append-only mint ledger
+ *     (shopify_media_mints), never from the mutable shopify_media_id pointer that undo, a dead
+ *     media and a reclaim all deliberately drop — and the original positions are rebased over what
+ *     remains.
  *
  *  2. THE BYTES ARE VERIFIED, NOT ATTEMPTED. Every disk is `throw => false`, so a failed write
  *     returns FALSE and used to hand back a path pointing at nothing — a snapshot stamped
@@ -235,16 +237,18 @@ final class ShopifyMediaSnapshotter
      * The media ids of THIS product that WE put in the store. They are not originals and may
      * never be snapshotted as such.
      *
+     * IT READS THE MINT LEDGER, NOT `product_assets.shopify_media_id`. That column is a MUTABLE
+     * POINTER: undo nulls it, a Shopify-FAILED media clears it, a reclaimed push overwrites it. Any
+     * media of ours whose link had been dropped was therefore invisible to this exclusion — and a
+     * later snapshot captured OUR AI image as a merchant "original", which a later undo then
+     * re-uploaded into the live storefront, where it stayed forever. shopify_media_mints is
+     * append-only and never nulled: if we ever put it in their store, it is not an original.
+     *
      * @return array<int,string>
      */
     private function ourMediaIds(Product $product): array
     {
-        return ProductAsset::query()
-            ->where('product_id', $product->getKey())
-            ->whereNotNull('shopify_media_id')
-            ->pluck('shopify_media_id')
-            ->map(static fn (mixed $id): string => (string) $id)
-            ->all();
+        return ShopifyMediaMint::mediaIdsForProduct((int) $product->getKey());
     }
 
     /**

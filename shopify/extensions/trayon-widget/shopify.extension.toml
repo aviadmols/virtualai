@@ -1,5 +1,5 @@
 # === CONSTANTS ===
-# The Tray On theme app extension: an APP EMBED block (no theme edit, no script tag
+# The Vsio theme app extension: an APP EMBED block (no theme edit, no script tag
 # pasted by hand — the merchant toggles it on in the theme editor).
 #
 # The block injects the widget loader WITH EXPLICIT PRODUCT CONTEXT (product id,
@@ -8,10 +8,10 @@
 # collection URLs, preview themes, renamed handles and page-builder PDPs cannot
 # break product resolution.
 
-name = "Tray On widget"
+name = "Vsio widget"
 type = "theme"
 
 [[extensions]]
-name = "Tray On widget"
+name = "Vsio widget"
 handle = "trayon-widget"
 type = "theme"

@@ -58,6 +58,10 @@ trait ShopifyMediaTestSupport
 
     protected const MEDIA_TYPE_VIDEO = 'VIDEO';
 
+    // What a FULL local/volume disk actually leaves behind: a non-empty, truncated object. It
+    // passes "does it exist?" and it passes "is it >= 1 byte?" — and it is not the image.
+    protected const SHORT_WRITE_BYTES = 1;
+
     /** The fake store's gallery: ordered list of ['id','status','alt','url','type']. */
     protected array $storeGallery = [];
 
@@ -90,6 +94,20 @@ trait ShopifyMediaTestSupport
 
     /** The snapshot objects VANISH from our disk mid-capture (a purge racing the capture). */
     protected bool $purgeSnapshotsMidCapture = false;
+
+    /**
+     * The snapshot objects VANISH from our disk during the STAGED UPLOAD — i.e. AFTER the pre-flight
+     * byte gates have already passed. This is the TOCTOU window: the proof was taken at the top of
+     * push(), and the delete happens a staged upload + a createMedia + a 20x3s READY poll later.
+     * (The asset's own bytes are already in memory by then, so only the backups disappear.)
+     */
+    protected bool $purgeSnapshotsOnUpload = false;
+
+    /** Runs INSIDE the staged upload — the seam where a second worker can race a push mid-flight. */
+    protected ?\Closure $onStagedUpload = null;
+
+    /** productDeleteMedia REPORTS these ids as deleted while silently keeping them in the gallery. */
+    protected array $deleteSilentlyKeeps = [];
 
     protected function bootShopifyMediaEnv(): void
     {
@@ -131,6 +149,28 @@ trait ShopifyMediaTestSupport
         $broken->shouldReceive('size')->andReturn(strlen(self::ORIGINAL_BYTES));
         $broken->shouldReceive('get')->andReturn(self::ORIGINAL_BYTES);
         $broken->shouldReceive('delete')->andReturnTrue();
+
+        Storage::set('s3', $broken);
+    }
+
+    /**
+     * THE FULL VOLUME. This is not a hypothetical disk — it is what MEDIA_DISK=volume (a Railway
+     * Volume, the local driver) really does when it runs out of space: Flysystem writes with
+     * file_put_contents, which on a full disk performs a SHORT WRITE and returns a BYTE COUNT, not
+     * false. So put() says YES, the object EXISTS, and it is NON-EMPTY — it is simply not the image.
+     *
+     * Every "is it there / is it >= 1 byte?" check sails straight through it. The only question that
+     * catches it is the one that matters: are those OUR bytes, ALL of them?
+     */
+    protected function breakMediaDiskWithShortWrites(): void
+    {
+        $broken = Mockery::mock(Filesystem::class);
+        $broken->shouldReceive('put')->andReturnTrue();          // file_put_contents wrote SOMETHING
+        $broken->shouldReceive('exists')->andReturnTrue();       // ...so the object is really there
+        $broken->shouldReceive('size')->andReturn(self::SHORT_WRITE_BYTES); // ...and it is truncated
+        $broken->shouldReceive('get')->andReturn(substr(self::ORIGINAL_BYTES, 0, self::SHORT_WRITE_BYTES));
+        $broken->shouldReceive('delete')->andReturnTrue();
+        $broken->shouldReceive('deleteDirectory')->andReturnTrue();
 
         Storage::set('s3', $broken);
     }
@@ -253,6 +293,17 @@ trait ShopifyMediaTestSupport
     }
 
     /**
+     * How many times ONE named GraphQL operation was actually sent. Counted from Http::recorded()
+     * and never from a counter inside a stub closure (TS-BUILD-008: every matching stub closure
+     * runs, so a counter there is nonsense).
+     */
+    protected function graphqlCalls(string $operation): int
+    {
+        return Http::recorded(static fn (Request $request): bool => str_contains($request->url(), 'graphql.json')
+            && str_contains((string) $request->body(), $operation))->count();
+    }
+
+    /**
      * Install the ONE Http stub. It answers:
      *  - the Admin GraphQL endpoint (staged upload, create, read, reorder, delete),
      *  - the staged upload target (the byte transfer),
@@ -263,10 +314,31 @@ trait ShopifyMediaTestSupport
         Http::fake([
             '*/admin/api/*/graphql.json' => fn (Request $request) => $this->answerGraphQL($request),
 
-            self::STAGED_URL.'*' => fn () => Http::response('', 201),
+            self::STAGED_URL.'*' => fn () => $this->answerStagedBytes(),
 
             self::ORIGINAL_CDN.'*' => fn (Request $request) => $this->answerOriginalDownload($request),
         ]);
+    }
+
+    /**
+     * The byte transfer to Shopify's staged target — and the seam that models the REAL WORLD PASSING
+     * while a push is mid-flight. It is the longest call in the push (a whole image goes over the
+     * wire), so it is exactly where a bucket purge lands, and exactly where a second worker reclaims
+     * a push that looked stuck.
+     */
+    private function answerStagedBytes()
+    {
+        if ($this->purgeSnapshotsOnUpload) {
+            // The snapshot objects vanish AFTER the pre-flight gates approved them. The paths in the
+            // snapshot are still perfectly good strings; they now point at NOTHING.
+            Storage::disk('s3')->deleteDirectory('accounts');
+        }
+
+        if ($this->onStagedUpload !== null) {
+            ($this->onStagedUpload)();
+        }
+
+        return Http::response('', 201);
     }
 
     /**
@@ -306,11 +378,84 @@ trait ShopifyMediaTestSupport
         return match (true) {
             str_contains($query, 'TrayOnStagedUpload') => $this->answerStagedUpload(),
             str_contains($query, 'TrayOnCreateMedia') => $this->answerCreateMedia($vars),
+            str_contains($query, 'TrayOnMediaNode') => $this->answerMediaNode($vars),
             str_contains($query, 'TrayOnProductMedia') => $this->answerProductMedia($vars),
             str_contains($query, 'TrayOnReorderMedia') => $this->answerReorder($vars),
             str_contains($query, 'TrayOnDeleteMedia') => $this->answerDelete($vars),
             default => Http::response(['data' => []], 200),
         };
+    }
+
+    /**
+     * The TARGETED single-media read (the READY poll). It advances processing exactly like a gallery
+     * read does — a media is a media, however you look at it — so a poll on this door still walks
+     * UPLOADED -> READY (or -> FAILED) after $readyAfterPolls reads.
+     */
+    private function answerMediaNode(array $vars)
+    {
+        $id = (string) ($vars['id'] ?? '');
+        $index = $this->indexOf($id);
+
+        if ($index === null) {
+            return Http::response(['data' => ['node' => null]], 200);
+        }
+
+        $this->advanceStatus($index);
+
+        return Http::response(['data' => ['node' => $this->nodeAt($index)]], 200);
+    }
+
+    /** Where a media sits in the fake gallery (null when Shopify no longer holds it). */
+    private function indexOf(string $mediaId): ?int
+    {
+        foreach ($this->storeGallery as $index => $media) {
+            if ($media['id'] === $mediaId) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Reading a media is what advances it: UPLOADED -> READY after $readyAfterPolls reads (or
+     * straight to FAILED when Shopify rejects the image). Shared by the gallery read and the
+     * targeted node read, so a test cannot accidentally depend on WHICH door the poller uses.
+     */
+    private function advanceStatus(int $index): void
+    {
+        $media = $this->storeGallery[$index];
+
+        if ($media['status'] !== ShopifyMediaItem::STATUS_UPLOADED) {
+            return;
+        }
+
+        $this->storeStatusReads[$media['id']] = ($this->storeStatusReads[$media['id']] ?? 0) + 1;
+
+        if ($this->processingFails) {
+            $this->storeGallery[$index]['status'] = ShopifyMediaItem::STATUS_FAILED;
+
+            return;
+        }
+
+        if ($this->storeStatusReads[$media['id']] >= $this->readyAfterPolls) {
+            $this->storeGallery[$index]['status'] = ShopifyMediaItem::STATUS_READY;
+        }
+    }
+
+    /** One gallery entry as Shopify's MediaFields fragment renders it. */
+    private function nodeAt(int $index): array
+    {
+        $media = $this->storeGallery[$index];
+        $isImage = ($media['type'] ?? self::MEDIA_TYPE_IMAGE) === self::MEDIA_TYPE_IMAGE && $media['url'] !== null;
+
+        return [
+            'id' => $media['id'],
+            'status' => $media['status'],
+            'alt' => $media['alt'],
+            'mediaContentType' => $media['type'] ?? self::MEDIA_TYPE_IMAGE,
+            'image' => $isImage ? ['url' => $media['url'], 'width' => 800, 'height' => 800] : null,
+        ];
     }
 
     private function answerStagedUpload()
@@ -372,27 +517,10 @@ trait ShopifyMediaTestSupport
         $page = array_slice($this->storeGallery, $offset, $first, true);
         $nodes = [];
 
-        foreach ($page as $index => $media) {
-            if ($media['status'] === ShopifyMediaItem::STATUS_UPLOADED) {
-                $this->storeStatusReads[$media['id']] = ($this->storeStatusReads[$media['id']] ?? 0) + 1;
+        foreach (array_keys($page) as $index) {
+            $this->advanceStatus($index);
 
-                if ($this->processingFails) {
-                    $this->storeGallery[$index]['status'] = ShopifyMediaItem::STATUS_FAILED;
-                } elseif ($this->storeStatusReads[$media['id']] >= $this->readyAfterPolls) {
-                    $this->storeGallery[$index]['status'] = ShopifyMediaItem::STATUS_READY;
-                }
-            }
-
-            $current = $this->storeGallery[$index];
-            $isImage = ($current['type'] ?? self::MEDIA_TYPE_IMAGE) === self::MEDIA_TYPE_IMAGE && $current['url'] !== null;
-
-            $nodes[] = [
-                'id' => $current['id'],
-                'status' => $current['status'],
-                'alt' => $current['alt'],
-                'mediaContentType' => $current['type'] ?? self::MEDIA_TYPE_IMAGE,
-                'image' => $isImage ? ['url' => $current['url'], 'width' => 800, 'height' => 800] : null,
-            ];
+            $nodes[] = $this->nodeAt($index);
         }
 
         $end = $offset + count($nodes);
@@ -460,13 +588,19 @@ trait ShopifyMediaTestSupport
             ),
         ];
 
+        // The store that KEEPS an image it was told to delete. Shopify still answers 200 with no
+        // mediaUserErrors — the only signal is the id missing from deletedMediaIds. A caller that
+        // trusts the CALL instead of the ANSWER clears the link and leaves our image live.
+        $kept = array_values(array_intersect($ids, $this->deleteSilentlyKeeps));
+        $gone = array_values(array_diff($ids, $kept));
+
         $this->storeGallery = array_values(array_filter(
             $this->storeGallery,
-            static fn (array $m): bool => ! in_array($m['id'], $ids, true),
+            static fn (array $m): bool => ! in_array($m['id'], $gone, true),
         ));
 
         return Http::response(['data' => ['productDeleteMedia' => [
-            'deletedMediaIds' => $ids,
+            'deletedMediaIds' => $gone,
             'mediaUserErrors' => [],
         ]]], 200);
     }

@@ -55,7 +55,7 @@ return [
             'report' => false,
         ],
 
-        // Tray On media disk on a Railway persistent VOLUME (a mounted local disk).
+        // Vsio media disk on a Railway persistent VOLUME (a mounted local disk).
         // Use when MEDIA_DISK=volume. The mount lives OUTSIDE public/, so bytes are
         // served by the app (MediaController) — public banners cacheable, private
         // try-on media via expiring signed URLs. MEDIA_VOLUME_PATH is the Railway
@@ -68,7 +68,7 @@ return [
             'report' => false,
         ],
 
-        // Tray On media disk (S3-compatible: Cloudflare R2 or AWS S3). Reads are
+        // Vsio media disk (S3-compatible: Cloudflare R2 or AWS S3). Reads are
         // served via MEDIA_CDN_URL (edge, cheap), not the origin bucket. R2 needs
         // a custom endpoint + path-style. Creds fall back S3_* -> R2_* -> AWS_*.
         's3' => [

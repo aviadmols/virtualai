@@ -31,11 +31,13 @@ return [
         'account_inactive' => 'Try-on is not available right now.',
     ],
 
-    // Start-generation input problems (the widget must fix these).
+    // Start-generation input problems (the widget must fix these), plus the one that is OURS:
+    // storage_failed — the media disk would not take the photo. Nothing was reserved or charged.
     'start' => [
         'photo_consent_required' => 'Please agree to let us use your photo before generating a try-on.',
         'product_not_confirmed' => 'This product is not available for try-on yet.',
         'variant_mismatch' => 'The selected variant does not belong to this product.',
+        'storage_failed' => 'We could not save your photo just now. Please try again in a moment.',
     ],
 
     // Validation field messages.

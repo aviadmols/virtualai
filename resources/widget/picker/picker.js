@@ -1,5 +1,5 @@
 /* =============================================================================
- * Tray On — in-preview element picker. Runs INSIDE the sandboxed preview iframe
+ * Vsio — in-preview element picker. Runs INSIDE the sandboxed preview iframe
  * (sandbox="allow-scripts", opaque origin — it cannot reach the admin session).
  * The merchant hovers to highlight and clicks any element; the chosen CSS
  * selector is postMessage'd to the parent admin page (which re-verifies it
@@ -9,7 +9,7 @@
  * unaffected.
  *
  * Three modes, one selector engine (selectorFor()):
- *  - 'placement' (default): pick WHERE the Tray On button goes — draws a ghost
+ *  - 'placement' (default): pick WHERE the Vsio button goes — draws a ghost
  *    button at the pick and posts {mode:'element', position, selector, rect, tag}.
  *  - 'role': pick WHICH element a product detail (price/title/size/…) is taken
  *    from — persistently highlights the pick (no ghost) and posts
@@ -87,7 +87,7 @@
 
   var ghost = null;
   var lastSelector = null;
-  var currentLabel = 'Tray On';
+  var currentLabel = 'Vsio';
   var mode = MODE_PLACEMENT; // default: the existing placement flow
   var currentRole = null; // which detail role a 'role' pick targets
 
@@ -353,7 +353,7 @@
         return;
       }
 
-      // Placement mode (default): choose where the Tray On button goes.
+      // Placement mode (default): choose where the Vsio button goes.
       send('pick', { mode: 'element', selector: lastSelector, position: 'after', rect: rectOf(el), tag: tag });
       drawGhost(lastSelector, 'after', currentLabel);
     },

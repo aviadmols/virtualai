@@ -43,7 +43,7 @@ return [
         'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
         'timeout' => (int) env('OPENROUTER_TIMEOUT', 80),
         'http_referer' => env('OPENROUTER_HTTP_REFERER', env('APP_URL')),
-        'app_title' => env('OPENROUTER_APP_TITLE', env('APP_NAME', 'Tray On')),
+        'app_title' => env('OPENROUTER_APP_TITLE', env('APP_NAME', 'Vsio')),
     ],
 
     // BytePlus / Seedream — the SECOND try-on image provider (image-to-image). Key is
@@ -153,7 +153,7 @@ return [
         'render_enabled' => (bool) env('SCRAPER_RENDER_ENABLED', false),
 
         // Honest, identifying user-agent for BOTH the HTTP and headless fetches.
-        'user_agent' => env('SCRAPER_USER_AGENT', 'TrayOnBot/1.0 (+https://trayon.app/bot)'),
+        'user_agent' => env('SCRAPER_USER_AGENT', 'VsioBot/1.0 (+https://go.vsio.app/bot)'),
 
         // Bounded timeouts (seconds) for the two attempts.
         'http_timeout' => (int) env('SCRAPER_HTTP_TIMEOUT', 15),

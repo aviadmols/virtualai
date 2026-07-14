@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * end_users — the lead / "Tray On user". Tenant-owned: account_id NOT NULL +
+ * end_users — the lead / "Vsio user". Tenant-owned: account_id NOT NULL +
  * BelongsToAccount; site-scoped (site_id) because the free-tries limit and the
  * lead funnel live per Site.
  *

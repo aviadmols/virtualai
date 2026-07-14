@@ -9,8 +9,10 @@ use App\Domain\Shopify\Media\MediaPlacement;
 use App\Domain\Shopify\Media\PushProductMedia;
 use App\Domain\Shopify\Media\PushProductMediaJob;
 use App\Domain\Shopify\Media\PushResult;
+use App\Domain\Shopify\Media\ShopifyMediaException;
 use App\Domain\Shopify\Media\UndoProductMediaJob;
 use App\Models\ProductAsset;
+use App\Models\ShopifyMediaMint;
 use App\Models\ShopifyMediaSnapshot;
 use App\Support\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -56,6 +58,15 @@ class ShopifyMediaSafetyTest extends TestCase
     private const CAPTURE_FAILED_MESSAGE = 'back up the original images';
 
     private const TRUNCATED_MESSAGE = 'could not be read completely';
+
+    // Past shopify.media.stuck_after_minutes (default 30) — the push is LOST, not in flight.
+    private const STUCK_MINUTES = 31;
+
+    // The claim a parked continuation carries back to renew its own lease.
+    private const PARKED_CLAIM = 'claim-of-the-parked-worker';
+
+    // Reads of a new media before Shopify calls it READY (= shopify.media.ready_attempts here).
+    private const SLOW_PROCESSING_POLLS = 5;
 
     protected function setUp(): void
     {
@@ -701,5 +712,486 @@ class ShopifyMediaSafetyTest extends TestCase
         $this->expectException(RuntimeException::class);
 
         Tenant::run($shop['account'], fn () => $snapshot->transitionTo(ShopifyMediaSnapshot::STATUS_CAPTURING));
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // B8 — VERIFY THE PREDICATE YOU CARE ABOUT, NOT A PROXY FOR IT.
+    //
+    // The readback existed and it asked the WRONG QUESTION: "is the object at least 1 byte?"
+    // A TRUNCATED object answers yes. And this is not a hypothetical disk — MEDIA_DISK=volume (a
+    // Railway Volume, the local driver) writes with file_put_contents, which on a FULL disk performs
+    // a SHORT WRITE and returns a BYTE COUNT, not false. So "the volume is full" used to mean "the
+    // original is gone from Shopify and what we hold is 1 byte of it".
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * The root law: OUR bytes, ALL of them, or nothing.
+     *
+     * Delete the `$stored !== $expected` clause in MediaStorage::write() -> RED.
+     */
+    public function test_media_storage_throws_when_the_disk_short_writes(): void
+    {
+        $this->breakMediaDiskWithShortWrites();
+
+        $this->expectException(MediaWriteException::class);
+
+        app(MediaStorage::class)->storeShopifySnapshot(1, 2, 3, self::ORIGINAL_BYTES, 'image/png');
+    }
+
+    /**
+     * THE BLAST RADIUS. The disk accepts the snapshot write and stores ONE BYTE of it. Every
+     * "does it exist / is it non-empty?" gate passes. Without the byte-count check the snapshot is
+     * stamped CAPTURED, the merchant's live original is DELETED, and the image we hand back on undo
+     * is not the image.
+     *
+     * Delete the `$stored !== $expected` clause in MediaStorage::write() -> RED.
+     */
+    public function test_a_short_written_snapshot_never_lets_the_original_be_deleted(): void
+    {
+        $shop = $this->mediaShop(originals: 2);
+        $asset = $this->approvedAsset($shop);
+        $before = $this->galleryIds();
+
+        $this->breakMediaDiskWithShortWrites();
+
+        $this->runPush($shop, $asset, MediaPlacement::replace($before[0]));
+
+        $asset->refresh();
+
+        $this->assertSame(ProductAsset::PUSH_FAILED, $asset->push_status);
+        $this->assertStringContainsString(self::CAPTURE_FAILED_MESSAGE, (string) $asset->push_error);
+
+        // The store is byte-identical: nothing was created, nothing was deleted.
+        $this->assertSame($before, $this->galleryIds());
+        $this->assertNotContains('delete', $this->storeOps());
+        $this->assertSame(0, $this->createdMediaCount());
+
+        // And the snapshot is FAILED — never CAPTURED on the strength of a truncated object.
+        $this->assertSame(ShopifyMediaSnapshot::STATUS_FAILED, $this->snapshotOf($shop)?->status);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // B9 — RE-PROVE REVERSIBILITY IMMEDIATELY BEFORE AN IRREVERSIBLE ACT.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * The pre-flight gates pass HONESTLY: the bytes are on the disk and they read back. Then a whole
+     * minute of the real world happens — a staged upload, a productCreateMedia, a 20 x 3s READY poll
+     * — and during it a bucket lifecycle rule / a bad purge / a racing cleanup takes the backups
+     * away. (The phase's own snapshot test already treats that threat as real.)
+     *
+     * The delete used to run anyway, on a proof that was 60 seconds stale: the original gone from
+     * Shopify AND from us. The bytes are now re-read as the LAST statement before the delete.
+     *
+     * A refusal here costs nothing: our media is live in the slot, the ORIGINAL IS STILL THERE, and
+     * Undo takes our image back out.
+     *
+     * Delete the assertMediaRestorable() re-assert in deleteReplaced() -> RED.
+     */
+    public function test_a_replace_is_refused_when_the_snapshot_bytes_vanish_after_the_ready_gate(): void
+    {
+        $shop = $this->mediaShop(originals: 2);
+        $asset = $this->approvedAsset($shop);
+        $target = $this->galleryIds()[0];
+
+        // The backups disappear DURING the staged upload — after the gates, before the delete.
+        $this->purgeSnapshotsOnUpload = true;
+
+        $this->runPush($shop, $asset, MediaPlacement::replace($target));
+
+        // THE MERCHANT'S ORIGINAL IS STILL IN THEIR LIVE GALLERY. Nothing was destroyed.
+        $this->assertContains($target, $this->galleryIds(), 'The original was DELETED on a byte proof that was already stale.');
+        $this->assertNotContains('delete', $this->storeOps(), 'The irreversible call ran without a fresh proof.');
+
+        // We got as far as creating (and even reordering) our media — and then STOPPED.
+        $this->assertContains('create', $this->storeOps());
+
+        $asset->refresh();
+
+        $this->assertSame(ProductAsset::PUSH_FAILED, $asset->push_status);
+        $this->assertStringContainsString(self::REFUSED_MESSAGE, (string) $asset->push_error);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // B7 — THE LEASE. A reclaim of a "stuck" push must never mint a SECOND media.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * THE DOUBLE-MINT RACE, in full.
+     *
+     * A push takes the lease and goes to Shopify. It then HANGS (a frozen worker, a stalled socket)
+     * past the stuck window. The merchant reclaims it — correctly, because from the outside it is
+     * indistinguishable from a killed worker. The reclaim mints the media.
+     *
+     * And then the "lost" worker WAKES UP, right where it left off: about to mint. It has no media
+     * id (that is precisely the case the reclaim exists for, and precisely the case the resume wall
+     * cannot cover). Before the lease it minted a SECOND media into the live gallery, the asset row
+     * kept only the LAST id, and no Undo could ever take the other one out.
+     *
+     * Now it re-proves its claim as the last statement before the mint, finds a stranger holding the
+     * lease, and STANDS DOWN.
+     *
+     * Delete the assertClaim (holdsPushClaim) check in ShopifyMediaPusher::createMedia() -> RED
+     * (two `create` calls, two AI images in the merchant's storefront).
+     */
+    public function test_a_reclaim_of_a_stuck_push_with_no_media_id_never_mints_a_second_media(): void
+    {
+        $shop = $this->mediaShop(originals: 1);
+        $asset = $this->approvedAsset($shop);
+        $reclaimed = false;
+
+        // The reclaim runs while the first worker is still uploading its bytes — the real
+        // interleaving, not a simulated one.
+        $this->onStagedUpload = function () use ($shop, $asset, &$reclaimed): void {
+            if ($reclaimed) {
+                return;
+            }
+
+            $reclaimed = true;
+
+            // The first worker has been hanging for longer than the stuck window.
+            $this->travel(self::STUCK_MINUTES)->minutes();
+
+            // The merchant reclaims: a fresh claim, which EVICTS the hung worker.
+            $this->runPush($shop, $asset->fresh(), MediaPlacement::append());
+        };
+
+        $this->runPush($shop, $asset, MediaPlacement::append());
+
+        $this->assertTrue($reclaimed, 'The reclaim must have raced the original push.');
+
+        // EXACTLY ONE media in the merchant's store — the reclaim's. The evicted worker stood down.
+        $this->assertSame(1, $this->createdMediaCount(), 'A reclaim must never mint a second media.');
+
+        $asset->refresh();
+
+        $this->assertSame(ProductAsset::PUSH_PUSHED, $asset->push_status);
+        $this->assertContains((string) $asset->shopify_media_id, $this->galleryIds());
+        $this->assertCount(2, $this->galleryIds(), 'One original + exactly one image of ours.');
+
+        // The mint ledger agrees: we put ONE media in their store.
+        $this->assertCount(1, $this->mintedIds($shop));
+    }
+
+    /**
+     * A LEASE MUST RE-STAMP THE FIELD IT IS JUDGED BY.
+     *
+     * isPushStuck() judges freshness by `updated_at`. A parked continuation that renews its OWN
+     * claim writes the same claim id — so without an explicit `updated_at` re-stamp the row is not
+     * dirty, nothing is written, and the lease keeps ageing while the push is very much alive. A
+     * reclaimer then walks in behind a LIVING worker.
+     *
+     * Delete `'updated_at' => now()` from ProductAsset::takePushLease() -> RED (the reclaim is
+     * admitted instead of denied IN_FLIGHT).
+     */
+    public function test_a_renewed_push_lease_is_fresh_and_a_second_worker_is_refused(): void
+    {
+        $shop = $this->mediaShop(originals: 1);
+        $asset = $this->approvedAsset($shop);
+
+        // A push that parked once: `pushing`, holding its claim, and its lease has gone stale in a
+        // queue backlog (it is SLOW, not dead).
+        Tenant::run($shop['account'], fn () => $asset->forceFill([
+            'push_status' => ProductAsset::PUSH_PUSHING,
+            'push_claim_id' => self::PARKED_CLAIM,
+            'shopify_media_id' => null,
+        ])->save());
+
+        $this->travel(self::STUCK_MINUTES)->minutes();
+
+        $verdict = null;
+
+        // While the continuation is mid-flight (it has already renewed its lease), a second worker
+        // asks whether it may take over.
+        $this->onStagedUpload = function () use ($shop, $asset, &$verdict): void {
+            $verdict ??= Tenant::run($shop['account'], fn (): PushResult => app(PushProductMedia::class)
+                ->push($shop['site'], (int) $asset->getKey(), MediaPlacement::append()));
+        };
+
+        (new PushProductMediaJob(
+            (int) $shop['account']->getKey(),
+            (int) $shop['site']->getKey(),
+            (int) $asset->getKey(),
+            MediaPlacement::append()->toArray(),
+            parks: 1,
+            claimId: self::PARKED_CLAIM,
+        ))->handle();
+
+        $this->assertInstanceOf(PushResult::class, $verdict);
+
+        // The lease is SECONDS old, not 31 minutes: the push is alive and nobody may take it.
+        $this->assertTrue($verdict->wasDenied());
+        $this->assertSame(PushResult::REASON_IN_FLIGHT, $verdict->deniedReason);
+
+        $this->assertSame(1, $this->createdMediaCount());
+        $this->assertSame(ProductAsset::PUSH_PUSHED, $asset->refresh()->push_status);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // B7(d) / S8 — THE MINT LEDGER: WHAT WE PUT IN, WE CAN ALWAYS TAKE OUT.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * THE ORPHAN. `product_assets.shopify_media_id` is a MUTABLE POINTER, and one of the paths that
+     * clears it needs no race at all to reach: Shopify processes our image to FAILED, so the id is
+     * worthless and is dropped (or every re-push would resume a dead media forever) — while THE
+     * MEDIA OBJECT IS STILL IN THE MERCHANT'S GALLERY.
+     *
+     * The asset re-pushes, succeeds, and now carries a DIFFERENT id. An Undo driven off that column
+     * removes only the second one: our first AI image stays live in the storefront forever, and
+     * "restore my original images" is a lie.
+     *
+     * Undo is driven off shopify_media_mints — append-only, never nulled.
+     *
+     * Delete the ShopifyMediaMint::record() call in createMedia() (or drive undo off pushedAssets)
+     * -> RED (the orphan is still in the gallery after the restore).
+     */
+    public function test_undo_removes_every_media_we_ever_minted_not_just_the_last(): void
+    {
+        $shop = $this->mediaShop(originals: 2);
+        $asset = $this->approvedAsset($shop);
+        $originals = $this->galleryIds();
+
+        // 1. A destructive push whose media Shopify processes to FAILED: minted, LIVE, and unlinked.
+        $this->processingFails = true;
+        $this->runPush($shop, $asset, MediaPlacement::position(1));
+
+        $asset->refresh();
+
+        $this->assertSame(ProductAsset::PUSH_FAILED, $asset->push_status);
+        $this->assertNull($asset->shopify_media_id, 'The dead media id is dropped — the media object is not.');
+
+        // The orphan is read from the STORE, not from any bookkeeping of ours: it is simply the
+        // media that appeared in the merchant's gallery and that nothing of ours points at now.
+        $orphan = array_values(array_diff($this->galleryIds(), $originals))[0];
+
+        // 2. The re-push succeeds and the asset now points at a DIFFERENT media.
+        $this->processingFails = false;
+        $this->runPush($shop, $asset->refresh(), MediaPlacement::position(1));
+
+        $asset->refresh();
+
+        $this->assertSame(ProductAsset::PUSH_PUSHED, $asset->push_status);
+        $this->assertNotSame($orphan, (string) $asset->shopify_media_id, 'The asset forgot the first media.');
+
+        // 3. UNDO — "restore my original images" must MEAN it.
+        $this->runUndo($shop);
+
+        $this->assertNotContains($orphan, $this->galleryIds(), 'Our ORPHANED AI image is still live in the merchant storefront after an undo.');
+        $this->assertSame($originals, $this->galleryIds(), 'The merchant must be left with exactly their originals.');
+
+        // ...and the ledger that made it possible remembers BOTH media we ever put in their store.
+        $this->assertCount(2, $this->mintedIds($shop));
+        $this->assertSame(ProductAsset::PUSH_NOT_PUSHED, $asset->refresh()->push_status);
+    }
+
+    /**
+     * S8 — the snapshot exclusion inherited the same amnesia. It excluded "our own media" by reading
+     * the mutable pointer, so a media of ours whose link had been dropped was captured as a merchant
+     * ORIGINAL — and a later undo would RE-UPLOAD our AI image into the live storefront (the B2 scar,
+     * through a side door). The exclusion reads the mint ledger.
+     *
+     * Point ourMediaIds() back at ProductAsset::shopify_media_id -> RED.
+     */
+    public function test_our_media_is_excluded_from_a_snapshot_even_when_its_asset_link_was_dropped(): void
+    {
+        $shop = $this->mediaShop(originals: 2);
+        $appended = $this->approvedAsset($shop);
+        $replacing = $this->approvedAsset($shop);
+        $originals = $this->galleryIds();
+
+        // An APPEND is not destructive: no snapshot yet, and our image is now in the live gallery.
+        $this->runPush($shop, $appended, MediaPlacement::append());
+        $appendedId = (string) $appended->refresh()->shopify_media_id;
+
+        // The pointer is dropped — exactly what undo, a dead media and a reclaim all do to it. The
+        // media itself is still very much in the merchant's store.
+        Tenant::run($shop['account'], fn () => $appended->forceFill(['shopify_media_id' => null])->save());
+
+        $this->assertContains($appendedId, $this->galleryIds());
+
+        // NOW the first destructive push takes the snapshot.
+        $this->runPush($shop, $replacing, MediaPlacement::replace($originals[0]));
+
+        $snapshotIds = array_map(
+            static fn (array $e): string => (string) $e[ShopifyMediaSnapshot::ENTRY_MEDIA_ID],
+            $this->snapshotOf($shop)->entries(),
+        );
+
+        $this->assertNotContains($appendedId, $snapshotIds, 'Our own image is not a merchant "original".');
+        $this->assertSame($originals, $snapshotIds);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // S9 / S10 — TRUST THE ANSWER, NOT THE CALL. AND CLOSE EVERY ROW THAT IS IN THE STORE.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * S9 — productDeleteMedia answers with `deletedMediaIds`. An id that is NOT in that list was NOT
+     * deleted (200, no mediaUserErrors — the missing id is the only signal). Clearing the asset link
+     * on the strength of the CALL left our image live in the storefront AND unlinked: an orphan, and
+     * the panel telling the merchant it was gone.
+     *
+     * Delete assertDeleted() -> RED (the link is cleared while the image is still in the gallery).
+     */
+    public function test_a_delete_shopify_does_not_confirm_never_clears_the_asset_link(): void
+    {
+        $shop = $this->mediaShop(originals: 2);
+        $asset = $this->approvedAsset($shop);
+        $first = $this->galleryIds()[0];
+
+        $this->runPush($shop, $asset, MediaPlacement::replace($first));
+
+        $ourId = (string) $asset->refresh()->shopify_media_id;
+
+        // The store REPORTS the delete and quietly keeps the image.
+        $this->deleteSilentlyKeeps = [$ourId];
+
+        try {
+            $this->runUndo($shop);
+            $this->fail('An unconfirmed delete must never pass silently.');
+        } catch (ShopifyMediaException $e) {
+            $this->assertSame(ShopifyMediaException::CODE_DELETE_UNCONFIRMED, $e->errorCode);
+        }
+
+        $asset->refresh();
+
+        // Our image is STILL in their store — so the row still says so, and a later undo retries it.
+        $this->assertContains($ourId, $this->galleryIds());
+        $this->assertSame(ProductAsset::PUSH_PUSHED, $asset->push_status);
+        $this->assertSame($ourId, (string) $asset->shopify_media_id);
+    }
+
+    /**
+     * S10 — a push that dies AFTER productCreateMedia (here: the READY poll budget runs out) leaves
+     * OUR MEDIA LIVE in the gallery with the asset at `push_failed`. Undo used to look only at
+     * `pushed` rows, so it skipped that asset entirely: the image came out of the store (the mint
+     * ledger sees it) but the row was left claiming a media id that no longer existed — and a later
+     * re-push would "resume" a dead media forever.
+     *
+     * Remove PUSH_FAILED / PUSH_PUSHING from UndoProductMediaJob::RESET_STATUSES -> RED.
+     */
+    public function test_undo_closes_an_asset_whose_push_died_after_the_media_was_minted(): void
+    {
+        $shop = $this->mediaShop(originals: 2);
+        $anchor = $this->approvedAsset($shop);
+        $stranded = $this->approvedAsset($shop);
+        $originals = $this->galleryIds();
+
+        // A destructive push first, so the product carries a snapshot (undo has something to replay).
+        $this->runPush($shop, $anchor, MediaPlacement::position(1));
+
+        // The second push mints its media and then dies waiting for Shopify to process it.
+        $this->readyAfterPolls = 99;
+        $this->runPush($shop, $stranded, MediaPlacement::append());
+
+        $stranded->refresh();
+        $strandedMedia = (string) $stranded->shopify_media_id;
+
+        $this->assertSame(ProductAsset::PUSH_FAILED, $stranded->push_status);
+        $this->assertNotSame('', $strandedMedia);
+        $this->assertContains($strandedMedia, $this->galleryIds(), 'Our media is LIVE at push_failed.');
+
+        // UNDO must take it out of the store AND close the row.
+        $this->readyAfterPolls = 1;
+        $this->runUndo($shop);
+
+        $this->assertSame($originals, $this->galleryIds());
+        $this->assertNotContains($strandedMedia, $this->galleryIds());
+
+        $stranded->refresh();
+
+        $this->assertSame(
+            ProductAsset::PUSH_NOT_PUSHED,
+            $stranded->push_status,
+            'Undo took the image out of the store but left the row claiming it is still pushed.',
+        );
+        $this->assertNull($stranded->shopify_media_id, 'A row may never point at a media we just deleted.');
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // S7 — AN ORIGINAL THAT WAS UNDONE IS STILL AN ORIGINAL.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * After an undo, a re-uploaded original lives under a NEW media id (Shopify mints a new object
+     * for our bytes). assertMediaRestorable() matched only the ORIGINAL id, so every later replace
+     * on that product was refused with "it was never backed up" — a lie: we hold its bytes, which is
+     * exactly why we just put them back. The destructive rail was dead for every undone product.
+     *
+     * Drop the ENTRY_RESTORED_MEDIA_ID match from entryIs() -> RED (the second replace is refused).
+     */
+    public function test_an_original_that_was_restored_can_be_replaced_again(): void
+    {
+        $shop = $this->mediaShop(originals: 2);
+        $first = $this->approvedAsset($shop);
+        $second = $this->approvedAsset($shop);
+        $original = $this->galleryIds()[0];
+
+        $this->runPush($shop, $first, MediaPlacement::replace($original));
+        $this->assertNotContains($original, $this->galleryIds());
+
+        $this->runUndo($shop);
+
+        // The original is back — under a NEW id.
+        $restored = (string) ($this->snapshotOf($shop)->entries()[0][ShopifyMediaSnapshot::ENTRY_RESTORED_MEDIA_ID] ?? '');
+
+        $this->assertNotSame('', $restored);
+        $this->assertContains($restored, $this->galleryIds());
+
+        // The merchant changes their mind and replaces that same original again. We hold its bytes;
+        // the push must run.
+        $this->runPush($shop, $second, MediaPlacement::replace($restored));
+
+        $second->refresh();
+
+        $this->assertSame(
+            ProductAsset::PUSH_PUSHED,
+            $second->push_status,
+            'The destructive rail is dead for every product that was ever undone: '.(string) $second->push_error,
+        );
+        $this->assertNull($second->push_error);
+        $this->assertNotContains($restored, $this->galleryIds());
+        $this->assertContains((string) $second->shopify_media_id, $this->galleryIds());
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // S12 — THE ONE RAIL THAT MUST NOT THROTTLE DOES NOT RE-READ THE WHOLE GALLERY 20 TIMES.
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * The READY poll ran up to 20 attempts, and each attempt walked the ENTIRE paginated gallery:
+     * up to 200 cost-weighted GraphQL calls per media on a large product. A throttle here parks the
+     * push and makes the merchant wait another 30 seconds — on the rail that mutates a live store.
+     *
+     * It polls ONE node.
+     *
+     * Point awaitReady() back at find() (the gallery walk) -> RED (0 node reads, N gallery walks).
+     */
+    public function test_the_ready_poll_asks_for_one_node_and_never_walks_the_gallery(): void
+    {
+        config()->set(self::CFG_PER_PRODUCT, 1); // every gallery read is a multi-page walk
+
+        $shop = $this->mediaShop(originals: 3);
+        $asset = $this->approvedAsset($shop);
+
+        $this->readyAfterPolls = self::SLOW_PROCESSING_POLLS; // the poll really has to spin
+
+        $this->runPush($shop, $asset, MediaPlacement::append());
+
+        $this->assertSame(ProductAsset::PUSH_PUSHED, $asset->refresh()->push_status);
+
+        // Five targeted reads of the ONE media we are waiting on — and not one gallery walk.
+        $this->assertSame(self::SLOW_PROCESSING_POLLS, $this->graphqlCalls('TrayOnMediaNode'));
+        $this->assertSame(0, $this->graphqlCalls('TrayOnProductMedia'));
+    }
+
+    /** Every media id we ever minted on this product (the append-only ledger). */
+    private function mintedIds(array $shop): array
+    {
+        return Tenant::run(
+            $shop['account'],
+            fn (): array => ShopifyMediaMint::mediaIdsForProduct((int) $shop['product']->getKey()),
+        );
     }
 }

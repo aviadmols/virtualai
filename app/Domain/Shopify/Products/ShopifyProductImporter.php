@@ -13,7 +13,7 @@ use App\Models\ShopifySyncRun;
 use App\Models\Site;
 
 /**
- * ShopifyProductImporter — the ONE place a Shopify product becomes a Tray On product.
+ * ShopifyProductImporter — the ONE place a Shopify product becomes a Vsio product.
  *
  * Fetch (ShopifyProductSource) -> persist (the shared PersistProduct writer) -> count on
  * the sync run -> write the timeline event. Used identically by the catalog walk, the

@@ -7,7 +7,7 @@ namespace App\Domain\Shopify\Auth;
  *
  * Produced ONLY by ShopifyOAuthState::verify() (signature + expiry + single-use all
  * passed). accountId/siteId are present for the connect_existing_site flow and null
- * for install_new_shop (there is no Tray On account yet at that point).
+ * for install_new_shop (there is no Vsio account yet at that point).
  */
 final class ShopifyOAuthStatePayload
 {

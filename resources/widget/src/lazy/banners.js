@@ -2,13 +2,13 @@
 // The merchant-banner runtime. Injects each active banner's image at the merchant-picked host-page
 // spots, gated by CLIENT-SIDE rules (audience / page context / frequency / locale — the schedule was
 // already enforced server-side). Each spot is a host-DOM wrapper with its OWN shadow root (like the
-// Tray On button) so there is ZERO host-CSS bleed either way; the <img> carries width/height so the
+// Vsio button) so there is ZERO host-CSS bleed either way; the <img> carries width/height so the
 // box is reserved (CLS-safe). ONE impression per banner per page-load (session-capped by the
 // frequency rule); a click beacons then lets the link navigate. Idempotent + self-healing (a
 // per-banner sentinel + a debounced MutationObserver). Rides the idle path — never a sync hook,
 // never throws into the host page.
 
-import widgetCss from '../styles/widget.css';
+import bannerCss from '../../styles/banner.css';
 import {
   BANNER_CONFIG,
   BANNER_COMPOSITION,
@@ -26,10 +26,10 @@ import {
   SESSION_BANNER_IMPR_PREFIX,
   BANNER_CART_URL_RE,
   APPEARANCE,
-} from './constants.js';
-import { state } from './state.js';
-import { el, safeQuery, warn } from './dom.js';
-import * as api from './api.js';
+} from '../constants.js';
+import { state, api, shell } from './bridge.js';
+import { el, safeQuery, warn } from '../dom.js';
+
 
 // Debounce for the self-heal re-mount after a host DOM mutation (SPA re-render).
 const OBSERVER_DEBOUNCE_MS = 400;
@@ -108,7 +108,7 @@ function alreadyAt(target, banner) {
 /**
  * A host-DOM wrapper (carrying the sentinel) with its OWN shadow root holding the banner. Lives in
  * the host DOM so the merchant placement is honored, but style-isolated both ways (its own shadow +
- * all:initial), exactly like the Tray On button.
+ * all:initial), exactly like the Vsio button.
  */
 function buildWrapper(banner) {
   const wrapper = el('span', { attrs: { [BANNER_SENTINEL_ATTR]: String(banner[BANNER_CONFIG.id]) } });
@@ -118,7 +118,7 @@ function buildWrapper(banner) {
   const shadow = wrapper.attachShadow({ mode: 'open' });
 
   const style = document.createElement('style');
-  style.textContent = widgetCss;
+  style.textContent = shell.getCoreCss() + bannerCss;
   shadow.appendChild(style);
 
   const root = el('div', { class: 'ton-root' });

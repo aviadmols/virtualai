@@ -1,16 +1,16 @@
 {% comment %}
-  Tray On — app embed block.
+  Vsio — app embed block.
 
   Injects the widget loader with EXPLICIT product context read from Liquid, so the widget
   never has to guess the product from the URL:
 
-    data-site-key      the PUBLIC site key (Tray On merchant panel -> Embed). Never the secret.
+    data-site-key      the PUBLIC site key (Vsio merchant panel -> Embed). Never the secret.
     data-platform      'shopify' — tells the widget to use the Ajax cart, not a DOM click.
     data-product-id    the numeric product id (the Admin GID's id segment).
     data-product-handle the handle (stable fallback key).
     data-variant-id    the currently selected variant — kept live by trayon-shopify-context.js.
 
-  Nothing renders visually here: the loader mounts the Tray On button itself, on idle, so the
+  Nothing renders visually here: the loader mounts the Vsio button itself, on idle, so the
   host theme's LCP/CLS are untouched. Outside a product page the context attributes are simply
   absent and the widget stays dormant.
 {% endcomment %}
@@ -39,21 +39,21 @@
 
 {% schema %}
 {
-  "name": "Tray On",
+  "name": "Vsio",
   "target": "body",
   "settings": [
     {
       "type": "text",
       "id": "site_key",
       "label": "Site key",
-      "info": "Copy it from your Tray On panel (Sites -> Embed). It is a public key."
+      "info": "Copy it from your Vsio panel (Sites -> Embed). It is a public key."
     },
     {
       "type": "text",
       "id": "script_src",
       "label": "Widget script URL",
-      "default": "https://app.trayon.ai/widget/v1/widget.js",
-      "info": "Leave the default unless Tray On support gives you another URL."
+      "default": "https://go.vsio.app/widget/v1/widget.js",
+      "info": "Leave the default unless Vsio support gives you another URL."
     }
   ]
 }

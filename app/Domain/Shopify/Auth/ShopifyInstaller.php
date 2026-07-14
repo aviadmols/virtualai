@@ -153,7 +153,7 @@ final class ShopifyInstaller
     }
 
     /**
-     * Re-install of a shop we already know, arriving with NO Tray On session (the
+     * Re-install of a shop we already know, arriving with NO Vsio session (the
      * merchant re-installed from the Shopify admin). The owning account is resolved
      * pre-bind by the routing lookup, so the existing connection is re-activated in
      * place. Returns null when the shop is unknown (-> park a pending install instead).

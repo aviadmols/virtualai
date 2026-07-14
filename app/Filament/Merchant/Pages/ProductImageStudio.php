@@ -379,7 +379,7 @@ class ProductImageStudio extends Page
 
     /**
      * UNDO — restore this product's ORIGINAL images: the originals come back (from our own copy),
-     * the original order and main image are restored, and everything Tray On added is removed.
+     * the original order and main image are restored, and everything Vsio added is removed.
      * Free, and idempotent.
      */
     public function undoProductMedia(int $productId): void

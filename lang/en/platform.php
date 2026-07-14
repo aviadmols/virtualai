@@ -448,11 +448,21 @@ return [
             'domain' => 'Domain',
             'no_domain' => 'No domain set',
             'state' => 'Setup',
+            'shopify' => 'Shopify',
             'created' => 'Created',
         ],
         'state' => [
             'ready' => 'Ready',
             'pending' => 'Setup pending',
+        ],
+
+        // Shopify connection, as the platform site list sees it. "none" = never connected
+        // (a custom/scanned storefront); the rest mirror ShopifyConnection::STATUS_*.
+        'shopify' => [
+            'none' => 'Not connected',
+            'installed' => 'Connected',
+            'uninstalled' => 'Disconnected',
+            'needs_reauth' => 'Reconnect needed',
         ],
         'empty' => 'No sites yet',
         'empty_sub' => 'Merchant storefronts appear here across every account.',
@@ -498,7 +508,7 @@ return [
         'verify' => [
             'label' => 'Verify setup',
             'heading' => 'Setup status',
-            'sub' => 'What must be in place for the Tray On button to appear on this site.',
+            'sub' => 'What must be in place for the Vsio button to appear on this site.',
             'close' => 'Close',
             'check' => [
                 'openrouter' => 'OpenRouter API key',
@@ -861,16 +871,16 @@ return [
             'from_address' => 'From address',
             'from_address_placeholder' => 'noreply@example.com',
             'from_name' => 'From name',
-            'from_name_placeholder' => 'Tray On',
+            'from_name_placeholder' => 'Vsio',
             'test' => 'Send test email',
             'test_recipient' => 'Send to',
             'test_ok' => 'Test email sent',
             'test_ok_body' => 'A test message was sent to :email through the configured SMTP.',
             'test_fail' => 'Test email failed',
             'test_fail_body' => 'The SMTP transport rejected the send — open "Read the full error" below for the details.',
-            'test_mail_subject' => 'Tray On — SMTP test',
+            'test_mail_subject' => 'Vsio — SMTP test',
             'test_mail_heading' => 'Your SMTP is working',
-            'test_mail_body' => 'This is a test message from your Tray On Platform settings. If you can read this, outbound email is configured correctly.',
+            'test_mail_body' => 'This is a test message from your Vsio Platform settings. If you can read this, outbound email is configured correctly.',
             'test_mail_dir' => 'ltr',
         ],
         'payplus' => [

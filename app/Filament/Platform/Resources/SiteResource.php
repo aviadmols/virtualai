@@ -9,6 +9,7 @@ use App\Domain\Platform\PlatformSiteQuery;
 use App\Domain\Platform\PlatformSiteWriter;
 use App\Domain\Scan\ScanProductJob;
 use App\Domain\Sites\InvalidSiteSettingsException;
+use App\Domain\Sites\StoreCategory;
 use App\Domain\Sites\WidgetAppearance;
 use App\Filament\Platform\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Platform\Resources\SiteResource\Pages\EditSite;
@@ -16,11 +17,13 @@ use App\Filament\Platform\Resources\SiteResource\Pages\ListSites;
 use App\Filament\Platform\Resources\SiteResource\Pages\ManageSiteProducts;
 use App\Models\Account;
 use App\Models\Product;
+use App\Models\ShopifyConnection;
 use App\Models\Site;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -63,14 +66,32 @@ class SiteResource extends Resource
 
     // i18n label keys (platform.sites.*).
     private const LABEL_SINGULAR = 'platform.sites.singular';
+
     private const NAV_LABEL = 'platform.sites.title';
 
     // Derived setup-state tokens + their plain-badge tones (not the §5 machine).
     private const STATE_READY = 'ready';
+
     private const STATE_PENDING = 'pending';
+
+    // Shopify-connection column. SHOPIFY_NONE is OURS (no connection row at all — a custom
+    // storefront); every other token is ShopifyConnection::STATUS_* verbatim, plus the
+    // needs_reauth flag, which outranks the status because a live-but-unusable token is the
+    // state a super-admin must act on.
+    private const SHOPIFY_NONE = 'none';
+
+    private const SHOPIFY_NEEDS_REAUTH = 'needs_reauth';
+
+    private const SHOPIFY_TONES = [
+        ShopifyConnection::STATUS_INSTALLED => 'success',
+        self::SHOPIFY_NEEDS_REAUTH => 'warning',
+        ShopifyConnection::STATUS_UNINSTALLED => 'danger',
+        self::SHOPIFY_NONE => 'gray',
+    ];
 
     // The widget loader path the install snippet references (app.url + this).
     private const WIDGET_SCRIPT_PATH = '/widget/v1/widget.js';
+
     private const EMBED_MODAL_VIEW = 'filament.platform.resources.site.embed-modal';
 
     // The "is this site configured?" verify-setup checklist (modal) view.
@@ -78,9 +99,13 @@ class SiteResource extends Resource
 
     // "Open shop workspace" drill-in bridge — action name, icon, secondary tone + i18n keys.
     private const ACTION_WORKSPACE = 'workspace';
+
     private const WORKSPACE_ICON = 'heroicon-o-arrow-top-right-on-square';
+
     private const WORKSPACE_COLOR = 'gray';
+
     private const WORKSPACE_LABEL = 'platform.sites.workspace.label';
+
     private const WORKSPACE_TOOLTIP = 'platform.sites.workspace.tooltip';
 
     public static function getModelLabel(): string
@@ -125,7 +150,7 @@ class SiteResource extends Resource
             Select::make('product_category')
                 ->label(__('platform.sites.field.category'))
                 ->helperText(__('platform.sites.field.category_help'))
-                ->options(\App\Domain\Sites\StoreCategory::options())
+                ->options(StoreCategory::options())
                 ->native(false),
             TagsInput::make('allowed_origins')
                 ->label(__('platform.sites.field.origins'))
@@ -159,6 +184,14 @@ class SiteResource extends Resource
                     ->state(static fn (Site $site): string => self::setupState($site))
                     ->formatStateUsing(static fn (string $state): string => __('platform.sites.state.'.$state))
                     ->color(static fn (string $state): string => $state === self::STATE_READY ? 'success' : 'gray'),
+                TextColumn::make('shopify_state')
+                    ->label(__('platform.sites.col.shopify'))
+                    ->badge()
+                    ->state(static fn (Site $site): string => self::shopifyState($site))
+                    ->formatStateUsing(static fn (string $state): string => __('platform.sites.shopify.'.$state))
+                    ->color(static fn (string $state): string => self::SHOPIFY_TONES[$state] ?? 'gray')
+                    // The store domain is the answer to the next question a super-admin asks.
+                    ->description(static fn (Site $site): ?string => $site->getAttribute('shopify_shop_domain')),
                 TextColumn::make('created_at')
                     ->label(__('platform.sites.col.created'))
                     ->since()
@@ -199,6 +232,34 @@ class SiteResource extends Resource
             'edit' => EditSite::route('/{record}/edit'),
             'products' => ManageSiteProducts::route('/{record}/products'),
         ];
+    }
+
+    /**
+     * Is this storefront a connected Shopify store — and is the connection healthy?
+     *
+     * Reads the columns PlatformSiteQuery SELECTS (a correlated subquery inside the audited
+     * seam) — deliberately NOT the shopifyConnection relation. ShopifyConnection is
+     * BelongsToAccount, and the platform panel binds no tenant, so any lazy read of that
+     * relation here resolves to null and this column would quietly report "Not connected"
+     * for stores that ARE connected. A silent lie is worse than an error. Pinned by a test.
+     *
+     * needs_reauth OUTRANKS the status: a connection can be `installed` and still hold a
+     * token Shopify has revoked (401 -> needs_reauth). It reads as connected, it syncs
+     * nothing, and that is exactly the state a super-admin needs shown.
+     */
+    private static function shopifyState(Site $site): string
+    {
+        $status = $site->getAttribute('shopify_status');
+
+        if ($status === null) {
+            return self::SHOPIFY_NONE;
+        }
+
+        if ((bool) $site->getAttribute('shopify_needs_reauth')) {
+            return self::SHOPIFY_NEEDS_REAUTH;
+        }
+
+        return (string) $status;
     }
 
     /**
@@ -378,7 +439,7 @@ class SiteResource extends Resource
     }
 
     /**
-     * "Widget appearance" — set WHERE the Tray On button shows on the store + its look
+     * "Widget appearance" — set WHERE the Vsio button shows on the store + its look
      * (placement, label, colours, popup theme/accent) for any site, cross-account. The
      * write goes through the audited PlatformSiteWriter (binds the site's account via
      * Tenant::run); values are validated by WidgetAppearance::sanitize. The storefront
@@ -427,7 +488,7 @@ class SiteResource extends Resource
                 ColorPicker::make(WidgetAppearance::KEY_POPUP_ACCENT)
                     ->label(__('appearance.popup.accent'))
                     ->required(),
-                \Filament\Forms\Components\Toggle::make(WidgetAppearance::KEY_ASK_HEIGHT)
+                Toggle::make(WidgetAppearance::KEY_ASK_HEIGHT)
                     ->label(__('appearance.popup.ask_height'))
                     ->helperText(__('appearance.popup.ask_height_help')),
             ])
@@ -441,7 +502,7 @@ class SiteResource extends Resource
                         ->success()
                         ->title(__('appearance.saved'))
                         ->send();
-                } catch (InvalidSiteSettingsException | \Throwable $e) {
+                } catch (InvalidSiteSettingsException|\Throwable $e) {
                     // A bad appearance value (or any failure) is a soft, user-facing notice —
                     // never a 500. Mirrors the merchant WidgetAppearanceSettings::save() guard.
                     Notification::make()

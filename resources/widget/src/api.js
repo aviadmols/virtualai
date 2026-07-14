@@ -103,6 +103,28 @@ export function getGeneration(id, anonToken) {
   });
 }
 
+/**
+ * GET /generations/{id}/image — the result BYTES, same-origin, tenant + shopper scoped.
+ *
+ * navigator.share({files}) needs the bytes, not an <img> src, and a signed media URL on a
+ * different origin cannot be read as a Blob from a storefront. This endpoint lives inside the
+ * same ResolveWidgetSite group, so it inherits the site_key + Origin allow-list and the per-origin
+ * CORS that makes fetch -> Blob -> File work. Any refusal (wrong shopper, wrong site, not
+ * succeeded) is a flat 404 — we simply get null back and Share degrades to its fallback.
+ */
+export async function getGenerationImageBlob(id, anonToken) {
+  try {
+    const response = await fetch(
+      url(ENDPOINTS.generationImage(id), { [QUERY_ANON_TOKEN]: anonToken }),
+      { method: 'GET', headers: headers(), credentials: 'omit', mode: 'cors' },
+    );
+    if (!response.ok) return null;
+    return await response.blob();
+  } catch {
+    return null; // network / CORS — the caller falls back, never throws into the host page
+  }
+}
+
 /** GET /gallery — this shopper's past succeeded try-ons (signed result URLs), newest first. */
 export function getGallery(anonToken, limit) {
   return request('GET', ENDPOINTS.gallery, {

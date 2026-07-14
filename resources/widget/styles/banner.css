@@ -1,0 +1,60 @@
+/*
+  Vsio storefront widget — the MERCHANT BANNER sheet (ships with the club chunk).
+
+  A merchant banner is injected at a merchant-picked host spot inside its OWN shadow root, so it
+  gets the core token block (shell.getCoreCss()) plus these structural rules. It declares no
+  token. The <img> reserves its box via width/height (CLS-safe); the overlay variant lays crisp
+  HTML text over the image with a scrim for legibility, and mirrors in RTL via logical properties.
+*/
+
+.ton-banner {
+  display: block;
+  position: relative;
+  inline-size: 100%;
+  overflow: hidden;
+  border-radius: var(--ton-radius-image);
+  text-decoration: none;
+  color: inherit;
+}
+
+.ton-banner__img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  object-fit: cover;
+}
+
+.ton-banner__overlay {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ton-space-1);
+  padding: var(--ton-space-4) var(--ton-space-5);
+  text-align: start;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0));
+  color: var(--ton-scrim-text);
+}
+
+.ton-banner__headline {
+  font-size: var(--ton-fs-title);
+  font-weight: var(--ton-fw-semibold);
+  line-height: 1.12;
+}
+
+.ton-banner__subtext {
+  font-size: var(--ton-fs-body);
+  font-weight: var(--ton-fw-light);
+}
+
+.ton-banner__cta {
+  margin-block-start: var(--ton-space-1);
+  padding: var(--ton-space-2) var(--ton-space-4);
+  border-radius: var(--ton-radius-control);
+  background: var(--ton-gradient);
+  color: var(--ton-surface);
+  font-size: var(--ton-fs-body);
+  font-weight: var(--ton-fw-medium);
+}

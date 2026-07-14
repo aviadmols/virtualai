@@ -1,0 +1,86 @@
+<!doctype html>
+<!--
+  Mock SHOPIFY product page for the Tray On widget harness.
+
+  The difference that matters: the <script> tag carries the attributes the Theme App Extension
+  stamps (data-platform / data-product-id / data-product-handle / data-variant-id), and a stand-in
+  for trayon-shopify-context.js keeps data-variant-id truthful and dispatches `trayon:variant-change`
+  when the shopper switches variant — exactly as the real extension does on a live theme.
+
+  The harness intercepts /cart/add.js + /cart.js by route, so the Ajax cart is real from the
+  widget's point of view and we can prove the line actually landed.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aviad Linen Tee — Mock Shopify Store</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Georgia, serif; color: rebeccapurple; background: #fafafa; }
+      /* The same hostile rule as the scanned mock: isolation must hold here too. */
+      .ton-button { background: lime !important; color: red !important; font-size: 40px !important; }
+      button { background: orange; color: white; border: 3px dashed green; padding: 14px 22px; }
+      .product { max-width: 720px; margin: 40px auto; padding: 0 20px; }
+      .product__media { width: 100%; max-width: 360px; }
+      .product__image { width: 100%; height: auto; display: block; background: #ddd; }
+      label { display: block; margin: 16px 0 6px; }
+    </style>
+  </head>
+  <body>
+    <main class="product">
+      <h1 class="product__title">Aviad Linen Tee</h1>
+
+      <!-- A positionable media wrapper: the on-image trigger anchors inside it. -->
+      <div class="product__media">
+        <img
+          class="product__image"
+          src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='480'><rect width='100%25' height='100%25' fill='%23cccccc'/><text x='50%25' y='50%25' font-size='20' text-anchor='middle' fill='%23555'>Product</text></svg>"
+          alt="Aviad Linen Tee"
+          width="360"
+          height="480"
+        />
+      </div>
+
+      <p class="product__price">$89.00</p>
+
+      <form action="/cart/add" method="post">
+        <label for="variant">Size</label>
+        <select id="variant" name="id">
+          <option value="1111111111">S</option>
+          <option value="2222222222" selected>M</option>
+        </select>
+
+        <button id="add-to-cart" type="button" onclick="window.__hostCartClicks=(window.__hostCartClicks||0)+1;">
+          Add to cart
+        </button>
+      </form>
+    </main>
+
+    <!-- The embed snippet exactly as the Theme App Extension renders it. -->
+    <script
+      src="/widget/v1/widget.js"
+      data-site-key="pk_test_mock"
+      data-platform="shopify"
+      data-product-id="900001"
+      data-product-handle="aviad-linen-tee"
+      data-variant-id="2222222222"
+      async
+    ></script>
+
+    <!-- Stand-in for shopify/extensions/trayon-widget/assets/trayon-shopify-context.js -->
+    <script>
+      (function () {
+        var tag = document.querySelector('script[data-site-key]');
+        var select = document.getElementById('variant');
+        select.addEventListener('change', function () {
+          tag.setAttribute('data-variant-id', select.value);
+          document.dispatchEvent(
+            new CustomEvent('trayon:variant-change', { detail: { variantId: select.value } }),
+          );
+        });
+      })();
+    </script>
+  </body>
+</html>

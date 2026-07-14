@@ -31,6 +31,30 @@ export function el(tag, opts = {}, children = []) {
   return node;
 }
 
+/**
+ * Write layout properties onto a node we do NOT own (the host-DOM button wrapper, the product-
+ * image container). This is the only place the widget touches a host node's style, it is done
+ * with setProperty from a CONST map (never an inline style attribute in markup), and every write
+ * is reverted on teardown. Returns the previous values so the caller can restore them.
+ */
+export function setStyles(node, styles) {
+  const previous = {};
+  for (const [name, value] of Object.entries(styles)) {
+    previous[name] = node.style.getPropertyValue(name);
+    node.style.setProperty(name, value);
+  }
+  return previous;
+}
+
+/** Restore what setStyles() overwrote (an empty previous value removes the property). */
+export function restoreStyles(node, previous) {
+  if (!node || !previous) return;
+  for (const [name, value] of Object.entries(previous)) {
+    if (value) node.style.setProperty(name, value);
+    else node.style.removeProperty(name);
+  }
+}
+
 /** A debounced wrapper (trailing-edge). Used for the MutationObserver callback. */
 export function debounce(fn, wait) {
   let timer = null;

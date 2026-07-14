@@ -30,7 +30,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
- * Per-site widget appearance — where the Tray On button sits, its text + colours, and the try-on
+ * Per-site widget appearance — where the Vsio button sits, its text + colours, and the try-on
  * popup's theme + accent. Binds 1:1 to SiteSettingsService::update() (the single validated writer)
  * which routes the appearance through WidgetAppearance::sanitize before persisting the one
  * whitelisted column; the storefront widget reads the resolved values from the bootstrap API.

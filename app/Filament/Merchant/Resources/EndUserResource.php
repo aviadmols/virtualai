@@ -17,7 +17,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * M5 / M6 — Leads ("Tray On users") list + lead card (A6 / A7).
+ * M5 / M6 — Leads ("Vsio users") list + lead card (A6 / A7).
  *
  * Tenant-safety: EndUser is BelongsToAccount and the merchant panel is bound to
  * the owner's account, so the list is ALREADY account-scoped — no manual

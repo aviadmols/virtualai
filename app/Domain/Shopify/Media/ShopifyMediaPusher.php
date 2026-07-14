@@ -42,6 +42,9 @@ use RuntimeException;
  *      replace  -> reorder the new media into the replaced image's slot, and ONLY THEN delete the
  *                  replaced media. NEVER delete before the replacement is confirmed READY: at
  *                  every intermediate state the gallery holds a valid, displayable image.
+ *                  And the bytes are RE-PROVED as the last statement before the delete — the
+ *                  gate in step 1 is a minute old by then, and a minute is enough for a bucket
+ *                  lifecycle rule to make it a lie (deleteReplaced).
  *
  * A push is FREE. It reserves nothing, charges nothing and writes no ledger row: the AI already
  * ran and was paid for when the asset succeeded. Nothing in this class may ever touch credits.
@@ -102,6 +105,7 @@ final class ShopifyMediaPusher
     {
         $connection = $this->connection($site);
         $productGid = $this->productGid($product);
+        $snapshot = null;
 
         // --- 1. THE SNAPSHOT GATE. A destructive push without a RESTORABLE original is refused. ---
         if ($placement->isDestructive()) {
@@ -125,8 +129,10 @@ final class ShopifyMediaPusher
         // --- 3. THE READY GATE. Nothing below this line may run on an unprocessed media. ---
         $this->awaitReady($asset, $connection, $productGid, $mediaId);
 
-        // --- 4. PLACEMENT ---
-        $this->place($connection, $productGid, $mediaId, $placement);
+        // --- 4. PLACEMENT. The snapshot travels WITH it: the proof taken in step 1 is a MINUTE
+        //        old by now (a staged upload + a create + a 20 x 3s poll), and the delete is the
+        //        one irreversible act in the system. It is re-proved down there, not up here. ---
+        $this->place($connection, $productGid, $mediaId, $placement, $snapshot);
 
         return $mediaId;
     }
@@ -147,10 +153,16 @@ final class ShopifyMediaPusher
      * resumes; it does not re-upload the same original again and leave the merchant a gallery that
      * grows a DUPLICATE on every retry.
      *
-     * @param  array<int,ProductAsset>  $pushed  the assets this product pushed (their media go)
+     * WHAT LEAVES THE STORE IS DECIDED BY THE MINT LEDGER, NOT BY AN ASSET'S POINTER. $ourMediaIds
+     * comes from shopify_media_mints — append-only, never nulled — so an ORPHAN (a media minted by
+     * a push that later cleared or overwrote its own shopify_media_id: a Shopify-FAILED media, a
+     * reclaimed worker, an undone push) is still taken back out of the merchant's live storefront.
+     * The asset column forgets; the mint ledger does not.
+     *
+     * @param  array<int,string>  $ourMediaIds  every media we EVER minted on this product
      * @return array<int,string> the media ids removed from the store
      */
-    public function restore(ShopifyMediaSnapshot $snapshot, Product $product, Site $site, array $pushed): array
+    public function restore(ShopifyMediaSnapshot $snapshot, Product $product, Site $site, array $ourMediaIds): array
     {
         $connection = $this->connection($site);
         $productGid = $this->productGid($product);
@@ -190,17 +202,20 @@ final class ShopifyMediaPusher
         // (b) Original ORDER (and so the original featured image) is back.
         $this->client->reorder($connection, $productGid, $order);
 
-        // (c) Only NOW may the images we added leave the gallery. Their bytes are still ours
-        //     (product_assets.image_path), so this destroys nothing unrecoverable.
-        $ours = [];
+        // (c) Only NOW may the images we added leave the gallery — EVERY media we ever minted that
+        //     is still live, not merely the last one an asset row happens to remember. Their bytes
+        //     are still ours (product_assets.image_path), so this destroys nothing unrecoverable.
+        $ours = array_values(array_filter(
+            array_unique($ourMediaIds),
+            static fn (string $id): bool => isset($live[$id]),
+        ));
 
-        foreach ($pushed as $asset) {
-            if ($asset->hasShopifyMedia() && isset($live[(string) $asset->shopify_media_id])) {
-                $ours[] = (string) $asset->shopify_media_id;
-            }
-        }
+        $confirmed = $this->client->deleteMedia($connection, $productGid, $ours);
 
-        return $this->client->deleteMedia($connection, $productGid, $ours);
+        // A delete Shopify REPORTED but did not PERFORM would leave our image live and unlinked.
+        $this->assertDeleted($ours, $confirmed);
+
+        return $confirmed;
     }
 
     /** The product's CURRENT gallery — what the placement chooser shows the merchant. */
@@ -245,7 +260,7 @@ final class ShopifyMediaPusher
     }
 
     /** Apply the merchant's placement to a media that is already live and READY. */
-    private function place(ShopifyConnection $connection, string $productGid, string $mediaId, MediaPlacement $placement): void
+    private function place(ShopifyConnection $connection, string $productGid, string $mediaId, MediaPlacement $placement, ?ShopifyMediaSnapshot $snapshot): void
     {
         if ($placement->isPositioned()) {
             $this->client->reorder($connection, $productGid, [$mediaId => (int) $placement->position]);
@@ -268,7 +283,53 @@ final class ShopifyMediaPusher
         // holds both images and is perfectly valid; the reverse order would blank the slot.
         $this->client->reorder($connection, $productGid, [$mediaId => $target->position]);
 
-        $this->client->deleteMedia($connection, $productGid, [$replaced]);
+        $this->deleteReplaced($connection, $productGid, $replaced, $snapshot);
+    }
+
+    /**
+     * THE ONLY IRREVERSIBLE CALL IN THE SYSTEM — and the last thing that happens before it is the
+     * proof that it can be undone.
+     *
+     * RE-PROVE REVERSIBILITY IMMEDIATELY BEFORE AN IRREVERSIBLE ACT, NOT AT THE TOP OF THE
+     * FUNCTION. push() proves the bytes at :106 — and then a staged upload, a productCreateMedia
+     * and a READY poll (up to 20 x 3s) run. A minute is a long time for a bucket lifecycle rule, a
+     * bad purge or a racing cleanup: the objects the gate approved could be gone by the time we get
+     * here, and the delete would still run — the original gone from Shopify AND from us. So the
+     * bytes are read back off the disk again, as the LAST statement before the delete.
+     *
+     * A refusal here is a normal push failure: our media is live at the replaced slot, the ORIGINAL
+     * IS STILL IN THE STORE, and nothing is lost. Undo takes our image back out (via the mint
+     * ledger). The refusal is recoverable; the delete would not have been.
+     */
+    private function deleteReplaced(ShopifyConnection $connection, string $productGid, string $replaced, ?ShopifyMediaSnapshot $snapshot): void
+    {
+        if (! $snapshot instanceof ShopifyMediaSnapshot) {
+            throw MediaSnapshotException::notRestorable($replaced); // unreachable: a replace is destructive
+        }
+
+        $this->assertMediaRestorable($snapshot, $replaced);
+
+        $confirmed = $this->client->deleteMedia($connection, $productGid, [$replaced]);
+
+        $this->assertDeleted([$replaced], $confirmed);
+    }
+
+    /**
+     * Shopify said it deleted them — did it? productDeleteMedia answers with `deletedMediaIds`, and
+     * an id we asked for that is NOT in that list was NOT deleted. Trusting the CALL instead of the
+     * ANSWER let a still-live image be treated as gone: the asset's link was cleared, the mint was
+     * forgotten by the row, and our AI image stayed on the storefront with nothing pointing at it.
+     *
+     * @param  array<int,string>  $requested
+     * @param  array<int,string>  $confirmed
+     */
+    private function assertDeleted(array $requested, array $confirmed): void
+    {
+        $missing = array_values(array_diff($requested, $confirmed));
+
+        if ($missing !== []) {
+            throw ShopifyMediaException::deleteNotConfirmed($missing);
+        }
     }
 
     /**
@@ -368,11 +429,18 @@ final class ShopifyMediaPusher
      *   - recorded with no path (a video, a 3D model) -> refuse;
      *   - recorded with a path we cannot read back -> refuse.
      * The delete is irreversible; the refusal is not.
+     *
+     * AN ORIGINAL THAT WAS UNDONE IS STILL AN ORIGINAL. After a restore it lives in the store under
+     * a NEW media id (Shopify mints a new object for the re-uploaded bytes), which the snapshot
+     * records as `restored_media_id`. Matching only the ORIGINAL id refused every later replace on
+     * that product with "it was never backed up" — which was a lie: we hold its bytes, which is why
+     * we just put them back. Either id identifies the same original, and the same bytes answer for
+     * both.
      */
     private function assertMediaRestorable(ShopifyMediaSnapshot $snapshot, string $mediaId): void
     {
         foreach ($snapshot->entries() as $entry) {
-            if ((string) ($entry[ShopifyMediaSnapshot::ENTRY_MEDIA_ID] ?? '') !== $mediaId) {
+            if (! $this->entryIs($entry, $mediaId)) {
                 continue;
             }
 
@@ -386,6 +454,18 @@ final class ShopifyMediaPusher
         }
 
         throw MediaSnapshotException::notRestorable($mediaId);
+    }
+
+    /**
+     * Does this snapshot entry describe that media — under its ORIGINAL id, or under the id a
+     * restore re-uploaded it as?
+     *
+     * @param  array<string,mixed>  $entry
+     */
+    private function entryIs(array $entry, string $mediaId): bool
+    {
+        return (string) ($entry[ShopifyMediaSnapshot::ENTRY_MEDIA_ID] ?? '') === $mediaId
+            || (string) ($entry[ShopifyMediaSnapshot::ENTRY_RESTORED_MEDIA_ID] ?? '') === $mediaId;
     }
 
     /**
