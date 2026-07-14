@@ -79,10 +79,32 @@ final class KlingCatalog
         'kling-3.0-turbo',
     ];
 
+    // Kling hard-caps prompt AND negative_prompt at 2500 chars — one char over is an
+    // HTTP 400 / code 1201 ("prompt: size must be between 0 and 2500") and the task never
+    // submits. An admin-edited template joined with real product facts can legitimately
+    // overflow, so the boundary clamps instead of letting a paying generation die.
+    public const PROMPT_MAX_CHARS = 2500;
+
     /** True when this model id runs on the dedicated virtual-try-on endpoint. */
     public static function isTryOn(string $modelId): bool
     {
         return str_starts_with(trim($modelId), self::TRY_ON_PREFIX);
+    }
+
+    /** A prompt Kling accepts: over-limit text is cut at the last word inside the cap. */
+    public static function clampPrompt(string $prompt): string
+    {
+        if (mb_strlen($prompt) <= self::PROMPT_MAX_CHARS) {
+            return $prompt;
+        }
+
+        $cut = mb_substr($prompt, 0, self::PROMPT_MAX_CHARS);
+        $space = mb_strrpos($cut, ' ');
+
+        // Cut on the last word boundary unless that loses a big tail of the budget.
+        return rtrim($space !== false && $space > self::PROMPT_MAX_CHARS - 200
+            ? mb_substr($cut, 0, $space)
+            : $cut);
     }
 
     /** The IMAGE endpoint a model id submits to (try-on models have their own path). */

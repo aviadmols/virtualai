@@ -265,7 +265,8 @@ final class KlingVideoClient implements VideoGenerationProvider
     {
         $body = [
             self::FIELD_MODEL_NAME => $model,
-            self::FIELD_PROMPT => $prompt,
+            // Kling rejects a prompt over its hard cap (400 / code 1201) — clamp.
+            self::FIELD_PROMPT => KlingCatalog::clampPrompt($prompt),
         ];
 
         if ($frame !== null) {

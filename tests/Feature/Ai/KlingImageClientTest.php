@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Ai;
 
+use App\Domain\Ai\KlingCatalog;
 use App\Domain\Ai\KlingImageClient;
 use App\Domain\Ai\OpenRouterException;
 use App\Domain\Ai\ParsedCost;
@@ -354,5 +355,37 @@ class KlingImageClientTest extends TestCase
 
         $this->assertTrue($result['ok']);
         $this->assertStringContainsString('no model catalog', $result['message']);
+    }
+
+    public function test_an_over_limit_prompt_is_clamped_before_submit(): void
+    {
+        // Kling 400s (code 1201) on a prompt over 2500 chars. A template joined with real
+        // product facts can overflow — the submit must clamp, not die.
+        Http::fake([
+            self::QUERY_IMAGE => Http::response($this->succeededTask(), 200),
+            self::SUBMIT_IMAGE => Http::response($this->task('submitted'), 200),
+            self::RESULT_URL => Http::response('PNG', 200, ['Content-Type' => 'image/png']),
+        ]);
+
+        $longPrompt = trim(str_repeat('studio packshot on seamless white ', 200)); // ~6800 chars
+
+        $this->client()->callWithFallback('op', self::IMAGE_MODEL, null, fn (string $m): array => [
+            KlingImageClient::KEY_MODEL => $m,
+            KlingImageClient::KEY_PROMPT => $longPrompt,
+        ]);
+
+        Http::assertSent(function ($request): bool {
+            if ($request->url() !== self::SUBMIT_IMAGE) {
+                return false;
+            }
+
+            $prompt = (string) ($request->data()['prompt'] ?? '');
+
+            // Clamped inside the cap, cut on a word boundary, content preserved from the start.
+            return mb_strlen($prompt) <= KlingCatalog::PROMPT_MAX_CHARS
+                && mb_strlen($prompt) > KlingCatalog::PROMPT_MAX_CHARS - 200
+                && ! str_ends_with($prompt, ' ')
+                && str_starts_with($prompt, 'studio packshot');
+        });
     }
 }

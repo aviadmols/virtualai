@@ -51,6 +51,8 @@ final class KlingImageClient implements ImageGenerationProvider
     // Kling's own request fields.
     private const FIELD_MODEL_NAME = 'model_name';
 
+    private const FIELD_NEGATIVE_PROMPT = 'negative_prompt';
+
     private const FIELD_IMAGE = 'image';
 
     private const FIELD_HUMAN_IMAGE = 'human_image';
@@ -156,6 +158,13 @@ final class KlingImageClient implements ImageGenerationProvider
         unset($body[self::KEY_MODEL], $body[self::KEY_IMAGE_URLS]);
 
         $body[self::FIELD_MODEL_NAME] = $model;
+
+        // Kling rejects a prompt/negative_prompt over its hard cap (400 / code 1201) — clamp.
+        foreach ([self::KEY_PROMPT, self::FIELD_NEGATIVE_PROMPT] as $field) {
+            if (is_string($body[$field] ?? null)) {
+                $body[$field] = KlingCatalog::clampPrompt($body[$field]);
+            }
+        }
 
         if (KlingCatalog::isTryOn($model)) {
             // The dedicated try-on endpoint takes the two images and NO prompt.
