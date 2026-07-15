@@ -27,7 +27,7 @@ import {
 } from '../constants.js';
 import { el, warn } from '../dom.js';
 import { prepare, ImageError } from '../image.js';
-import { state, newIntent, panel, shell, button, hud, pending, gen, t, tries } from './bridge.js';
+import { state, newIntent, panel, button, hud, pending, gen, t, tries } from './bridge.js';
 import { ICON_UPLOAD, ICON_SAVE, ICON_SAVED, ICON_SHARE, ICON_REGEN } from './icons.js';
 import * as cart from './cart.js';
 import { share, SHARE_OUTCOME } from './share.js';
@@ -73,7 +73,7 @@ export function open() {
 }
 
 export function close() {
-  shell.clearOverlay();
+  panel.dismiss();
   isOpen = false;
   activeThumb = null;
 

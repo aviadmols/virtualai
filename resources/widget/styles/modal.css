@@ -51,7 +51,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--ton-space-3);
-  margin-block-end: var(--ton-space-6);
+  margin-block-end: var(--ton-space-brand);
 }
 
 .ton-modal__title {
@@ -92,7 +92,7 @@
   width: 100%;
   aspect-ratio: var(--ton-preview-ratio);
   max-height: var(--ton-preview-max-h);
-  margin-block-end: var(--ton-space-6);
+  margin-block-end: var(--ton-space-preview);
   border-radius: var(--ton-radius-image);
   background: var(--ton-glass-preview);
   overflow: hidden;
@@ -102,8 +102,15 @@
    preview shrinks below its preferred aspect height (the image letterboxes) so the strip,
    the consent and the actions stay on screen with NO scrolling. min-height keeps it usable. */
 .ton-modal .ton-preview {
+  flex: 1 1 auto;
   flex-shrink: 1;
-  min-height: 140px;
+  min-height: 100px;
+}
+
+/* Preview that IS the modal body (loading / early skeleton swap) must also flex-shrink. */
+.ton-modal > .ton-preview.ton-modal__body {
+  flex: 1 1 auto;
+  min-height: 100px;
 }
 
 /* ---- Empty state: the dropzone IS the invitation (there is no separate empty panel) ---- */
@@ -349,14 +356,14 @@
 
 /* ---- Thumb strip + Upload tile --------------------------------------------------------- */
 .ton-gallery {
-  margin-block-end: var(--ton-space-6);
+  margin-block-end: var(--ton-space-gallery);
 }
 
 .ton-gallery__strip {
   display: flex;
   gap: var(--ton-space-3);
   overflow-x: auto;
-  padding-block-end: var(--ton-space-4);
+  padding: var(--ton-strip-pad) var(--ton-strip-pad) var(--ton-space-4) var(--ton-strip-pad);
   scrollbar-width: none;
 }
 
@@ -551,7 +558,7 @@
 .ton-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--ton-space-4);
+  gap: var(--ton-space-actions);
 }
 
 .ton-action {
@@ -589,7 +596,7 @@
 
 .ton-action--primary {
   grid-column: 1 / -1;
-  margin-block-start: var(--ton-space-1);
+  margin-block-start: var(--ton-space-cta-top);
   padding: var(--ton-space-5);
   background: var(--ton-gradient);
   color: var(--ton-surface);

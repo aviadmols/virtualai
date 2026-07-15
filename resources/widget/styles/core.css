@@ -119,6 +119,15 @@
   --ton-icon-sm: 18px;
   --ton-icon-lg: 24px;
 
+  /* Exact reference spacings (vyra-dash) — not on the 4px scale on purpose. */
+  --ton-space-brand: 25px;
+  --ton-space-preview: 25px;
+  --ton-space-gallery: 30px;
+  --ton-space-actions: 15px;
+  --ton-space-cta-top: 5px;
+  --ton-strip-pad: 4px;
+  --ton-close-ms: 250ms;
+
   /* ---- Motion ---- */
   --ton-t-fast: 0.15s ease;
   --ton-t: 0.2s ease;
@@ -453,6 +462,18 @@
   background: var(--ton-overlay);
   z-index: var(--ton-z);
   animation: ton-fade var(--ton-t-overlay);
+  transition: opacity var(--ton-t-overlay);
+}
+
+.ton-overlay--closing {
+  opacity: 0;
+}
+
+.ton-overlay--closing .ton-modal {
+  animation: none;
+  transform: translateY(20px) scale(0.98);
+  opacity: 0;
+  transition: transform var(--ton-t-modal), opacity var(--ton-t-overlay);
 }
 
 .ton-modal {
@@ -496,6 +517,19 @@
   flex-shrink: 0;
 }
 
+/* The body column: grows into leftover height and lets .ton-preview shrink inside it.
+   Without this (a bare wrapper div) flex-shrink on the preview never fires. */
+.ton-modal__body {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+.ton-modal__body > * {
+  flex-shrink: 0;
+}
+
 .ton-modal__close {
   position: absolute;
   inset-block-start: var(--ton-space-5);
@@ -527,7 +561,7 @@
 
 /* ---- Brand header (wordmark + product title with its last word gradient-filled) ------ */
 .ton-brand {
-  margin-block-end: var(--ton-space-6);
+  margin-block-end: var(--ton-space-brand);
   text-align: center;
 }
 
@@ -656,5 +690,15 @@
   .ton-modal,
   .ton-notification {
     animation: ton-fade var(--ton-t-overlay);
+  }
+
+  .ton-overlay,
+  .ton-overlay--closing,
+  .ton-overlay--closing .ton-modal {
+    transition: none;
+  }
+
+  .ton-overlay--closing .ton-modal {
+    transform: none;
   }
 }

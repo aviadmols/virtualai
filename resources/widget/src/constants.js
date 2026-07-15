@@ -76,6 +76,8 @@ export const KERNEL_KEY = '__k';
 // past it we open the skeleton shell; past 8 s (or on a fetch error) we surface a retryable HUD.
 export const CHUNK_SHELL_DELAY_MS = 250;
 export const CHUNK_TIMEOUT_MS = 8000;
+// Modal close fade — matches the reference overlay transition (0.25s).
+export const OVERLAY_CLOSE_MS = 250;
 
 // Cross-page / cross-tab "your look is ready" persistence. When a generation is created we
 // persist ONLY handles (generationId, anonToken, productId, startedAt) under a SITE-SCOPED key

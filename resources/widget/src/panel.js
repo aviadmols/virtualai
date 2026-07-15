@@ -5,11 +5,14 @@
 // exact builders through the kernel, so the box the shopper sees at t=250ms is the very same box
 // the real content lands in: no second modal, no flash, no re-layout.
 
+import { OVERLAY_CLOSE_MS } from './constants.js';
 import { state } from './state.js';
 import { t } from './i18n.js';
 import { el } from './dom.js';
 import { getOverlayMount, clearOverlay } from './shell.js';
 import { ICON_SPARKLE, ICON_CLOSE } from './icons.js';
+
+let closingTimer = null;
 
 /**
  * The brand header: the wordmark + the product title with its LAST whitespace-delimited token
@@ -40,6 +43,10 @@ export function brandHeader() {
 
 /** The glass box: close (top-inline-end), an optional chip (top-inline-start), the brand header. */
 export function panel(body, { onClose, chip, skeleton } = {}) {
+  // The body is the ONE flex-growing column inside the modal. Without this class the preview
+  // cannot shrink and Add to Cart scrolls off-screen on short viewports.
+  if (body && body.classList) body.classList.add('ton-modal__body');
+
   return el(
     'div',
     {
@@ -60,8 +67,15 @@ export function panel(body, { onClose, chip, skeleton } = {}) {
   );
 }
 
+function cancelClosing() {
+  if (closingTimer == null) return;
+  clearTimeout(closingTimer);
+  closingTimer = null;
+}
+
 /** Mount a panel in the shared overlay. Replaces whatever was there (skeleton or prior screen). */
 export function mount(panelEl, onClose) {
+  cancelClosing();
   clearOverlay();
   const overlay = el(
     'div',
@@ -78,4 +92,33 @@ export function mount(panelEl, onClose) {
   const host = getOverlayMount();
   if (host) host.appendChild(overlay);
   return overlay;
+}
+
+/**
+ * Fade the overlay out (reference: 250ms), then remove it. Instant under prefers-reduced-motion.
+ * A subsequent mount() cancels a pending close so screen swaps stay snappy.
+ */
+export function dismiss() {
+  cancelClosing();
+
+  const host = getOverlayMount();
+  const overlay = host && host.querySelector('.ton-overlay');
+  if (!overlay) {
+    clearOverlay();
+    return;
+  }
+
+  const reduce =
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (reduce) {
+    clearOverlay();
+    return;
+  }
+
+  overlay.classList.add('ton-overlay--closing');
+  closingTimer = setTimeout(() => {
+    closingTimer = null;
+    clearOverlay();
+  }, OVERLAY_CLOSE_MS);
 }
