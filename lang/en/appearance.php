@@ -23,7 +23,9 @@ return [
         'theme' => 'Theme',
         'accent' => 'Accent colour',
         'ask_height' => 'Ask for the shopper’s height',
-        'ask_height_help' => 'Turn off for jewelry, furniture or anything where height is irrelevant. On for clothing and footwear.',
+        'ask_height_help' => 'Off by default. Turn on for clothing and footwear when height improves the try-on.',
+        'ask_consent' => 'Show photo-consent checkbox',
+        'ask_consent_help' => 'Off by default. When off, generating a look still records consent from the act of uploading. Turn on to require an explicit checkbox.',
     ],
     'placement' => [
         'section' => 'Button placement',

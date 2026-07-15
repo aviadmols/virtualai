@@ -117,6 +117,7 @@ export const APPEARANCE = {
   popupTheme: 'popup_theme',
   popupAccent: 'popup_accent',
   askHeight: 'ask_height',
+  askConsent: 'ask_consent',
   customAnchor: 'custom_anchor_selector',
   customPosition: 'custom_position',
 };

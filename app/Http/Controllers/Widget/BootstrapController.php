@@ -69,7 +69,7 @@ final class BootstrapController
                 'privacy' => $site->privacy_config ?? [],
                 'free_generations_before_signup' => $site->free_generations_before_signup,
                 // Resolved with defaults so the widget always gets a complete, valid look.
-                // The ask_height default follows the shop's store type (product_category).
+                // Height + consent checkboxes default OFF; merchants opt in from appearance.
                 'appearance' => WidgetAppearance::resolve($site->widget_appearance, $site->product_category),
             ],
             'lead' => [

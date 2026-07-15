@@ -181,6 +181,10 @@ class WidgetAppearanceSettings extends Page implements HasForms
                             ->label(__('appearance.popup.ask_height'))
                             ->helperText(__('appearance.popup.ask_height_help'))
                             ->columnSpanFull(),
+                        Toggle::make(WidgetAppearance::KEY_ASK_CONSENT)
+                            ->label(__('appearance.popup.ask_consent'))
+                            ->helperText(__('appearance.popup.ask_consent_help'))
+                            ->columnSpanFull(),
                     ]),
             ])
             ->statePath('data');

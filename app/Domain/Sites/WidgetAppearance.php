@@ -24,9 +24,12 @@ final class WidgetAppearance
     public const KEY_BUTTON_TEXT = 'button_text_color';
     public const KEY_POPUP_THEME = 'popup_theme';
     public const KEY_POPUP_ACCENT = 'popup_accent';
-    // Whether the popup asks the shopper for their height (cm). Off for jewelry / furniture
-    // / eyewear where height is irrelevant; on for clothing / footwear.
+    // Whether the popup asks the shopper for their height (cm). Off by default; merchants
+    // opt in from Widget Appearance (useful for clothing / footwear).
     public const KEY_ASK_HEIGHT = 'ask_height';
+    // Whether the popup shows an explicit use-my-photo checkbox. Off by default; when off
+    // the widget still sends consent=true on generate (the act of uploading + generating).
+    public const KEY_ASK_CONSENT = 'ask_consent';
 
     // Button placement relative to the store's add-to-cart (or a fixed screen corner), plus
     // CUSTOM — a merchant-picked host anchor (visual placement picker). The legacy enum values
@@ -79,9 +82,8 @@ final class WidgetAppearance
 
     private const HEX_PATTERN = '/^#[0-9a-fA-F]{6}$/';
 
-    // The locked defaults — a brand-neutral monochrome button + light popup. The
-    // ask_height default here (true) is the general fallback; defaultsForCategory()
-    // overrides it per store type (jewelry/furniture/eyewear ask no height).
+    // The locked defaults — a brand-neutral monochrome button + light popup.
+    // Height and the photo-consent checkbox are OFF until the merchant opts in.
     public const DEFAULTS = [
         self::KEY_PLACEMENT => self::PLACEMENT_AFTER_ATC,
         self::KEY_LABEL => 'Try it on',
@@ -89,38 +91,33 @@ final class WidgetAppearance
         self::KEY_BUTTON_TEXT => '#ffffff',
         self::KEY_POPUP_THEME => self::THEME_LIGHT,
         self::KEY_POPUP_ACCENT => '#111111',
-        self::KEY_ASK_HEIGHT => true,
+        self::KEY_ASK_HEIGHT => false,
+        self::KEY_ASK_CONSENT => false,
         self::KEY_CUSTOM_ANCHOR => '',
         self::KEY_CUSTOM_POSITION => self::POSITION_AFTER,
     ];
 
-    /** The complete default appearance, with ask_height following the store category. */
+    /** The complete default appearance (category no longer flips ask_height). */
     public static function defaults(?string $category = null): array
     {
         return self::defaultsForCategory($category);
     }
 
     /**
-     * The defaults for a site whose store type is $category. Identical to DEFAULTS
-     * except ask_height, whose sensible default follows the category (StoreCategory):
-     * clothing/footwear ask the shopper's height, jewelry/furniture/eyewear do not.
-     * A null/unknown category keeps the general default (ask height).
+     * Defaults for a site. Category is accepted for call-site compatibility but no longer
+     * changes ask_height — both height and the consent checkbox stay off until opted in.
      *
      * @return array<string,mixed>
      */
     public static function defaultsForCategory(?string $category): array
     {
-        $defaults = self::DEFAULTS;
-        $defaults[self::KEY_ASK_HEIGHT] = StoreCategory::asksHeight($category);
-
-        return $defaults;
+        return self::DEFAULTS;
     }
 
     /**
      * The effective appearance for the widget: stored values merged OVER the defaults,
-     * keeping only known keys. Always returns a complete, valid set. When the merchant
-     * never set ask_height, it defaults from the site's store category ($category); an
-     * explicit stored value always wins.
+     * keeping only known keys. Always returns a complete, valid set. Explicit stored
+     * booleans (including false) always win over the defaults.
      *
      * @param  array<string,mixed>|null  $stored
      * @return array<string,mixed>
@@ -130,9 +127,18 @@ final class WidgetAppearance
         $resolved = self::defaultsForCategory($category);
 
         foreach ($resolved as $key => $default) {
-            if (is_array($stored) && array_key_exists($key, $stored) && $stored[$key] !== null && $stored[$key] !== '') {
-                $resolved[$key] = $stored[$key];
+            if (! is_array($stored) || ! array_key_exists($key, $stored) || $stored[$key] === null) {
+                continue;
             }
+            // Booleans: keep false (empty-string check would wrongly drop them).
+            if (is_bool($default)) {
+                $resolved[$key] = (bool) $stored[$key];
+                continue;
+            }
+            if ($stored[$key] === '') {
+                continue;
+            }
+            $resolved[$key] = $stored[$key];
         }
 
         return $resolved;
@@ -160,6 +166,10 @@ final class WidgetAppearance
 
         if (array_key_exists(self::KEY_ASK_HEIGHT, $input)) {
             $clean[self::KEY_ASK_HEIGHT] = (bool) $input[self::KEY_ASK_HEIGHT];
+        }
+
+        if (array_key_exists(self::KEY_ASK_CONSENT, $input)) {
+            $clean[self::KEY_ASK_CONSENT] = (bool) $input[self::KEY_ASK_CONSENT];
         }
 
         // The two custom fields are only meaningful for custom placement; a null/empty value

@@ -491,6 +491,9 @@ class SiteResource extends Resource
                 Toggle::make(WidgetAppearance::KEY_ASK_HEIGHT)
                     ->label(__('appearance.popup.ask_height'))
                     ->helperText(__('appearance.popup.ask_height_help')),
+                Toggle::make(WidgetAppearance::KEY_ASK_CONSENT)
+                    ->label(__('appearance.popup.ask_consent'))
+                    ->helperText(__('appearance.popup.ask_consent_help')),
             ])
             ->action(static function (Site $record, array $data): void {
                 try {

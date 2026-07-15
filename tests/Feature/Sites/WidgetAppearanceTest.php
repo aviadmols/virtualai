@@ -42,27 +42,31 @@ class WidgetAppearanceTest extends TestCase
         $this->assertSame(WidgetAppearance::PLACEMENT_AFTER_ATC, $resolved[WidgetAppearance::KEY_PLACEMENT]);
     }
 
-    public function test_ask_height_default_follows_store_category(): void
+    public function test_ask_height_and_consent_default_off(): void
     {
-        // A jewelry / furniture shop should NOT ask the shopper's height by default;
-        // a clothing / footwear shop should. The default follows the shop's store type.
-        $this->assertFalse(WidgetAppearance::resolve(null, StoreCategory::JEWELRY)[WidgetAppearance::KEY_ASK_HEIGHT]);
-        $this->assertFalse(WidgetAppearance::resolve(null, StoreCategory::FURNITURE)[WidgetAppearance::KEY_ASK_HEIGHT]);
-        $this->assertTrue(WidgetAppearance::resolve(null, StoreCategory::CLOTHING)[WidgetAppearance::KEY_ASK_HEIGHT]);
-        $this->assertTrue(WidgetAppearance::resolve(null, StoreCategory::FOOTWEAR)[WidgetAppearance::KEY_ASK_HEIGHT]);
-        // An unknown / null category keeps the general default (ask height).
-        $this->assertTrue(WidgetAppearance::resolve(null, null)[WidgetAppearance::KEY_ASK_HEIGHT]);
+        $resolved = WidgetAppearance::resolve(null, StoreCategory::CLOTHING);
+        $this->assertFalse($resolved[WidgetAppearance::KEY_ASK_HEIGHT]);
+        $this->assertFalse($resolved[WidgetAppearance::KEY_ASK_CONSENT]);
+
+        $this->assertFalse(WidgetAppearance::resolve(null, null)[WidgetAppearance::KEY_ASK_HEIGHT]);
+        $this->assertFalse(WidgetAppearance::resolve(null, null)[WidgetAppearance::KEY_ASK_CONSENT]);
     }
 
-    public function test_explicit_ask_height_always_overrides_the_category_default(): void
+    public function test_explicit_ask_height_and_consent_overrides_defaults(): void
     {
-        // The merchant can force the height question ON for a jewelry shop (explicit wins)...
-        $on = WidgetAppearance::resolve([WidgetAppearance::KEY_ASK_HEIGHT => true], StoreCategory::JEWELRY);
+        $on = WidgetAppearance::resolve([
+            WidgetAppearance::KEY_ASK_HEIGHT => true,
+            WidgetAppearance::KEY_ASK_CONSENT => true,
+        ], StoreCategory::JEWELRY);
         $this->assertTrue($on[WidgetAppearance::KEY_ASK_HEIGHT]);
+        $this->assertTrue($on[WidgetAppearance::KEY_ASK_CONSENT]);
 
-        // ...and OFF for a clothing shop, overriding that category's "ask" default.
-        $off = WidgetAppearance::resolve([WidgetAppearance::KEY_ASK_HEIGHT => false], StoreCategory::CLOTHING);
+        $off = WidgetAppearance::resolve([
+            WidgetAppearance::KEY_ASK_HEIGHT => false,
+            WidgetAppearance::KEY_ASK_CONSENT => false,
+        ], StoreCategory::CLOTHING);
         $this->assertFalse($off[WidgetAppearance::KEY_ASK_HEIGHT]);
+        $this->assertFalse($off[WidgetAppearance::KEY_ASK_CONSENT]);
     }
 
     public function test_sanitize_accepts_valid_values_and_normalises_hex(): void

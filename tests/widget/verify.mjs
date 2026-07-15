@@ -316,15 +316,24 @@ async function openModal(page) {
   await page.locator('.ton-cta').waitFor({ timeout: 8000 });
 }
 
-/** Fill the setup form (photo + height + consent) and start the generation. */
+/** Optional height/consent fields — only present when the merchant opted them in. */
+async function fillOptionalSetupFields(page) {
+  if ((await page.locator('.ton-field .ton-input').count()) > 0) {
+    await page.locator('.ton-field .ton-input').first().fill('175');
+  }
+  if ((await page.locator('.ton-consent__box').count()) > 0) {
+    await page.locator('.ton-consent__box').check();
+  }
+}
+
+/** Fill the setup form (photo + optional height/consent) and start the generation. */
 async function startGeneration(page) {
   await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
   await page.locator('.ton-preview__img').waitFor({ timeout: 6000 }).catch(async () => {
     const err = await page.locator('.ton-error').first().textContent().catch(() => '');
     throw new Error('photo not accepted by prepare(); error box="' + (err || '').trim() + '"');
   });
-  await page.locator('.ton-input').first().fill('175');
-  await page.locator('.ton-consent__box').check();
+  await fillOptionalSetupFields(page);
   await page.locator('.ton-cta').click({ timeout: 6000 });
   await page.locator('.ton-loading__frame').waitFor({ timeout: 6000 });
 }
@@ -799,8 +808,7 @@ async function perfTrackingGate(browser) {
     // Run a full try-on so the add-to-cart interaction fires (its own funnel + track signal).
     await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
     await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
-    await page.locator('.ton-input').first().fill('175');
-    await page.locator('.ton-consent__box').check();
+    await fillOptionalSetupFields(page);
     await page.locator('.ton-cta').click({ timeout: 6000 });
     await page.locator('.ton-result__img').waitFor({ timeout: 8000 });
     await page.locator('.ton-action--primary').click(); // add to cart
@@ -1424,8 +1432,7 @@ async function realCartGate(browser) {
     await openModal(page);
     await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
     await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
-    await page.locator('.ton-input').first().fill('175');
-    await page.locator('.ton-consent__box').check();
+    await fillOptionalSetupFields(page);
     await page.locator('.ton-cta').click({ timeout: 6000 });
     await page.locator('.ton-result__img').waitFor({ timeout: 8000 });
 
@@ -1476,8 +1483,7 @@ async function realCartGate(browser) {
     await openModal(p2);
     await p2.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
     await p2.locator('.ton-preview__img').waitFor({ timeout: 6000 });
-    await p2.locator('.ton-input').first().fill('175');
-    await p2.locator('.ton-consent__box').check();
+    await fillOptionalSetupFields(p2);
     await p2.locator('.ton-cta').click({ timeout: 6000 });
     await p2.locator('.ton-result__img').waitFor({ timeout: 8000 });
     await p2.locator('.ton-action--primary').click();
@@ -1544,8 +1550,7 @@ async function variantSyncGate(browser) {
     await openModal(page);
     await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
     await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
-    await page.locator('.ton-input').first().fill('175');
-    await page.locator('.ton-consent__box').check();
+    await fillOptionalSetupFields(page);
     await page.locator('.ton-cta').click({ timeout: 6000 });
     await page.locator('.ton-result__img').waitFor({ timeout: 8000 });
     await page.locator('.ton-action--primary').click();
@@ -1757,8 +1762,7 @@ async function designScreenshotGate(browser, locale) {
 
     await page.locator('.ton-upload__file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG_UPLOAD_BYTES });
     await page.locator('.ton-preview__img').waitFor({ timeout: 6000 });
-    await page.locator('.ton-input').first().fill('175');
-    await page.locator('.ton-consent__box').check();
+    await fillOptionalSetupFields(page);
     await page.screenshot({ path: resolve(OUT, `design-setup-ready.${locale}.png`) });
 
     await page.locator('.ton-cta').click({ timeout: 6000 });
@@ -1893,7 +1897,7 @@ async function run() {
         return { hasModal: !!modal, ctaDisabled: cta ? cta.disabled : null, dir: sr.querySelector('.ton-root').getAttribute('dir') };
       });
       assert(modalState.hasModal, 'modal opened inside the shadow root');
-      assert(modalState.ctaDisabled === true, 'submit CTA is disabled until photo + height + consent');
+      assert(modalState.ctaDisabled === true, 'submit CTA is disabled until a photo is chosen');
       assert(modalState.dir === (locale === 'he' ? 'rtl' : 'ltr'), `modal dir inherited (${modalState.dir})`);
 
       // Screenshot the modal (EN + HE record).

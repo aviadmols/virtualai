@@ -40,9 +40,14 @@ let activeThumb = null; // the generation id currently being viewed from the str
 // The working draft for the current intent (kept across step changes / retries).
 let draft = { photo: null, height: '', extra: {}, consent: false };
 
-/** Does this site's popup ask for the shopper's height? (Off for jewelry/furniture/eyewear.) */
+/** Does this site's popup ask for the shopper's height? Off by default. */
 function asksHeight() {
-  return state.config?.appearance?.[APPEARANCE.askHeight] !== false;
+  return state.config?.appearance?.[APPEARANCE.askHeight] === true;
+}
+
+/** Does this site's popup show the use-my-photo checkbox? Off by default. */
+function asksConsent() {
+  return state.config?.appearance?.[APPEARANCE.askConsent] === true;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +73,8 @@ export function open() {
   }
 
   newIntent();
-  draft = { photo: null, height: '', extra: {}, consent: false };
+  // Consent is auto-granted when the merchant hid the checkbox; the API still needs consent=true.
+  draft = { photo: null, height: '', extra: {}, consent: !asksConsent() };
   renderSetup();
 }
 
@@ -123,7 +129,7 @@ function renderSetup() {
   const strip = el('div', { class: 'ton-gallery' });
   const height = asksHeight() ? buildHeight(refresh) : null;
   const details = buildDetails();
-  const consent = buildConsent(refresh);
+  const consent = asksConsent() ? buildConsent(refresh) : null;
 
   const body = el('div', {}, [preview, strip, height, details, consent, cta, errorBox].filter(Boolean));
   mount(body, triesChip());
@@ -285,7 +291,7 @@ function updateCta(cta) {
   } else if (!heightOk()) {
     cta.disabled = true;
     cta.textContent = t('cta.need_height');
-  } else if (!draft.consent) {
+  } else if (asksConsent() && !draft.consent) {
     cta.disabled = true;
     cta.textContent = t('cta.need_consent');
   } else {
@@ -653,7 +659,7 @@ function onRegenerate() {
 function onChangePhoto() {
   newIntent();
   draft.photo = null;
-  draft.consent = false;
+  draft.consent = !asksConsent();
   activeThumb = null;
   renderSetup();
 }
