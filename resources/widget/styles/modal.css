@@ -44,6 +44,18 @@
   }
 }
 
+/* Short viewports (laptop / landscape phones): compress chrome so setup + result fit
+   without scrolling — the preview keeps giving ground via flex. */
+@media (max-height: 740px) {
+  .ton-modal {
+    --ton-modal-pad: var(--ton-space-6);
+    --ton-space-brand: var(--ton-space-4);
+    --ton-space-preview: var(--ton-space-4);
+    --ton-space-gallery: var(--ton-space-4);
+    --ton-preview-max-h: 42vh;
+  }
+}
+
 /* ---- The Customer-Club login panel reuses the modal box with its own head (it has no product
    to brand-header). Same glass, same close, same inputs — it inherits the new look for free. ---- */
 .ton-modal__head {
@@ -98,19 +110,23 @@
   overflow: hidden;
 }
 
-/* The ONE flexible box in the modal column: when the flow is taller than the viewport the
-   preview shrinks below its preferred aspect height (the image letterboxes) so the strip,
-   the consent and the actions stay on screen with NO scrolling. min-height keeps it usable. */
-.ton-modal .ton-preview {
-  flex: 1 1 auto;
-  flex-shrink: 1;
-  min-height: 100px;
+/* The ONE flexible box: flex-basis 0% + min-height so aspect-ratio cannot block shrinking.
+   The image letterboxes (object-fit: contain) inside whatever height flex allocates. */
+.ton-modal .ton-preview,
+.ton-modal__body > .ton-preview {
+  flex: 1 1 0%;
+  min-height: 80px;
+  max-height: var(--ton-preview-max-h);
+  /* Aspect-ratio remains the preferred shape on tall screens; overflow:hidden (above) +
+     a zero flex-basis lets short viewports compress past that preferred height. */
+  overflow: hidden;
 }
 
-/* Preview that IS the modal body (loading / early skeleton swap) must also flex-shrink. */
+/* Preview that IS the modal body (loading / early skeleton swap). */
 .ton-modal > .ton-preview.ton-modal__body {
-  flex: 1 1 auto;
-  min-height: 100px;
+  flex: 1 1 0%;
+  min-height: 80px;
+  overflow: hidden;
 }
 
 /* ---- Empty state: the dropzone IS the invitation (there is no separate empty panel) ---- */

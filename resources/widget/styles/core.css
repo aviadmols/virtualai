@@ -482,10 +482,14 @@
   flex-direction: column;
   width: 100%;
   max-width: var(--ton-modal-max-w);
-  max-height: var(--ton-modal-max-h);
-  /* dvh tracks the REAL visible viewport on mobile (URL bar); older engines keep the vh cap. */
+  /* A definite height is required for flex-shrink on the preview to fire. max-height alone
+     lets the box grow to content then paint a scrollbar — which is exactly the bug we hit.
+     min(max-content, …) sizes to content on tall screens and caps on short ones. */
+  height: min(max-content, 95vh);
+  height: min(max-content, 95dvh);
+  max-height: min(var(--ton-modal-max-h), 95vh);
   max-height: min(var(--ton-modal-max-h), 95dvh);
-  overflow-y: auto;
+  overflow: hidden;
   padding: var(--ton-modal-pad);
   border: 0;
   border-radius: var(--ton-radius-modal);
@@ -510,20 +514,19 @@
   }
 }
 
-/* The whole flow must FIT the viewport — no internal scrolling. Every section keeps its
-   height; the PREVIEW is the one flexible box that gives ground (see .ton-preview).
-   overflow-y:auto above stays only as the can't-happen failsafe. */
+/* The whole flow must FIT the viewport — no scrolling. Every section keeps its height;
+   the PREVIEW is the one flexible box that gives ground (see .ton-preview). */
 .ton-modal > * {
   flex-shrink: 0;
 }
 
-/* The body column: grows into leftover height and lets .ton-preview shrink inside it.
-   Without this (a bare wrapper div) flex-shrink on the preview never fires. */
+/* The body column: takes leftover height under the brand and lets .ton-preview shrink. */
 .ton-modal__body {
   display: flex;
   flex-direction: column;
-  flex-shrink: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
 }
 
 .ton-modal__body > * {
@@ -572,8 +575,7 @@
   gap: var(--ton-space-2);
   font-size: var(--ton-fs-logo);
   font-weight: var(--ton-fw-semibold);
-  letter-spacing: var(--ton-track-logo);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--ton-ink);
 }
 

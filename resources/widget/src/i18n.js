@@ -15,8 +15,8 @@ const RTL_LOCALES = [LOCALE_HE];
 
 const MESSAGES = {
   en: {
-    // A brand name is not translated — the wordmark is Latin in both locales.
-    'brand.wordmark': 'TRAY ON',
+    // Brand name — Latin in both locales (not translated).
+    'brand.wordmark': 'Vsio',
     'button.label': 'Try it with Vsio',
     'button.loading': 'Loading…',
     'button.busy': 'Creating…',
@@ -33,7 +33,7 @@ const MESSAGES = {
     'hud.close': 'Dismiss',
   },
   he: {
-    'brand.wordmark': 'TRAY ON',
+    'brand.wordmark': 'Vsio',
     'button.label': 'מדדו עם Vsio',
     'button.loading': 'טוען…',
     'button.busy': 'יוצרים…',
