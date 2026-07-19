@@ -84,7 +84,6 @@
 
     <div id="toe-error" class="toe-state toe-state--error" hidden>
         <p id="toe-error-message">{{ __('shopify_embedded.errors.load_failed') }}</p>
-        <p><a id="toe-error-fallback" href="#" target="_blank" rel="noopener" hidden>{{ __('shopify_embedded.errors.open_new_tab') }}</a></p>
     </div>
 
     <div id="toe-app" hidden>
@@ -144,7 +143,7 @@
             </div>
         </div>
 
-        <a class="toe-cta" id="toe-dashboard" href="#">{{ __('shopify_embedded.dashboard_cta') }}</a>
+        <a class="toe-cta" id="toe-dashboard" href="#" target="_self">{{ __('shopify_embedded.dashboard_cta') }}</a>
     </div>
 </div>
 
@@ -159,19 +158,15 @@
         const token = await window.shopify.idToken();
         return fetch(url, {
             ...options,
+            credentials: 'include',
             headers: { ...(options.headers || {}), Authorization: 'Bearer ' + token, Accept: 'application/json' },
         });
     }
 
-    function fail(fallbackUrl) {
+    function fail() {
         el('toe-loading').hidden = true;
         el('toe-app').hidden = true;
         el('toe-error').hidden = false;
-        if (fallbackUrl) {
-            const link = el('toe-error-fallback');
-            link.href = fallbackUrl;
-            link.hidden = false;
-        }
     }
 
     function renderCheck(id, done) {
@@ -212,23 +207,21 @@
     }
 
     (async function boot() {
-        let dashboardFallback = null;
         try {
             // 1. JWT -> partitioned session cookie (the bridge into the Filament panel).
             const session = await authedFetch(SESSION_URL, { method: 'POST' });
-            if (session.ok) {
-                const body = await session.json();
-                dashboardFallback = body.dashboard_url || null;
-            }
+            if (!session.ok) return fail();
+            const sessionBody = await session.json();
+            if (!sessionBody.ok || !sessionBody.dashboard_url) return fail();
 
             // 2. The onboarding state.
             const res = await authedFetch(BOOTSTRAP_URL);
-            if (!res.ok) return fail(dashboardFallback);
+            if (!res.ok) return fail();
             const data = await res.json();
-            if (!data.ok) return fail(dashboardFallback);
+            if (!data.ok) return fail();
             render(data);
         } catch {
-            fail(dashboardFallback);
+            fail();
         }
     })();
 </script>

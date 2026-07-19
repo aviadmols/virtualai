@@ -6,7 +6,6 @@ use App\Domain\Shopify\Auth\ShopifyAccessToken;
 use App\Domain\Shopify\Auth\ShopifyAccountProvisioner;
 use App\Domain\Shopify\Auth\ShopifyOAuthException;
 use App\Domain\Shopify\Auth\ShopifyOAuthState;
-use App\Http\Shopify\Controllers\OAuthController;
 use App\Models\Account;
 use App\Models\CreditLedger;
 use App\Models\ShopifyConnection;
@@ -233,10 +232,10 @@ class ShopifyAutoProvisionTest extends TestCase
         $this->assertSame('Brand New', Account::query()->firstOrFail()->name);
     }
 
-    public function test_an_authenticated_install_keeps_the_claim_path_and_makes_no_second_account(): void
+    public function test_an_authenticated_install_attaches_directly_and_returns_to_shopify(): void
     {
-        // Pins the Auth::check() branch: an ALREADY-signed-in merchant installing a new shop
-        // must NOT auto-provision a second account — they park + claim into their existing one.
+        // An already-signed-in merchant must not get a second account or leave Shopify for
+        // /claim. The verified callback attaches the new shop directly to their account.
         Bus::fake();
         $this->fakeShopify();
 
@@ -245,11 +244,15 @@ class ShopifyAutoProvisionTest extends TestCase
 
         $response = $this->actingAs($user)->get($this->signedCallback($this->newShopState()));
 
-        $response->assertRedirect(route('shopify.install.claim'));
-        $response->assertSessionHas(OAuthController::SESSION_CLAIM_TOKEN);
-        $this->assertSame(1, Account::query()->count());          // no SECOND account
-        $this->assertSame(1, ShopifyPendingInstall::query()->count());
-        $this->assertSame(0, DB::table('shopify_connections')->count());
+        $response->assertRedirect('https://'.self::SHOP.'/admin/apps/'.self::CLIENT_ID);
+        $this->assertSame(1, Account::query()->count()); // no second account
+        $this->assertSame(0, ShopifyPendingInstall::query()->count());
+        $this->assertSame(1, DB::table('sites')->count());
+        $this->assertSame(1, DB::table('shopify_connections')->count());
+
+        $connection = Tenant::run($account, fn (): ?ShopifyConnection => ShopifyConnection::query()->first());
+        $this->assertNotNull($connection);
+        $this->assertSame(self::SHOP, $connection->shop_domain);
     }
 
     // === HELPERS ===

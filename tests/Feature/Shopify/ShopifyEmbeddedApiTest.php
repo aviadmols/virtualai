@@ -9,7 +9,6 @@ use App\Models\ShopifyConnection;
 use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -40,6 +39,9 @@ class ShopifyEmbeddedApiTest extends TestCase
         parent::setUp();
         config()->set('services.shopify.client_id', self::CLIENT_ID);
         config()->set('services.shopify.client_secret', self::CLIENT_SECRET);
+        config()->set('session.same_site', 'none');
+        config()->set('session.secure', true);
+        config()->set('session.partitioned', true);
         // The theme inspector must never make a real call from these tests.
         Http::preventStrayRequests();
         Http::fake(['*/admin/api/*' => Http::response(['data' => ['themes' => ['nodes' => []]]])]);
@@ -56,6 +58,15 @@ class ShopifyEmbeddedApiTest extends TestCase
         $this->assertAuthenticatedAs($owner);
         // The shop is stamped in the session so the panel CSP can name it.
         $this->assertSame(self::SHOP, session(ShopifyFrameAncestors::SESSION_SHOP_DOMAIN));
+
+        // The same bridged session opens Filament inside this iframe; it must not bounce
+        // to /merchant/login or require a top-level escape.
+        $this->get('/merchant/'.$site->slug)->assertOk();
+
+        $cookieHeader = strtolower(implode('; ', $response->headers->all('set-cookie')));
+        $this->assertStringContainsString('secure', $cookieHeader);
+        $this->assertStringContainsString('samesite=none', $cookieHeader);
+        $this->assertStringContainsString('partitioned', $cookieHeader);
     }
 
     public function test_an_invalid_token_never_logs_anyone_in(): void

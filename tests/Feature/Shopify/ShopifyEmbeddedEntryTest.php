@@ -48,6 +48,10 @@ class ShopifyEmbeddedEntryTest extends TestCase
         $response->assertSee('name="shopify-api-key" content="'.self::CLIENT_ID.'"', escape: false);
         $response->assertSee(self::APP_BRIDGE_SRC, escape: false);
         $response->assertSee('BOOTSTRAP_URL'); // the shell wired its token-authed endpoints
+        $response->assertSee("credentials: 'include'", escape: false);
+        $response->assertSee('if (!session.ok) return fail();', escape: false);
+        $response->assertSee('id="toe-dashboard" href="#" target="_self"', escape: false);
+        $response->assertDontSee('id="toe-error-fallback"', escape: false);
         $response->assertHeader(
             self::CSP_HEADER,
             'frame-ancestors https://'.self::SHOP.' https://admin.shopify.com;',

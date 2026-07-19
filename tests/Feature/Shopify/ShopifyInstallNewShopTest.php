@@ -20,12 +20,11 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * install_new_shop (docs/shopify/DECISIONS.md §2): the install starts ON SHOPIFY, before
- * a Tray On account exists. The callback parks the offline token in a PRE-BIND,
- * short-lived, encrypted pending-install row; only an AUTHENTICATED account consumes it
- * (exactly once, then it is deleted) and the Site + ShopifyConnection are created inside
- * Tenant::run. A re-install of a KNOWN shop skips the parking entirely and re-activates
- * the existing connection.
+ * install_new_shop (docs/shopify/DECISIONS.md §2): every verified callback finishes back
+ * inside Shopify Admin. A guest is auto-provisioned; an already-authenticated merchant gets
+ * the new shop attached directly to their account; a known shop is re-activated in place.
+ * Legacy pending-install rows can still be claimed exactly once, but normal installs no
+ * longer create one because the intermediate redirect could leak to /merchant/login.
  */
 class ShopifyInstallNewShopTest extends TestCase
 {
@@ -67,50 +66,48 @@ class ShopifyInstallNewShopTest extends TestCase
         $response->assertRedirectContains('https://'.self::SHOP.'/admin/oauth/authorize');
     }
 
-    public function test_an_authenticated_merchant_adding_a_shop_parks_an_encrypted_pending_install(): void
+    public function test_an_authenticated_merchant_is_attached_directly_and_returns_to_shopify_admin(): void
     {
         Bus::fake();
         $this->fakeTokenExchange();
 
-        // A merchant already signed in to Vsio installs an ADDITIONAL store from Shopify:
-        // the callback parks the token and sends them to claim it (never a second account).
+        // A signed-in merchant installs an additional store from Shopify: attach it in this
+        // verified callback and return to the embedded app — no claim/login detour.
         $account = Account::factory()->create();
         $user = User::factory()->create(['account_id' => $account->id]);
 
         $response = $this->actingAs($user)->get($this->signedCallback($this->newShopState()));
 
-        $response->assertRedirect(route(self::CLAIM_ROUTE));
-        $response->assertSessionHas(OAuthController::SESSION_CLAIM_TOKEN);
-
-        $pending = ShopifyPendingInstall::query()->where('shop_domain', self::SHOP)->first();
-        $this->assertNotNull($pending);
-        $this->assertSame(self::OFFLINE_TOKEN, $pending->accessToken());
-
-        // The token is encrypted at rest, and the claim token is stored HASHED — the row
-        // alone can neither be replayed nor read for a live token.
-        $row = DB::table('shopify_pending_installs')->where('id', $pending->id)->first();
-        $this->assertStringNotContainsString(self::OFFLINE_TOKEN, (string) $row->credentials);
-        $this->assertNotSame(session(OAuthController::SESSION_CLAIM_TOKEN), $row->claim_token_hash);
-
-        // Nothing tenant-owned exists yet: no site, no connection, and no SECOND account.
-        $this->assertSame(0, DB::table('shopify_connections')->count());
+        $response->assertRedirect('https://'.self::SHOP.'/admin/apps/'.self::CLIENT_ID);
+        $this->assertSame(0, ShopifyPendingInstall::query()->count());
         $this->assertSame(1, Account::query()->count());
-        Bus::assertNotDispatched(RegisterShopifyWebhooksJob::class);
+        $this->assertSame(1, DB::table('sites')->count());
+        $this->assertSame(1, DB::table('shopify_connections')->count());
+
+        $connection = Tenant::run($account, fn (): ?ShopifyConnection => ShopifyConnection::query()->first());
+        $this->assertNotNull($connection);
+        $this->assertSame(self::SHOP, $connection->shop_domain);
+        $this->assertSame(self::OFFLINE_TOKEN, $connection->accessToken());
+        Bus::assertDispatched(RegisterShopifyWebhooksJob::class);
     }
 
     public function test_an_authenticated_account_consumes_the_pending_install_exactly_once(): void
     {
         Bus::fake();
-        $this->fakeTokenExchange();
 
         $account = Account::factory()->create();
         $user = User::factory()->create(['account_id' => $account->id]);
 
-        // The signed-in merchant installs an additional shop: the callback parks + redirects.
-        $this->actingAs($user)->get($this->signedCallback($this->newShopState()))
-            ->assertRedirect(route(self::CLAIM_ROUTE));
-        $claimToken = (string) session(OAuthController::SESSION_CLAIM_TOKEN);
-        $this->assertNotSame('', $claimToken);
+        // Legacy rows created before direct callback attachment remain safely consumable.
+        $claimToken = ShopifyPendingInstall::generateClaimToken();
+        ShopifyPendingInstall::factory()->withClaimToken($claimToken)->create([
+            'shop_domain' => self::SHOP,
+            'credentials' => [
+                ShopifyPendingInstall::CRED_ACCESS_TOKEN => self::OFFLINE_TOKEN,
+                ShopifyPendingInstall::CRED_SCOPES => (string) config('shopify.scopes'),
+                ShopifyPendingInstall::CRED_API_VERSION => (string) config('shopify.api_version'),
+            ],
+        ]);
 
         $response = $this->actingAs($user)
             ->withSession([OAuthController::SESSION_CLAIM_TOKEN => $claimToken])

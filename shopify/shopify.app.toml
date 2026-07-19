@@ -13,16 +13,15 @@
 name = "Vsio"
 handle = "vsio"
 client_id = "585a39aa83a140e7fbdcd80bb74f43db"
-# The app opens straight into the Vsio merchant panel (the management system). embedded=false
-# because there is no App Bridge / session-token UI yet — an embedded iframe would break the
-# panel's cookie auth. Clicking the app in Shopify admin opens the panel top-level (its own tab).
-# Flip back to embedded once an App Bridge admin UI exists (an App-Store requirement; we stay
-# Unlisted until then).
-application_url = "https://go.vsio.app/merchant"
-embedded = false
+# EMBEDDED: application_url is the App Bridge shell (/shopify/app) that renders inside the
+# Shopify admin iframe and authenticates via session tokens. The full Filament panel also
+# renders in-iframe (partitioned session cookie + a per-shop frame-ancestors CSP). Installs
+# redirect back into the admin (/admin/apps/{client_id}) with the owner auto-logged-in.
+application_url = "https://go.vsio.app/shopify/app"
+embedded = true
 
 [access_scopes]
-scopes = "read_products,write_products,read_orders"
+scopes = "read_products,write_products,read_orders,read_themes"
 
 [auth]
 redirect_urls = [

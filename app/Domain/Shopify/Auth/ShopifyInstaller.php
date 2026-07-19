@@ -156,7 +156,7 @@ final class ShopifyInstaller
      * Re-install of a shop we already know, arriving with NO Vsio session (the
      * merchant re-installed from the Shopify admin). The owning account is resolved
      * pre-bind by the routing lookup, so the existing connection is re-activated in
-     * place. Returns null when the shop is unknown (-> park a pending install instead).
+     * place. Returns null when the shop is unknown (-> direct attach or auto-provision).
      */
     public function reconnectKnownShop(string $shopDomain, ShopifyAccessToken $token, ?string $correlationId = null): ?ShopifyConnection
     {
@@ -185,9 +185,9 @@ final class ShopifyInstaller
     }
 
     /**
-     * Park an install that started on Shopify: the token is held ENCRYPTED and NOT
-     * tenant-bound until an authenticated account claims it. Returns the plaintext
-     * claim token (handed to the browser once; only its hash is stored).
+     * Legacy compatibility for installs parked before callbacks attached directly.
+     * The token is held ENCRYPTED and NOT tenant-bound until an authenticated account
+     * claims it. New callback flows do not call this method.
      */
     public function park(string $shopDomain, ShopifyAccessToken $token, string $correlationId): string
     {

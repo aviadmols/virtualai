@@ -1452,6 +1452,85 @@ The lookup axis. File each entry under exactly one category; cross-link the rest
 - **RELATED:** [[railway-infra]], [[config/horizon.php]], [[config/trayon.php]],
   [[config/filesystems.php]], [[config/queue.php]], [[routes/web.php]], [[scripts/docker-web.sh]]
 
+### TS-INFRA-004 — embedded Shopify install took the `park→claim` branch when `Auth::check()`, so the claim redirect to `/merchant/login` broke the app OUT of the Shopify Admin iframe
+- **Date:** 2026-07-19
+- **Category:** infra/railway/horizon
+- **Severity:** blocker
+- **Status:** open — real production install VERIFICATION pending deploy (see below)
+- **Recurrence:** 1
+- **Tags:** `shopify`, `embedded`, `oauth`, `iframe`, `install`, `session-bridge`, `samesite-none`, `partitioned-cookie`, `top-level-redirect`, `auto-provision`
+
+- **SYMPTOM:** Installing the embedded Shopify app for a NEW shop while a merchant
+  was already authenticated (`Auth::check()` true) navigated the browser to
+  `/merchant/login` and the app rendered as a full-page site OUTSIDE the Shopify
+  Admin iframe, instead of staying embedded inside `Shopify Admin`. The merchant
+  was ejected from Admin at the exact moment the install should have completed.
+- **CONTEXT / TRIGGER:** Shopify embedded install/OAuth flow. The OAuth callback
+  (`app/Http/Shopify/Controllers/OAuthController.php`) could enter a `park→claim`
+  branch when `Auth::check()`, handing off to `InstallClaimController`, which
+  redirected to `/merchant/login`. Any top-level `login`/site redirect from inside
+  the Admin iframe breaks the app out of the embedded surface. Trigger: connect a
+  new shop while signed in to the merchant panel.
+- **ROOT CAUSE:** The install callback treated "already authenticated" as a
+  park-then-claim handoff. `InstallClaimController` then issued a top-level redirect
+  to `/merchant/login` — a full-page navigation — which is exactly what an embedded
+  app must NEVER do: inside `Shopify Admin` the app lives in an iframe, and a
+  login/site redirect escapes it. The authenticated case had no direct
+  "attach this shop to the current account and return to Admin" path, so it fell
+  through to a flow designed for the guest/hand-off case.
+- **SOLUTION:** Route the callback by install case, and NEVER top-level-redirect out
+  of the iframe:
+  1. **New shop + authenticated** → attach the shop directly to the logged-in
+     account via `ShopifyInstaller::installFreshShop`
+     (`app/Domain/Shopify/Auth/ShopifyInstaller.php`) and ALWAYS return to
+     `https://{shop}/admin/apps/{client_id}` (stay in Admin). No `park→claim`, no
+     `/merchant/login`.
+  2. **Guest install** → continues the auto-provision path.
+  3. **Reinstall** → continues the reconnect path.
+  4. **Session bridge** (`resources/views/shopify/embedded/app.blade.php`): the
+     `POST /shopify/app/session` fetch uses `credentials: 'include'`, HALTS if that
+     request fails (no silent fall-through), and the dashboard link uses
+     `target="_self"` with NO external fallback — so nothing navigates the top frame
+     out of Admin.
+  5. **Cookie contract locked** for the embedded (third-party-context) session:
+     `SameSite=None`, `Secure`, `Partitioned` — pinned in `.env.example`,
+     `config/session.php`, and enforced by the predeploy guard so a
+     non-Partitioned/non-None cookie can't ship (Chrome CHIPS drops the session
+     cookie in the iframe otherwise).
+  Local verification evidence (this machine, pre-deploy): full suite **237 tests /
+  1077 assertions PASS** including all `tests/Feature/Shopify`, `tests/Feature/Infra`
+  and `ShopifyStorePageTest`; the focused Shopify/Infra subset **37/181 PASS**;
+  **Pint** clean.
+  > **NOT YET VERIFIED IN PRODUCTION.** No live Shopify install was performed: the
+  > code is not deployed and there is no connected Shopify session. A real
+  > production install (install a new shop from Shopify Admin, confirm the app stays
+  > embedded and the session cookie survives the iframe) remains a **post-deploy
+  > release step**. Entry stays `open` until that live install is confirmed.
+- **PREVENTION:**
+  - An embedded Shopify app must NEVER issue a top-level redirect to a
+    `login`/site route from inside the Admin iframe. The OAuth callback returns to
+    `https://{shop}/admin/apps/{client_id}` for every install case (new / guest /
+    reinstall).
+  - Branch the install callback by case explicitly — new-shop-authenticated attaches
+    via `installFreshShop`; never let the authenticated case fall through to a
+    guest `park→claim` hand-off that redirects to `/merchant/login`.
+  - The embedded session bridge fetch uses `credentials: 'include'` and HARD-FAILS
+    (does not silently continue) when `POST /shopify/app/session` fails; in-Admin
+    navigation is `target="_self"` with no external fallback.
+  - The embedded session cookie contract (`SameSite=None; Secure; Partitioned`) is
+    pinned in `.env.example` + `config/session.php` and gated by the predeploy check
+    — treat it as a release blocker, not a default.
+  - Release checklist: after deploy, perform ONE real install from Shopify Admin and
+    confirm the app stays inside the iframe before marking this entry `resolved`.
+- **RELATED:** [[railway-infra]], [[app/Http/Shopify/Controllers/OAuthController.php]],
+  [[app/Domain/Shopify/Auth/ShopifyInstaller.php]],
+  [[app/Http/Shopify/Controllers/InstallClaimController.php]],
+  [[resources/views/shopify/embedded/app.blade.php]], [[config/session.php]],
+  [[.env.example]], [[tests/Feature/Shopify/ShopifyInstallNewShopTest.php]],
+  [[tests/Feature/Shopify/ShopifyAutoProvisionTest.php]],
+  [[tests/Feature/Shopify/ShopifyEmbeddedEntryTest.php]],
+  [[tests/Feature/Infra/PredeployCheckTest.php]]
+
 ## filament/admin
 
 ### TS-FILAMENT-001 — platform cross-account read: the EAGER-LOAD relation re-applies the global scope (variants return 0); + Livewire route-param vs typed property collision

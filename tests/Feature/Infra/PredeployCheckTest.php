@@ -25,6 +25,10 @@ class PredeployCheckTest extends TestCase
             $_SERVER[$key] = $value;
             putenv("{$key}={$value}");
         }
+
+        config()->set('session.same_site', 'none');
+        config()->set('session.secure', true);
+        config()->set('session.partitioned', true);
     }
 
     protected function tearDown(): void
@@ -68,25 +72,43 @@ class PredeployCheckTest extends TestCase
             ->assertExitCode(0);
     }
 
-    public function test_a_strict_same_site_cookie_is_refused_because_it_kills_every_shopify_install(): void
+    public function test_same_site_must_be_none_for_the_shopify_embedded_session(): void
     {
-        // The Shopify OAuth callback is a cross-site top-level redirect and the install's CSRF
-        // wall (the state nonce) lives in the session: 'strict' silently drops the cookie and
-        // every install 403s with invalid_state. The deploy must fail LOUDLY instead.
         config()->set('app.env', 'staging');
         config()->set('trayon.media.disk', 's3');
-        config()->set('session.same_site', 'strict');
+        config()->set('session.same_site', 'lax');
 
         $this->artisan('trayon:predeploy-check', ['--skip-disk' => true])
             ->expectsOutputToContain('SESSION_SAME_SITE')
             ->assertExitCode(1);
     }
 
-    public function test_the_default_lax_cookie_passes(): void
+    public function test_session_cookie_must_be_secure_for_shopify_embedded_app_to_work(): void
     {
         config()->set('app.env', 'staging');
         config()->set('trayon.media.disk', 's3');
-        config()->set('session.same_site', 'lax');
+        config()->set('session.secure', false);
+
+        $this->artisan('trayon:predeploy-check', ['--skip-disk' => true])
+            ->expectsOutputToContain('SESSION_SECURE_COOKIE')
+            ->assertExitCode(1);
+    }
+
+    public function test_session_cookie_must_be_partitioned_for_shopify_embedded_app_to_work(): void
+    {
+        config()->set('app.env', 'staging');
+        config()->set('trayon.media.disk', 's3');
+        config()->set('session.partitioned', false);
+
+        $this->artisan('trayon:predeploy-check', ['--skip-disk' => true])
+            ->expectsOutputToContain('SESSION_PARTITIONED_COOKIE')
+            ->assertExitCode(1);
+    }
+
+    public function test_the_embedded_cookie_contract_passes(): void
+    {
+        config()->set('app.env', 'staging');
+        config()->set('trayon.media.disk', 's3');
 
         $this->artisan('trayon:predeploy-check', ['--skip-disk' => true])
             ->assertExitCode(0);

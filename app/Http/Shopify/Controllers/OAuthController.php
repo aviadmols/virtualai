@@ -53,8 +53,6 @@ final class OAuthController
     // Route names (routes/shopify.php owns the paths).
     private const ROUTE_CALLBACK = 'shopify.oauth.callback';
 
-    private const ROUTE_CLAIM = 'shopify.install.claim';
-
     // Where an unauthenticated "Connect" click, and a finished install, land.
     private const CFG_LOGIN_PATH = 'shopify.merchant_login_path';
 
@@ -260,15 +258,20 @@ final class OAuthController
                 return redirect()->away($this->embeddedAdminUrl($shop));
             }
 
-            // Brand-new shop, and a merchant is ALREADY signed in to Vsio: they are adding
-            // an extra store to their existing account. Park the token (encrypted, NOT
-            // tenant-bound) and send them to claim it — never a second account. The claim
-            // token lives in the SESSION only, never in a URL where it could be replayed.
+            // Brand-new shop, and a merchant is ALREADY signed in to Vsio: attach the store
+            // directly to that account in THIS verified callback. Never park + redirect through
+            // /claim: ambient session availability can differ after the OAuth round-trip, which
+            // used to leak the install out of Shopify and onto /merchant/login.
             if (Auth::check()) {
-                $claimToken = $this->installer->park($shop, $token, $correlationId);
-                $request->session()->put(self::SESSION_CLAIM_TOKEN, $claimToken);
+                $accountId = (int) (Auth::user()?->account_id ?? 0);
 
-                return redirect()->route(self::ROUTE_CLAIM);
+                if ($accountId <= 0) {
+                    throw ShopifyOAuthException::noAccount();
+                }
+
+                $this->installer->installFreshShop($accountId, $shop, $token, $correlationId);
+
+                return redirect()->away($this->embeddedAdminUrl($shop));
             }
 
             // Brand-new shop with NO Vsio session: Shopify-SSO auto-provisioning. The shop

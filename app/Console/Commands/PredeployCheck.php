@@ -52,14 +52,15 @@ class PredeployCheck extends Command
 
     private const PROBE_PATH = 'predeploy/.probe';
 
-    // The Shopify OAuth callback is a CROSS-SITE top-level GET back from Shopify, and the
-    // install's CSRF wall (the state nonce) lives in the session — so the session cookie MUST
-    // survive that navigation. 'strict' drops it and EVERY install dies with invalid_state (an
-    // outage, never a leak). A well-meaning hardening pass is exactly how that happens, so the
-    // guard pins it here.
+    // Shopify needs one cookie contract for BOTH its cross-site OAuth callback and the
+    // embedded Admin iframe. Partitioned cookies are accepted only with Secure + SameSite=None.
     private const SESSION_SAME_SITE_CONFIG = 'session.same_site';
 
-    private const SESSION_SAME_SITE_ALLOWED = ['lax', 'none'];
+    private const SESSION_SECURE_CONFIG = 'session.secure';
+
+    private const SESSION_PARTITIONED_CONFIG = 'session.partitioned';
+
+    private const SESSION_SAME_SITE_EXPECTED = 'none';
 
     public function handle(): int
     {
@@ -105,16 +106,24 @@ class PredeployCheck extends Command
             }
         }
 
-        // 4. The Shopify install depends on the session cookie surviving Shopify's cross-site
-        //    redirect back to our callback (see SESSION_SAME_SITE_ALLOWED).
+        // 4. The Shopify install + embedded panel require the complete CHIPS contract.
+        //    A partial setup can pass OAuth yet lose auth inside the Admin iframe.
         $sameSite = strtolower((string) config(self::SESSION_SAME_SITE_CONFIG));
 
-        if (! in_array($sameSite, self::SESSION_SAME_SITE_ALLOWED, true)) {
+        if ($sameSite !== self::SESSION_SAME_SITE_EXPECTED) {
             $failures[] = sprintf(
-                "SESSION_SAME_SITE='%s' breaks the Shopify OAuth callback (the state nonce lives in the session; the cookie must survive Shopify's cross-site redirect). Use one of: %s.",
+                "SESSION_SAME_SITE='%s' breaks the Shopify embedded session. Use '%s' with Secure + Partitioned.",
                 $sameSite,
-                implode(', ', self::SESSION_SAME_SITE_ALLOWED),
+                self::SESSION_SAME_SITE_EXPECTED,
             );
+        }
+
+        if (config(self::SESSION_SECURE_CONFIG) !== true) {
+            $failures[] = 'SESSION_SECURE_COOKIE must be true for the Shopify embedded session.';
+        }
+
+        if (config(self::SESSION_PARTITIONED_CONFIG) !== true) {
+            $failures[] = 'SESSION_PARTITIONED_COOKIE must be true for the Shopify embedded session.';
         }
 
         // 5. Media disk must be configured (and reachable unless skipped).
