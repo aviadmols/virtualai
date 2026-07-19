@@ -7,11 +7,12 @@ use Illuminate\Support\Facades\Route;
 // === CONSTANTS ===
 // Guarded so route:cache (which can evaluate route files more than once) stays idempotent.
 defined('ROUTE_HEALTH') || define('ROUTE_HEALTH', 'health');
-// Root sends a visitor INTO the system: the merchant panel. Filament bounces a guest to its
-// own login screen (/merchant/login), and an authenticated merchant to their dashboard.
-defined('PATH_ROOT_REDIRECT') || define('PATH_ROOT_REDIRECT', '/merchant');
 
-Route::get('/', fn () => redirect()->to(PATH_ROOT_REDIRECT));
+// Root sends a visitor INTO the system: the merchant panel. Filament bounces a guest to its
+// own login screen (/merchant/login) and an authenticated merchant to their dashboard.
+// The path is read from config INSIDE the closure ON PURPOSE: a route-file define() does NOT
+// exist when the closure runs from a CACHED routes file (route:cache), so referencing one 500s.
+Route::get('/', fn () => redirect()->to((string) config('shopify.merchant_panel_path')));
 
 // Liveness/readiness: app + DB + Redis + queue reachability + scheduler heartbeat.
 // Laravel's built-in /up (bootstrap/app.php) stays for the platform healthcheck;
