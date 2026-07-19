@@ -13,8 +13,16 @@ use App\Domain\Shopify\Webhooks\HandleProductUpdateJob;
 defined('SHOPIFY_API_VERSION') || define('SHOPIFY_API_VERSION', '2026-04');
 
 // OAuth scopes — minimal by design (docs/shopify/DECISIONS.md §3): products for
-// sync + media push, orders for purchase attribution (protected-data level only).
-defined('SHOPIFY_SCOPES') || define('SHOPIFY_SCOPES', 'read_products,write_products,read_orders');
+// sync + media push, orders for purchase attribution (protected-data level only),
+// themes (read) for the onboarding checklist's real "try-on button enabled" check.
+defined('SHOPIFY_SCOPES') || define('SHOPIFY_SCOPES', 'read_products,write_products,read_orders,read_themes');
+
+// The Theme App Extension identity (shopify/extensions/trayon-widget). The uid keys the
+// theme-file checks (a block's type carries it) and, with the embed block's handle, the
+// theme-editor deep link that activates the app embed. Values change ONLY when the
+// extension is re-created in the Partner Dashboard.
+defined('SHOPIFY_THEME_EXT_UID') || define('SHOPIFY_THEME_EXT_UID', '034675f6-b79c-bc61-57f9-25f5bf0a6798c3f54cf9');
+defined('SHOPIFY_THEME_EMBED_HANDLE') || define('SHOPIFY_THEME_EMBED_HANDLE', 'trayon');
 
 // Webhook receipt housekeeping: how long a processed receipt keeps its payload, and
 // when a stuck (received/queued) receipt is considered lost and re-dispatched.
@@ -135,6 +143,12 @@ return [
     // Where the install flows send the merchant (see the guarded defines above).
     'merchant_login_path' => env('SHOPIFY_MERCHANT_LOGIN_PATH', SHOPIFY_MERCHANT_LOGIN_PATH),
     'merchant_panel_path' => env('SHOPIFY_MERCHANT_PANEL_PATH', SHOPIFY_MERCHANT_PANEL_PATH),
+
+    // The Theme App Extension identity (see the guarded defines above).
+    'theme_extension' => [
+        'uid' => SHOPIFY_THEME_EXT_UID,
+        'embed_handle' => SHOPIFY_THEME_EMBED_HANDLE,
+    ],
 
     // Webhook-receipt housekeeping knobs (see the recovery job).
     'receipts' => [

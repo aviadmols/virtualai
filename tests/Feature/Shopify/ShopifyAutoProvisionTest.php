@@ -102,9 +102,10 @@ class ShopifyAutoProvisionTest extends TestCase
         $this->assertSame(1, $grants);
         $this->assertGreaterThan(0, $account->fresh()->balance_micro_usd);
 
-        // Auto-logged-in and landed on the panel — never on /merchant/login.
+        // Auto-logged-in and sent BACK INTO the Shopify admin (embedded app), never the
+        // Sign-in wall and never an external panel tab.
         $this->assertAuthenticatedAs($owner);
-        $response->assertRedirect('/merchant/'.$site->slug);
+        $response->assertRedirect('https://'.self::SHOP.'/admin/apps/'.self::CLIENT_ID);
         $this->assertSame(0, ShopifyPendingInstall::query()->count()); // never parked
     }
 

@@ -7,7 +7,9 @@ use App\Domain\Shopify\Auth\ShopifyInstaller;
 use App\Domain\Shopify\Auth\ShopifyOAuth;
 use App\Domain\Shopify\Auth\ShopifyOAuthException;
 use App\Domain\Shopify\Auth\ShopifyOAuthState;
+use App\Domain\Shopify\ShopifyCredentials;
 use App\Models\Site;
+use App\Models\User;
 use App\Support\CorrelationId;
 use App\Support\Tenant;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -74,11 +76,16 @@ final class OAuthController
 
     private const ERROR_BODY_TEMPLATE = "Shopify install failed: %s\n(code: %s)";
 
+    // The embedded app's home inside the Shopify admin, keyed by client_id so a handle
+    // rename never breaks it. Shopify 302s this to the admin.shopify.com embedded page.
+    private const EMBEDDED_ADMIN_URL_TEMPLATE = 'https://%s/admin/apps/%s';
+
     public function __construct(
         private readonly ShopifyOAuth $oauth,
         private readonly ShopifyOAuthState $state,
         private readonly ShopifyInstaller $installer,
         private readonly ShopifyAccountProvisioner $provisioner,
+        private readonly ShopifyCredentials $credentials,
     ) {}
 
     /**
@@ -242,11 +249,15 @@ final class OAuthController
             }
 
             // install_new_shop. A shop we ALREADY know re-activates its existing
-            // connection in place (never a duplicate, never a second Site).
+            // connection in place (never a duplicate, never a second Site). Reinstall from
+            // Shopify auto-logs the shop's owner in (same trust anchor as a first install:
+            // the HMAC-verified shop), so the embedded app opens straight into the panel.
             $known = $this->installer->reconnectKnownShop($shop, $token, $correlationId);
 
             if ($known !== null) {
-                return redirect()->to($this->panelUrl((int) $known->account_id, (int) $known->site_id));
+                $this->loginOwner((int) $known->account_id, $request);
+
+                return redirect()->away($this->embeddedAdminUrl($shop));
             }
 
             // Brand-new shop, and a merchant is ALREADY signed in to Vsio: they are adding
@@ -270,7 +281,8 @@ final class OAuthController
             Auth::login($result->owner);
             $request->session()->regenerate();
 
-            return redirect()->to($this->panelUrl((int) $result->owner->account_id, $result->siteId));
+            // Back INTO the Shopify admin: the embedded app opens the onboarding shell there.
+            return redirect()->away($this->embeddedAdminUrl($shop));
         } catch (ShopifyOAuthException $e) {
             return $this->denied($e, $correlationId);
         }
@@ -295,6 +307,30 @@ final class OAuthController
         $base = rtrim((string) config(self::CFG_PANEL_PATH), '/');
 
         return $slug === null ? $base : $base.'/'.$slug;
+    }
+
+    /** The embedded app's home inside the Shopify admin (client_id-keyed). */
+    private function embeddedAdminUrl(string $shop): string
+    {
+        return sprintf(self::EMBEDDED_ADMIN_URL_TEMPLATE, $shop, $this->credentials->clientId());
+    }
+
+    /**
+     * Log the account owner in for an install-from-Shopify flow — the canonical owner rule
+     * (earliest user of the account). A top-level session cookie is set here (fixation
+     * defense), which also lets the embedded shell's "open dashboard" land without a wall.
+     * A missing owner (corrupt state) is skipped, never a crash.
+     */
+    private function loginOwner(int $accountId, Request $request): void
+    {
+        $owner = User::query()->forAccount($accountId)->orderBy('id')->first();
+
+        if ($owner === null) {
+            return;
+        }
+
+        Auth::login($owner);
+        $request->session()->regenerate();
     }
 
     /** The typed denial: 403 (tampered) / 409 (conflict) / 502 (not configured), never 500. */

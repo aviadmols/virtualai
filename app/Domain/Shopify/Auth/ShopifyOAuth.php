@@ -26,7 +26,10 @@ final class ShopifyOAuth
 {
     // === CONSTANTS ===
     // The ONLY shop-domain shape we ever talk to. Anchored, lowercase, no userinfo/port/path.
-    public const SHOP_DOMAIN_PATTERN = '/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/';
+    // The `D` (PCRE_DOLLAR_ENDONLY) flag makes `$` match the absolute end, NOT before a
+    // trailing newline — so a "foo.myshopify.com\n" can never pass (this regex also gates
+    // the session-token `dest`, which is not trim()'d before the check).
+    public const SHOP_DOMAIN_PATTERN = '/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/D';
 
     private const SCHEME = 'https://';
 

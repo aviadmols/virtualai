@@ -1,8 +1,16 @@
 <?php
 
+use App\Http\Middleware\ShopifyFrameAncestors;
+use App\Http\Middleware\VerifyShopifySessionToken;
+use App\Http\Shopify\Controllers\EmbeddedAppApiController;
+use App\Http\Shopify\Controllers\EmbeddedAppController;
+use App\Http\Shopify\Controllers\EmbeddedSessionController;
 use App\Http\Shopify\Controllers\InstallClaimController;
 use App\Http\Shopify\Controllers\OAuthController;
 use App\Http\Shopify\Controllers\WebhookController;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 
 // === CONSTANTS ===
@@ -12,12 +20,18 @@ defined('ROUTE_SHOPIFY_INSTALL') || define('ROUTE_SHOPIFY_INSTALL', 'shopify.ins
 defined('ROUTE_SHOPIFY_INSTALL_CLAIM') || define('ROUTE_SHOPIFY_INSTALL_CLAIM', 'shopify.install.claim');
 defined('ROUTE_SHOPIFY_OAUTH_START') || define('ROUTE_SHOPIFY_OAUTH_START', 'shopify.oauth.start');
 defined('ROUTE_SHOPIFY_OAUTH_CALLBACK') || define('ROUTE_SHOPIFY_OAUTH_CALLBACK', 'shopify.oauth.callback');
+defined('ROUTE_SHOPIFY_APP') || define('ROUTE_SHOPIFY_APP', 'shopify.app');
+defined('ROUTE_SHOPIFY_APP_SESSION') || define('ROUTE_SHOPIFY_APP_SESSION', 'shopify.app.session');
+defined('ROUTE_SHOPIFY_APP_BOOTSTRAP') || define('ROUTE_SHOPIFY_APP_BOOTSTRAP', 'shopify.app.bootstrap');
 
 defined('PATH_SHOPIFY_WEBHOOKS') || define('PATH_SHOPIFY_WEBHOOKS', '/shopify/webhooks');
 defined('PATH_SHOPIFY_INSTALL') || define('PATH_SHOPIFY_INSTALL', '/shopify/install');
 defined('PATH_SHOPIFY_INSTALL_CLAIM') || define('PATH_SHOPIFY_INSTALL_CLAIM', '/shopify/install/claim');
 defined('PATH_SHOPIFY_OAUTH_START') || define('PATH_SHOPIFY_OAUTH_START', '/shopify/oauth/start');
 defined('PATH_SHOPIFY_OAUTH_CALLBACK') || define('PATH_SHOPIFY_OAUTH_CALLBACK', '/shopify/oauth/callback');
+defined('PATH_SHOPIFY_APP') || define('PATH_SHOPIFY_APP', '/shopify/app');
+defined('PATH_SHOPIFY_APP_SESSION') || define('PATH_SHOPIFY_APP_SESSION', '/shopify/app/session');
+defined('PATH_SHOPIFY_APP_BOOTSTRAP') || define('PATH_SHOPIFY_APP_BOOTSTRAP', '/shopify/app/api/bootstrap');
 
 // The webhook intake is server-to-server: throttled, but NO session and NO CSRF —
 // Shopify's raw-body HMAC is the auth (verified inside the controller, fails closed).
@@ -28,6 +42,25 @@ defined('MW_SHOPIFY_WEBHOOK') || define('MW_SHOPIFY_WEBHOOK', ['throttle:webhook
 // post-login intended URL survive the round trip through Shopify's grant screen.
 // They are all GET, so CSRF never applies; the security is HMAC + the signed state.
 defined('MW_SHOPIFY_WEB') || define('MW_SHOPIFY_WEB', ['web']);
+
+// The embedded-admin page: STATELESS (no session/cookies — they don't exist in a
+// third-party iframe). The CSP middleware stamps the per-shop frame-ancestors header.
+defined('MW_SHOPIFY_EMBEDDED_PAGE') || define('MW_SHOPIFY_EMBEDDED_PAGE', [ShopifyFrameAncestors::class]);
+
+// The embedded API: the App Bridge session-token JWT is the ONLY auth. No CSRF —
+// the signed, short-lived, audience-bound JWT is itself the anti-CSRF credential.
+defined('MW_SHOPIFY_EMBEDDED_API') || define('MW_SHOPIFY_EMBEDDED_API', [VerifyShopifySessionToken::class, 'throttle:60,1']);
+
+// The session BRIDGE (JWT -> partitioned cookie): the only embedded route that touches
+// the session, so it carries exactly the cookie/session pieces needed to WRITE one.
+// Not in any CSRF group; the verified JWT authorizes the login.
+defined('MW_SHOPIFY_EMBEDDED_SESSION') || define('MW_SHOPIFY_EMBEDDED_SESSION', [
+    EncryptCookies::class,
+    AddQueuedCookiesToResponse::class,
+    StartSession::class,
+    VerifyShopifySessionToken::class,
+    'throttle:60,1',
+]);
 
 Route::middleware(MW_SHOPIFY_WEBHOOK)
     ->post(PATH_SHOPIFY_WEBHOOKS, WebhookController::class)
@@ -50,3 +83,16 @@ Route::middleware(MW_SHOPIFY_WEB)->group(function (): void {
     Route::get(PATH_SHOPIFY_INSTALL_CLAIM, InstallClaimController::class)
         ->name(ROUTE_SHOPIFY_INSTALL_CLAIM);
 });
+
+// The embedded admin surface (application_url): shell/breakout page + its token-authed API.
+Route::middleware(MW_SHOPIFY_EMBEDDED_PAGE)
+    ->get(PATH_SHOPIFY_APP, EmbeddedAppController::class)
+    ->name(ROUTE_SHOPIFY_APP);
+
+Route::middleware(MW_SHOPIFY_EMBEDDED_SESSION)
+    ->post(PATH_SHOPIFY_APP_SESSION, EmbeddedSessionController::class)
+    ->name(ROUTE_SHOPIFY_APP_SESSION);
+
+Route::middleware(MW_SHOPIFY_EMBEDDED_API)
+    ->get(PATH_SHOPIFY_APP_BOOTSTRAP, [EmbeddedAppApiController::class, 'bootstrap'])
+    ->name(ROUTE_SHOPIFY_APP_BOOTSTRAP);

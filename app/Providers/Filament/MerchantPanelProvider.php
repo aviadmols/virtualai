@@ -104,6 +104,10 @@ class MerchantPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
                 HtmlDirection::class,
+                // The panel renders inside the Shopify admin iframe (partitioned session
+                // cookie). frame-ancestors names the exact shop when the embedded session
+                // bridge stamped one, else the static Shopify pair — never an open frame.
+                \App\Http\Middleware\ShopifyFrameAncestors::class.':'.\App\Http\Middleware\ShopifyFrameAncestors::MODE_PANEL,
             ])
             ->authMiddleware([
                 Authenticate::class,

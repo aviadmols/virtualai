@@ -44,10 +44,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prepend(WidgetCorsPreflight::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // The widget API must answer TYPED JSON, never an HTML error page, on any
-        // unhandled throwable (validation/not-found/etc are already typed; this is the
-        // backstop so a 500 never renders HTML to the storefront widget).
+        // The widget API and the embedded Shopify-admin API must answer TYPED JSON,
+        // never an HTML error page, on any unhandled throwable (validation/not-found/etc
+        // are already typed; this is the backstop so a 500 never renders HTML to the
+        // storefront widget or the App Bridge shell).
         $exceptions->shouldRenderJsonWhen(function ($request) {
-            return $request->is(config('widget.prefix').'/*') || $request->expectsJson();
+            return $request->is(config('widget.prefix').'/*')
+                || $request->is('shopify/app/api/*')
+                || $request->is('shopify/app/session')
+                || $request->expectsJson();
         });
     })->create();

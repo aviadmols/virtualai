@@ -229,6 +229,7 @@ class ShopifyInstallNewShopTest extends TestCase
         $this->fakeTokenExchange();
 
         $account = Account::factory()->create();
+        $owner = User::factory()->create(['account_id' => $account->id]);
         $site = Site::factory()->forAccount($account)->create();
         $connection = Tenant::run($account, fn (): ShopifyConnection => ShopifyConnection::factory()->forSite($site)->create([
             'shop_domain' => self::SHOP,
@@ -239,7 +240,9 @@ class ShopifyInstallNewShopTest extends TestCase
         // The merchant re-installs from the Shopify admin — no Tray On session at all.
         $response = $this->get($this->signedCallback($this->newShopState()));
 
-        $response->assertRedirect('/merchant/'.$site->slug);
+        // Back INTO the Shopify admin (embedded), with the shop owner auto-logged-in.
+        $response->assertRedirect('https://'.self::SHOP.'/admin/apps/'.self::CLIENT_ID);
+        $this->assertAuthenticatedAs($owner);
         $this->assertSame(0, ShopifyPendingInstall::query()->count()); // never parked
 
         $fresh = Tenant::run($account, fn (): ?ShopifyConnection => ShopifyConnection::query()->first());
