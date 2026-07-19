@@ -12,7 +12,7 @@
 
 name = "Vsio"
 handle = "vsio"
-client_id = ""
+client_id = "585a39aa83a140e7fbdcd80bb74f43db"
 application_url = "https://go.vsio.app"
 embedded = true
 
@@ -27,20 +27,22 @@ redirect_urls = [
 [webhooks]
 api_version = "2026-04"
 
-  # The three MANDATORY compliance webhooks. Registered HERE (app config), not via the
-  # API, and answered by the same signed intake endpoint from day one.
-  [[webhooks.subscriptions]]
-  topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
-  uri = "https://go.vsio.app/shopify/webhooks"
+  # The three MANDATORY privacy/compliance webhooks. Declared as a privacy_compliance
+  # block — Shopify REJECTS these topics inside a generic subscriptions array. Answered
+  # by the same signed-HMAC intake endpoint from day one.
+  [webhooks.privacy_compliance]
+  customer_data_request_url = "https://go.vsio.app/shopify/webhooks"
+  customer_deletion_url = "https://go.vsio.app/shopify/webhooks"
+  shop_deletion_url = "https://go.vsio.app/shopify/webhooks"
 
   # The product/order/uninstall topics are registered per store after install
   # (RegisterShopifyWebhooksJob) so they always point at the live app host.
 
-[app_proxy]
-# Reserved: Phase 6 may serve the attribution beacon through a proxy subpath.
+# [app_proxy] is intentionally omitted until Phase 6 — Shopify rejects an empty
+# section (url/subpath/prefix are all required once it exists). Re-add it when the
+# attribution beacon actually serves through a proxy subpath.
 
 [build]
-include_config_on_deploy = true
 
 [pos]
 embedded = false

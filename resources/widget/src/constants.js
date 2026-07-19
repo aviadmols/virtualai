@@ -98,6 +98,11 @@ export const PENDING_MSG = { done: 'done', failed: 'failed', viewed: 'viewed', d
 // The sentinel marking an already-mounted button — guards idempotent injection.
 export const MOUNT_SENTINEL_ATTR = 'data-trayon-mounted';
 
+// A merchant-placed theme app block (the "Tray it on" section block) renders this empty slot.
+// When one exists on the page the mount engine puts the trigger INSIDE it — the block wins over
+// the site's configured placement, so the merchant positions the button from the theme editor.
+export const THEME_SLOT_ATTR = 'data-trayon-slot';
+
 // Selector roles the widget reads from the per-site config (pdp-scanner source-of-truth).
 export const SELECTOR_ROLES = {
   addToCart: 'add_to_cart',

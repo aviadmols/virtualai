@@ -13,6 +13,7 @@
 
 import {
   MOUNT_SENTINEL_ATTR,
+  THEME_SLOT_ATTR,
   APPEARANCE,
   PLACEMENT,
   OBSERVER_DEBOUNCE_MS,
@@ -68,6 +69,17 @@ function inject() {
     }
   }
   if (liveFound) return;
+
+  // A merchant-placed theme block is authoritative: if the "Tray it on" app block was dropped
+  // into the product template, render the trigger INSIDE its slot — wherever the merchant put it,
+  // ignoring the site's configured placement. Force the inline skin so a site set to a fixed /
+  // on-image placement doesn't fixed-position a button that must live in the block's flow.
+  const slot = safeQuery('[' + THEME_SLOT_ATTR + ']');
+  if (slot) {
+    wrapper = button.build({ ...appearance, [APPEARANCE.placement]: PLACEMENT.afterAtc });
+    slot.appendChild(wrapper);
+    return;
+  }
 
   const anchor = findAddToCart(selectors);
 

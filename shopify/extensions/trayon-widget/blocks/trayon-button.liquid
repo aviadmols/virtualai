@@ -1,0 +1,65 @@
+{% comment %}
+  Vsio — "Tray it on" product button block (Online Store 2.0 app block, target: section).
+
+  Unlike the app-EMBED block (trayon.liquid, target body), which loads globally and lets the widget
+  auto-inject the button under Add to Cart, THIS block lets the merchant drop the Vsio try-on trigger
+  anywhere inside the product template from the theme editor ("Add block" in the product section).
+
+  It renders an EMPTY slot; the widget mounts the button INTO the slot (data-trayon-slot), so the
+  merchant controls the exact position. The slot wins over the site's configured placement.
+
+    data-site-key     the PUBLIC site key (Vsio panel -> Sites -> Embed). Never the secret.
+    data-trayon-slot  the mount point the widget renders the trigger into.
+    data-platform     'shopify' — the widget drives the Ajax cart, not a blind DOM click.
+{% endcomment %}
+
+{% if block.settings.site_key != blank and product %}
+  {% liquid
+    assign selected_variant = product.selected_or_first_available_variant
+  %}
+
+  <div
+    data-trayon-slot
+    data-product-id="{{ product.id }}"
+    data-product-handle="{{ product.handle }}"
+    {% if selected_variant %}data-variant-id="{{ selected_variant.id }}"{% endif %}
+    {{ block.shopify_attributes }}
+  ></div>
+
+  <script
+    src="{{ block.settings.script_src }}"
+    data-site-key="{{ block.settings.site_key }}"
+    data-platform="shopify"
+    data-product-id="{{ product.id }}"
+    data-product-handle="{{ product.handle }}"
+    {% if selected_variant %}data-variant-id="{{ selected_variant.id }}"{% endif %}
+    async
+  ></script>
+
+  <script src="{{ 'trayon-shopify-context.js' | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Vsio try-on button",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "settings": [
+    {
+      "type": "text",
+      "id": "site_key",
+      "label": "Site key",
+      "info": "Copy it from your Vsio panel (Sites -> Embed). It is a public key."
+    },
+    {
+      "type": "text",
+      "id": "script_src",
+      "label": "Widget script URL",
+      "default": "https://go.vsio.app/widget/v1/widget.js",
+      "info": "Leave the default unless Vsio support gives you another URL."
+    }
+  ]
+}
+{% endschema %}

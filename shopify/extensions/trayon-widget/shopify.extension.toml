@@ -10,6 +10,7 @@
 
 name = "Vsio widget"
 type = "theme"
+uid = "034675f6-b79c-bc61-57f9-25f5bf0a6798c3f54cf9"
 
 [[extensions]]
 name = "Vsio widget"
