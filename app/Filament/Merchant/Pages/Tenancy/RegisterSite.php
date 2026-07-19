@@ -9,9 +9,10 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Pages\Tenancy\RegisterTenant;
+use Filament\Support\Exceptions\Halt;
 use Illuminate\Database\Eloquent\Model;
-use RuntimeException;
 
 /**
  * RegisterSite — the Filament tenant-registration page: add a new shop from the merchant panel
@@ -54,8 +55,16 @@ class RegisterSite extends RegisterTenant
     {
         $accountId = auth()->user()?->account_id;
 
+        // A user with no account (e.g. a platform super-admin) cannot own a shop. Fail
+        // gracefully with a notification instead of a 500 — Halt stops the action cleanly
+        // (RegisterTenant::register catches it and rolls the transaction back).
         if ($accountId === null) {
-            throw new RuntimeException('Only an account owner can register a shop.');
+            Notification::make()
+                ->danger()
+                ->title(__('sites.register.not_owner'))
+                ->send();
+
+            throw new Halt();
         }
 
         return Tenant::run((int) $accountId, static fn (): Site => Site::create($data));

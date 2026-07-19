@@ -10,6 +10,7 @@ return [
     'updated' => 'Site saved',
     'register' => [
         'label' => 'Add a shop',
+        'not_owner' => 'Your user isn’t linked to a merchant account, so it can’t add a shop.',
     ],
     'profile' => [
         'label' => 'Shop settings',
