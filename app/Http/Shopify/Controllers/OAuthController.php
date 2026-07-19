@@ -2,6 +2,7 @@
 
 namespace App\Http\Shopify\Controllers;
 
+use App\Domain\Shopify\Auth\ShopifyAccountProvisioner;
 use App\Domain\Shopify\Auth\ShopifyInstaller;
 use App\Domain\Shopify\Auth\ShopifyOAuth;
 use App\Domain\Shopify\Auth\ShopifyOAuthException;
@@ -77,6 +78,7 @@ final class OAuthController
         private readonly ShopifyOAuth $oauth,
         private readonly ShopifyOAuthState $state,
         private readonly ShopifyInstaller $installer,
+        private readonly ShopifyAccountProvisioner $provisioner,
     ) {}
 
     /**
@@ -247,13 +249,28 @@ final class OAuthController
                 return redirect()->to($this->panelUrl((int) $known->account_id, (int) $known->site_id));
             }
 
-            // Brand-new shop: park the token (encrypted, NOT tenant-bound) and send the
-            // merchant through register-or-login. The claim token lives in the SESSION
-            // only — never in a URL, where it could be replayed into a stranger's account.
-            $claimToken = $this->installer->park($shop, $token, $correlationId);
-            $request->session()->put(self::SESSION_CLAIM_TOKEN, $claimToken);
+            // Brand-new shop, and a merchant is ALREADY signed in to Vsio: they are adding
+            // an extra store to their existing account. Park the token (encrypted, NOT
+            // tenant-bound) and send them to claim it — never a second account. The claim
+            // token lives in the SESSION only, never in a URL where it could be replayed.
+            if (Auth::check()) {
+                $claimToken = $this->installer->park($shop, $token, $correlationId);
+                $request->session()->put(self::SESSION_CLAIM_TOKEN, $claimToken);
 
-            return redirect()->route(self::ROUTE_CLAIM);
+                return redirect()->route(self::ROUTE_CLAIM);
+            }
+
+            // Brand-new shop with NO Vsio session: Shopify-SSO auto-provisioning. The shop
+            // was HMAC-verified above, so only the real store admin who approved the grant
+            // reaches here — we mint the account + owner (opening grant included), create the
+            // Site + connection, LOG THE OWNER IN, and land them straight in the merchant
+            // panel (no Sign-in wall). The session is regenerated on login (fixation).
+            $result = $this->provisioner->provisionForInstall($shop, $token, $correlationId);
+
+            Auth::login($result->owner);
+            $request->session()->regenerate();
+
+            return redirect()->to($this->panelUrl((int) $result->owner->account_id, $result->siteId));
         } catch (ShopifyOAuthException $e) {
             return $this->denied($e, $correlationId);
         }

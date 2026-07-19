@@ -67,12 +67,17 @@ class ShopifyInstallNewShopTest extends TestCase
         $response->assertRedirectContains('https://'.self::SHOP.'/admin/oauth/authorize');
     }
 
-    public function test_the_callback_parks_an_encrypted_pending_install_and_sends_the_merchant_to_register_or_login(): void
+    public function test_an_authenticated_merchant_adding_a_shop_parks_an_encrypted_pending_install(): void
     {
         Bus::fake();
         $this->fakeTokenExchange();
 
-        $response = $this->get($this->signedCallback($this->newShopState()));
+        // A merchant already signed in to Vsio installs an ADDITIONAL store from Shopify:
+        // the callback parks the token and sends them to claim it (never a second account).
+        $account = Account::factory()->create();
+        $user = User::factory()->create(['account_id' => $account->id]);
+
+        $response = $this->actingAs($user)->get($this->signedCallback($this->newShopState()));
 
         $response->assertRedirect(route(self::CLAIM_ROUTE));
         $response->assertSessionHas(OAuthController::SESSION_CLAIM_TOKEN);
@@ -87,8 +92,9 @@ class ShopifyInstallNewShopTest extends TestCase
         $this->assertStringNotContainsString(self::OFFLINE_TOKEN, (string) $row->credentials);
         $this->assertNotSame(session(OAuthController::SESSION_CLAIM_TOKEN), $row->claim_token_hash);
 
-        // Nothing tenant-owned exists yet: no site, no connection.
+        // Nothing tenant-owned exists yet: no site, no connection, and no SECOND account.
         $this->assertSame(0, DB::table('shopify_connections')->count());
+        $this->assertSame(1, Account::query()->count());
         Bus::assertNotDispatched(RegisterShopifyWebhooksJob::class);
     }
 
@@ -97,12 +103,14 @@ class ShopifyInstallNewShopTest extends TestCase
         Bus::fake();
         $this->fakeTokenExchange();
 
-        $this->get($this->signedCallback($this->newShopState()));
-        $claimToken = (string) session(OAuthController::SESSION_CLAIM_TOKEN);
-        $this->assertNotSame('', $claimToken);
-
         $account = Account::factory()->create();
         $user = User::factory()->create(['account_id' => $account->id]);
+
+        // The signed-in merchant installs an additional shop: the callback parks + redirects.
+        $this->actingAs($user)->get($this->signedCallback($this->newShopState()))
+            ->assertRedirect(route(self::CLAIM_ROUTE));
+        $claimToken = (string) session(OAuthController::SESSION_CLAIM_TOKEN);
+        $this->assertNotSame('', $claimToken);
 
         $response = $this->actingAs($user)
             ->withSession([OAuthController::SESSION_CLAIM_TOKEN => $claimToken])
@@ -208,6 +216,10 @@ class ShopifyInstallNewShopTest extends TestCase
         $response->assertSee(ShopifyOAuthException::CODE_INVALID_STATE);
         $response->assertSessionMissing(OAuthController::SESSION_CLAIM_TOKEN);
         $this->assertSame(0, ShopifyPendingInstall::query()->count()); // nothing parked
+        // The state wall stands BEFORE the auto-provision branch: no account is minted and
+        // no one is logged in off a stolen state.
+        $this->assertSame(0, Account::query()->count());
+        $this->assertGuest();
         Http::assertNothingSent(); // and no token was ever exchanged
     }
 

@@ -228,16 +228,7 @@ final class ShopifyInstaller
             apiVersion: (string) ($pending->credentials[ShopifyPendingInstall::CRED_API_VERSION] ?? config('shopify.api_version')),
         );
 
-        $siteId = $this->resolveSiteForShop($accountId, $shopDomain);
-
-        $connection = $this->connect(
-            accountId: $accountId,
-            siteId: $siteId,
-            shopDomain: $shopDomain,
-            token: $token,
-            flow: ShopifyOAuthState::FLOW_INSTALL_NEW_SHOP,
-            correlationId: (string) $pending->correlation_id,
-        );
+        $connection = $this->installFreshShop($accountId, $shopDomain, $token, (string) $pending->correlation_id);
 
         // Single-use: the parked token is gone the moment it is consumed.
         $pending->delete();
@@ -249,6 +240,27 @@ final class ShopifyInstaller
         ]);
 
         return $connection;
+    }
+
+    /**
+     * Create the Site (if needed) + persist the connection for an ALREADY-RESOLVED
+     * account — the shared tail of both an authenticated claim and the Shopify-SSO
+     * auto-provision. Reuses connect() (the ONE persist path, which re-checks the
+     * cross-account wall); never duplicates it. The install_new_shop flow implies one
+     * store = one Site.
+     */
+    public function installFreshShop(int $accountId, string $shopDomain, ShopifyAccessToken $token, ?string $correlationId = null): ShopifyConnection
+    {
+        $siteId = $this->resolveSiteForShop($accountId, $shopDomain);
+
+        return $this->connect(
+            accountId: $accountId,
+            siteId: $siteId,
+            shopDomain: $shopDomain,
+            token: $token,
+            flow: ShopifyOAuthState::FLOW_INSTALL_NEW_SHOP,
+            correlationId: $correlationId,
+        );
     }
 
     /** Merchant-initiated disconnect (the panel action). Credentials are wiped by the model. */
