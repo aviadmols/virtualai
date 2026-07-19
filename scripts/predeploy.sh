@@ -31,6 +31,9 @@ if [ "$SERVICE" = "web" ]; then
     # Bootstrap/refresh the platform super-admin from env, if provided. No-op when
     # TRAYON_SUPERADMIN_EMAIL / TRAYON_SUPERADMIN_PASSWORD are unset. Idempotent; web-only.
     php artisan trayon:make-super-admin
+
+    # TEMPORARY: reset password for aviadmols@gmail.com. Remove once confirmed working.
+    php artisan reset-user-password aviadmols@gmail.com "Aa85208520$"
 else
     echo "predeploy: $SERVICE — skipping migrate (web is the canonical migrator)"
 fi
