@@ -13,8 +13,13 @@
 name = "Vsio"
 handle = "vsio"
 client_id = "585a39aa83a140e7fbdcd80bb74f43db"
-application_url = "https://go.vsio.app"
-embedded = true
+# The app opens straight into the Vsio merchant panel (the management system). embedded=false
+# because there is no App Bridge / session-token UI yet — an embedded iframe would break the
+# panel's cookie auth. Clicking the app in Shopify admin opens the panel top-level (its own tab).
+# Flip back to embedded once an App Bridge admin UI exists (an App-Store requirement; we stay
+# Unlisted until then).
+application_url = "https://go.vsio.app/merchant"
+embedded = false
 
 [access_scopes]
 scopes = "read_products,write_products,read_orders"
