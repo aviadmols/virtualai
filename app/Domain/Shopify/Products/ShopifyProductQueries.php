@@ -22,6 +22,10 @@ final class ShopifyProductQueries
 
     public const IMAGES_PER_PRODUCT = 10;
 
+    // Collections a product belongs to — the input to a collection-scoped button rule. A
+    // product rarely sits in many collections; 25 is ample and keeps the query cost modest.
+    public const COLLECTIONS_PER_PRODUCT = 25;
+
     // The one field set both the catalog walk and the single-product fetch select.
     private const PRODUCT_FIELDS = <<<'GRAPHQL'
     fragment ProductFields on Product {
@@ -33,6 +37,7 @@ final class ShopifyProductQueries
       productType
       vendor
       tags
+      collections(first: COLLECTIONS_LIMIT) { nodes { handle title } }
       status
       onlineStoreUrl
       featuredImage { url altText }
@@ -115,6 +120,7 @@ final class ShopifyProductQueries
         $fragment = strtr(self::PRODUCT_FIELDS, [
             'VARIANTS_LIMIT' => (string) self::VARIANTS_PER_PRODUCT,
             'IMAGES_LIMIT' => (string) self::IMAGES_PER_PRODUCT,
+            'COLLECTIONS_LIMIT' => (string) self::COLLECTIONS_PER_PRODUCT,
         ]);
 
         return $document."\n".$fragment;

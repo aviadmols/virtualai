@@ -89,6 +89,7 @@ final class ShopifyProductMapper
                     'status' => $node['status'] ?? null,
                     'vendor' => $node['vendor'] ?? null,
                     'tags' => $node['tags'] ?? [],
+                    'collections' => $this->collections($node),
                     'options' => $node['options'] ?? [],
                 ],
             ],
@@ -106,6 +107,33 @@ final class ShopifyProductMapper
             url: $this->storefrontUrl($node, $shopDomain),
             active: $this->isActive($node),
         );
+    }
+
+    /**
+     * The collections this product belongs to, each as {handle, title} — the input to a
+     * collection-scoped button-visibility rule (ButtonVisibility). Skips any malformed node.
+     *
+     * @return array<int,array{handle: string, title: string}>
+     */
+    private function collections(array $node): array
+    {
+        $nodes = $node['collections']['nodes'] ?? [];
+
+        if (! is_array($nodes)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($nodes as $c) {
+            $handle = is_array($c) ? (string) ($c['handle'] ?? '') : '';
+            $title = is_array($c) ? (string) ($c['title'] ?? '') : '';
+
+            if ($handle !== '' || $title !== '') {
+                $out[] = ['handle' => $handle, 'title' => $title];
+            }
+        }
+
+        return $out;
     }
 
     /**

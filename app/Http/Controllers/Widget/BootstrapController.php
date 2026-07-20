@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Widget;
 
 use App\Domain\Banners\BannerRules;
 use App\Domain\Media\MediaStorage;
+use App\Domain\Sites\ButtonVisibility;
 use App\Domain\Sites\ClubConfig;
 use App\Domain\Sites\WidgetAppearance;
 use App\Http\Widget\EndUserResolver;
@@ -59,6 +60,14 @@ final class BootstrapController
         $this->touchWidgetSeen($site);
 
         $product = $this->confirmedProductFor($request, $site);
+
+        // The merchant's button-visibility rule (all / tag / product_type / collection). A
+        // product that fails the rule resolves to null, so the widget never mounts the button
+        // on that PDP. Fail-open: no rule (or MODE_ALL) shows the button on every product.
+        if ($product !== null && ! ButtonVisibility::resolve($site->button_rules)->matches($product)) {
+            $product = null;
+        }
+
         $endUser = $this->resolveEndUser($request, $site);
 
         $lead = $endUser !== null ? $this->gates->leadState($site, $endUser) : null;

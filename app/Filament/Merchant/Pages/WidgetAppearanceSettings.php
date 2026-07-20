@@ -7,6 +7,7 @@ use App\Domain\Scan\Preview\PreviewFetcher;
 use App\Domain\Scan\Preview\PreviewResult;
 use App\Domain\Scan\Preview\PreviewSnapshotStore;
 use App\Domain\Scan\Represent\ScanDom;
+use App\Domain\Sites\ButtonVisibility;
 use App\Domain\Sites\InvalidSiteSettingsException;
 use App\Domain\Sites\SiteSettingsService;
 use App\Domain\Sites\WidgetAppearance;
@@ -17,11 +18,13 @@ use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
@@ -55,16 +58,28 @@ class WidgetAppearanceSettings extends Page implements HasForms
     protected static string $view = 'filament.merchant.pages.widget-appearance-settings';
 
     private const NAV_LABEL = 'appearance.nav';
+
     private const TITLE = 'appearance.title';
+
     private const SAVED = 'appearance.saved';
+
     private const SAVE_FAILED = 'appearance.errors.save_failed';
 
     // Preview cache + rate limit — headless renders cost money, so cache briefly + cap per site.
     private const PREVIEW_CACHE_TTL_MINUTES = 10;
+
     private const PREVIEW_RATE_MAX = 20;   // "Load preview" attempts per window, per site
+
     private const PREVIEW_RATE_DECAY = 60; // seconds
 
     private const PICKER_ASSET = 'widget/picker/picker.js';
+
+    // Button-visibility rule form fields — persisted to the SEPARATE button_rules column
+    // (ButtonVisibility), never mixed into the appearance blob. Only Shopify sites carry the
+    // tag/collection metadata the tag/collection modes need, so the section is Shopify-only.
+    private const FIELD_RULE_MODE = 'button_rule_mode';
+
+    private const FIELD_RULE_VALUES = 'button_rule_values';
 
     /** The bound site id (scalar — Livewire-safe; the model re-resolves on demand). */
     public ?int $siteId = null;
@@ -132,7 +147,12 @@ class WidgetAppearanceSettings extends Page implements HasForms
 
         $this->siteId = (int) $resolved->getKey();
         $this->hasSite = true;
-        $this->form->fill(WidgetAppearance::resolve($resolved->widget_appearance, $resolved->product_category));
+
+        $rule = ButtonVisibility::resolve($resolved->button_rules);
+        $this->form->fill(WidgetAppearance::resolve($resolved->widget_appearance, $resolved->product_category) + [
+            self::FIELD_RULE_MODE => $rule->mode,
+            self::FIELD_RULE_VALUES => $rule->values,
+        ]);
 
         // Deep-link from the scan-review flow (?pick=1): open the picker straight onto
         // the just-scanned product. Guarded so a bad param never 500s the page load.
@@ -165,6 +185,23 @@ class WidgetAppearanceSettings extends Page implements HasForms
                         Hidden::make(WidgetAppearance::KEY_PLACEMENT),
                         Hidden::make(WidgetAppearance::KEY_CUSTOM_ANCHOR),
                         Hidden::make(WidgetAppearance::KEY_CUSTOM_POSITION),
+                    ]),
+                Section::make(__('appearance.visibility.title'))
+                    ->description(__('appearance.visibility.sub'))
+                    ->schema([
+                        Select::make(self::FIELD_RULE_MODE)
+                            ->label(__('appearance.visibility.mode'))
+                            ->options(self::visibilityModeOptions())
+                            ->default(ButtonVisibility::MODE_ALL)
+                            ->live()
+                            ->required(),
+                        // The tag / product-type / collection values to match. Hidden for "all".
+                        TagsInput::make(self::FIELD_RULE_VALUES)
+                            ->label(__('appearance.visibility.values'))
+                            ->helperText(__('appearance.visibility.values_help'))
+                            ->placeholder(__('appearance.visibility.values_placeholder'))
+                            ->visible(fn (Get $get): bool => $get(self::FIELD_RULE_MODE) !== ButtonVisibility::MODE_ALL)
+                            ->columnSpanFull(),
                     ]),
                 Section::make(__('appearance.popup.title'))
                     ->description(__('appearance.popup.sub'))
@@ -407,14 +444,34 @@ class WidgetAppearanceSettings extends Page implements HasForms
         }
 
         try {
+            $state = $this->form->getState();
+
             app(SiteSettingsService::class)->update($site, [
-                SiteSettingsService::KEY_WIDGET_APPEARANCE => $this->form->getState(),
+                // WidgetAppearance::sanitize keeps only the appearance keys, so the two rule
+                // fields riding in the same state are ignored here and captured below instead.
+                SiteSettingsService::KEY_WIDGET_APPEARANCE => $state,
+                SiteSettingsService::KEY_BUTTON_RULES => [
+                    ButtonVisibility::KEY_MODE => $state[self::FIELD_RULE_MODE] ?? ButtonVisibility::MODE_ALL,
+                    ButtonVisibility::KEY_VALUES => $state[self::FIELD_RULE_VALUES] ?? [],
+                ],
             ]);
 
             Notification::make()->success()->title(__(self::SAVED))->send();
-        } catch (InvalidSiteSettingsException | \Throwable) {
+        } catch (InvalidSiteSettingsException|\Throwable) {
             Notification::make()->danger()->title(__(self::SAVE_FAILED))->send();
         }
+    }
+
+    /** The button-visibility modes as value => localised label. */
+    private static function visibilityModeOptions(): array
+    {
+        $options = [];
+
+        foreach (ButtonVisibility::MODES as $mode) {
+            $options[$mode] = __('appearance.visibility.mode_'.$mode);
+        }
+
+        return $options;
     }
 
     /** The bound site (account-scoped), or null. */

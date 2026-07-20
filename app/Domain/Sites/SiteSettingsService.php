@@ -36,6 +36,8 @@ final class SiteSettingsService
 
     public const KEY_WIDGET_APPEARANCE = 'widget_appearance';
 
+    public const KEY_BUTTON_RULES = 'button_rules';
+
     public const KEY_CLUB_CONFIG = 'club_config';
 
     private const WRITABLE_KEYS = [
@@ -44,6 +46,7 @@ final class SiteSettingsService
         self::KEY_GALLERY_SETTINGS,
         self::KEY_FREE_GENERATIONS,
         self::KEY_WIDGET_APPEARANCE,
+        self::KEY_BUTTON_RULES,
         self::KEY_CLUB_CONFIG,
     ];
 
@@ -99,6 +102,7 @@ final class SiteSettingsService
                 self::KEY_PRIVACY_CONFIG => $this->validObject(self::KEY_PRIVACY_CONFIG, $patch[$key]),
                 self::KEY_GALLERY_SETTINGS => $this->validObject(self::KEY_GALLERY_SETTINGS, $patch[$key]),
                 self::KEY_WIDGET_APPEARANCE => WidgetAppearance::sanitize($this->validObject(self::KEY_WIDGET_APPEARANCE, $patch[$key])),
+                self::KEY_BUTTON_RULES => ButtonVisibility::sanitize($this->validObject(self::KEY_BUTTON_RULES, $patch[$key])),
                 self::KEY_CLUB_CONFIG => ClubConfig::sanitize($this->validObject(self::KEY_CLUB_CONFIG, $patch[$key])),
             };
         }

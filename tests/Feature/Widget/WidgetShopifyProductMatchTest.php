@@ -83,6 +83,32 @@ final class WidgetShopifyProductMatchTest extends TestCase
         $this->assertNotSame($productB->id, $response->json('product.id'));
     }
 
+    public function test_a_button_visibility_rule_hides_a_product_that_does_not_match(): void
+    {
+        [$account, $site, $product] = $this->shopifyShopWithProduct();
+
+        // Rule: show the button ONLY on products tagged 'tryon'. This product isn't.
+        Tenant::run($account, function () use ($site, $product): void {
+            $site->update(['button_rules' => ['mode' => 'tag', 'values' => ['tryon']]]);
+            $product->update(['scan_raw' => ['shopify' => ['tags' => ['winter']]]]);
+        });
+
+        $url = self::ORIGIN.'/products/'.self::HANDLE;
+
+        $hidden = $this->withHeaders($this->widgetHeaders($site, self::ORIGIN))
+            ->getJson('/widget/v1/bootstrap?url='.urlencode($url));
+        $hidden->assertOk();
+        $this->assertNull($hidden->json('product')); // rule excludes it -> button never mounts
+
+        // Tag it 'tryon' -> the rule matches -> the product (and button) come back.
+        Tenant::run($account, fn () => $product->update(['scan_raw' => ['shopify' => ['tags' => ['tryon']]]]));
+
+        $shown = $this->withHeaders($this->widgetHeaders($site, self::ORIGIN))
+            ->getJson('/widget/v1/bootstrap?url='.urlencode($url));
+        $shown->assertOk();
+        $this->assertSame($product->id, $shown->json('product.id'));
+    }
+
     /** A confirmed Shopify product whose STORED url differs from the shopper's live url. */
     private function shopifyShopWithProduct(): array
     {

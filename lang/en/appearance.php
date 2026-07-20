@@ -17,6 +17,18 @@ return [
         'bg' => 'Button colour',
         'text' => 'Text colour',
     ],
+    'visibility' => [
+        'title' => 'Where the button shows',
+        'sub' => 'Show the Try-it-on button on every product, or only on products that match a rule.',
+        'mode' => 'Show the button on',
+        'mode_all' => 'All products',
+        'mode_tag' => 'Products with a tag',
+        'mode_product_type' => 'Products of a type',
+        'mode_collection' => 'Products in a collection',
+        'values' => 'Matching values',
+        'values_help' => 'The button shows on a product that matches ANY of these. Tags and collections come from your Shopify store; type is the product type. Case-insensitive.',
+        'values_placeholder' => 'Type a value and press Enter',
+    ],
     'popup' => [
         'title' => 'Popup',
         'sub' => 'How the try-on popup looks when a shopper opens it.',
