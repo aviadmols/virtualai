@@ -255,6 +255,34 @@ class ShopifyAutoProvisionTest extends TestCase
         $this->assertSame(self::SHOP, $connection->shop_domain);
     }
 
+    public function test_an_authenticated_super_admin_install_provisions_the_shops_own_account(): void
+    {
+        // A super-admin owns no account of their own (account_id null). Installing a brand-new
+        // shop while signed in as the super-admin must FALL THROUGH to SSO provisioning — mint
+        // the SHOP's own account — instead of the old no_account dead-end that blocked a
+        // super-admin (or an account-less session) from ever installing/reinstalling a store.
+        Bus::fake();
+        $this->fakeShopify();
+
+        $superAdmin = User::factory()->superAdmin()->create();
+
+        $response = $this->actingAs($superAdmin)->get($this->signedCallback($this->newShopState()));
+
+        // Provisioned the shop's own account + a distinct owner, and did NOT 4xx no_account.
+        $response->assertRedirect('https://'.self::SHOP.'/admin/apps/'.self::CLIENT_ID);
+        $this->assertSame(1, Account::query()->count());
+        $account = Account::query()->firstOrFail();
+        $this->assertSame(self::SHOP_NAME, $account->name);
+
+        $owner = User::query()->where('email', self::SHOP_EMAIL)->firstOrFail();
+        $this->assertSame((int) $account->id, (int) $owner->account_id);
+        $this->assertFalse($owner->isSuperAdmin());
+
+        $this->assertSame(1, DB::table('shopify_connections')->count());
+        $connection = Tenant::run($account, fn (): ?ShopifyConnection => ShopifyConnection::query()->first());
+        $this->assertSame(self::SHOP, $connection->shop_domain);
+    }
+
     // === HELPERS ===
 
     private function newShopState(): string

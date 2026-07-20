@@ -272,18 +272,19 @@ final class OAuthController
                 return redirect()->away($this->embeddedAdminUrl($shop));
             }
 
-            // Brand-new shop, and a merchant is ALREADY signed in to Vsio: attach the store
+            // Brand-new shop, and a MERCHANT is ALREADY signed in to Vsio: attach the store
             // directly to that account in THIS verified callback. Never park + redirect through
             // /claim: ambient session availability can differ after the OAuth round-trip, which
             // used to leak the install out of Shopify and onto /merchant/login.
-            if (Auth::check()) {
-                $accountId = (int) (Auth::user()?->account_id ?? 0);
+            //
+            // A signed-in SUPER-ADMIN owns no account of their own (account_id === null), so they
+            // fall THROUGH to the SSO auto-provisioning below — which mints the SHOP's own account
+            // — instead of the old no_account dead-end that blocked a super-admin from ever
+            // installing/reinstalling a store.
+            $sessionAccountId = Auth::check() ? (int) (Auth::user()?->account_id ?? 0) : 0;
 
-                if ($accountId <= 0) {
-                    throw ShopifyOAuthException::noAccount();
-                }
-
-                $this->installer->installFreshShop($accountId, $shop, $token, $correlationId);
+            if ($sessionAccountId > 0) {
+                $this->installer->installFreshShop($sessionAccountId, $shop, $token, $correlationId);
 
                 return redirect()->away($this->embeddedAdminUrl($shop));
             }
