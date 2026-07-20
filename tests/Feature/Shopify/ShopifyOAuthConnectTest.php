@@ -230,14 +230,16 @@ class ShopifyOAuthConnectTest extends TestCase
         // THE STORE-THEFT PATH. The attacker mints a genuine state for THEIR OWN account and
         // phishes the victim's store admin with the real Shopify grant link. The victim approves,
         // and Shopify redirects the VICTIM'S browser to our callback with a valid hmac + code.
+        // The wall is the callback's ACCOUNT RE-CHECK: the state names the attacker's account, but
+        // the victim's browser is NOT signed in as the attacker (account 0 ≠ the attacker's), so
+        // the connect is refused — even though the single-use nonce (now cache-based) is present.
         Bus::fake();
         $this->fakeTokenExchange();
 
         [$attacker, $attackerSite, $attackerUser] = $this->merchant();
         $state = $this->issuedState($attacker->id, $attackerSite->id);
 
-        // The victim's browser: a different session (the attacker's nonce is not in it) and not
-        // signed in as the attacker.
+        // The victim's browser: not signed in as the attacker — the account re-check is the wall.
         $this->flushSession();
 
         $response = $this->get($this->signedCallback($state));

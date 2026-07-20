@@ -219,29 +219,31 @@ class ShopifyInstallNewShopTest extends TestCase
         $this->assertSame(1, DB::table('shopify_connections')->count());
     }
 
-    public function test_a_state_stolen_from_another_browser_cannot_complete_the_install(): void
+    public function test_a_replayed_install_state_is_single_use_and_dies_the_second_time(): void
     {
-        // The install_new_shop flow has no account to check yet, so the BROWSER BINDING is the
-        // only wall: whoever completes the callback receives the claim token, and would go on to
-        // attach the store to THEIR account. A state lifted out of the merchant's browser (a
-        // leaked referrer, a shared link) must therefore be dead in any other browser.
+        // The state nonce is SINGLE-USE: it lives in the shared cache (not the session — the
+        // Partitioned embedded cookie cannot round-trip it across the top-level OAuth flow) and is
+        // consumed at the first valid callback. A replay of the same state (a leaked referrer, a
+        // shared link) finds the nonce gone and dies at the wall, so it can never provision a
+        // second shop. The Shopify HMAC is the real wall for install_new_shop — only the store
+        // admin's genuine grant yields a valid callback; store-theft on the account-bearing
+        // connect flow is closed by the callback's account re-check.
         Bus::fake();
         $this->fakeTokenExchange();
 
-        $state = $this->newShopState();   // issued in the merchant's browser
-        $this->flushSession();            // the attacker's browser: it never held the nonce
+        $state = $this->newShopState();
 
-        $response = $this->get($this->signedCallback($state));
+        // First use provisions the shop and consumes the nonce.
+        $first = $this->get($this->signedCallback($state));
+        $first->assertRedirect('https://'.self::SHOP.'/admin/apps/'.self::CLIENT_ID);
+        $this->assertSame(1, Account::query()->count());
 
-        $response->assertStatus(403);
-        $response->assertSee(ShopifyOAuthException::CODE_INVALID_STATE);
-        $response->assertSessionMissing(OAuthController::SESSION_CLAIM_TOKEN);
-        $this->assertSame(0, ShopifyPendingInstall::query()->count()); // nothing parked
-        // The state wall stands BEFORE the auto-provision branch: no account is minted and
-        // no one is logged in off a stolen state.
-        $this->assertSame(0, Account::query()->count());
-        $this->assertGuest();
-        Http::assertNothingSent(); // and no token was ever exchanged
+        // A REPLAY of the same state is dead — the single-use nonce is gone from the cache.
+        $replay = $this->get($this->signedCallback($state));
+
+        $replay->assertStatus(403);
+        $replay->assertSee(ShopifyOAuthException::CODE_INVALID_STATE);
+        $this->assertSame(1, Account::query()->count(), 'a replay must never provision a second shop');
     }
 
     public function test_a_reinstall_from_shopify_of_a_known_shop_reactivates_without_parking(): void

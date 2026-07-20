@@ -2,6 +2,7 @@
 
 namespace App\Domain\Shopify\Auth;
 
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Session\Session;
 use JsonException;
 
@@ -13,17 +14,19 @@ use JsonException;
  *   1. SIGNATURE — HMAC-SHA256 over the payload with an APP_KEY-derived key (a derivation, so
  *      the raw APP_KEY is never used directly for this purpose).
  *   2. EXPIRY    — issued_at + TTL. A stale state is dead.
- *   3. SINGLE-USE + BROWSER-BOUND — the nonce is written to the ISSUING BROWSER'S SESSION and
- *      PULLED at verify. A replay finds nothing; a callback arriving in any OTHER browser finds
- *      nothing either, because that session never held the nonce.
+ *   3. SINGLE-USE — the nonce is written to the shared server-side CACHE (TTL-bounded) and PULLED
+ *      at verify. A replay finds nothing. It lives in the cache, NOT the initiating session,
+ *      because the SameSite=None; Secure; Partitioned session cookie required for the embedded
+ *      panel does not survive the top-level cross-site OAuth round-trip — a session-stored nonce
+ *      was lost at the callback (invalid_state) even for a legitimate install.
  *   4. (in the callback) the authenticated account must BE the account the state names.
  *
- * Check 3 is what stops STORE THEFT. A signed, unexpired state is otherwise a bearer token that
- * NAMES an account: an attacker could mint one for their own account, phish a victim's store
- * admin into approving the genuine Shopify grant screen, and have the victim's store — and its
- * offline access token — persisted under the ATTACKER's account. Keeping the nonce in the
- * initiating session (Shopify's own guidance) means the victim's callback presents a state their
- * browser never issued, and it dies at the wall.
+ * Check 4 is what stops STORE THEFT on the account-bearing connect flow. A signed, unexpired state
+ * NAMES an account; an attacker could mint one for their own account and phish a victim's store
+ * admin into approving the genuine Shopify grant screen. The callback's account re-check refuses
+ * it: the victim's browser is not signed in as the attacker, so the caller's account never matches
+ * the state's. install_new_shop names NO account and provisions a fresh one for the HMAC-verified
+ * shop, so there is nothing to steal there; the Shopify HMAC + the single-use nonce close CSRF.
  *
  * The payload carries only routing facts ({flow, account_id?, site_id?, nonce, issued_at}) —
  * never a token, never a secret.
@@ -50,8 +53,13 @@ final class ShopifyOAuthState
 
     private const NONCE_BYTES = 16;
 
-    // The session key the single-use nonce is parked under (pulled, never read, at verify).
-    private const SESSION_NONCE_PREFIX = 'shopify.oauth.state.';
+    // The CACHE key the single-use nonce is parked under (pulled at verify). It lives in the
+    // shared server-side cache — NOT the session — because the SameSite=None; Secure; Partitioned
+    // session cookie (required for the embedded iframe panel) does NOT survive the top-level
+    // cross-site OAuth round-trip, so a session-stored nonce was lost at the callback
+    // (invalid_state). Signature + single-use + TTL keep CSRF closed; the callback's account
+    // re-check (below) keeps STORE THEFT closed.
+    private const CACHE_NONCE_PREFIX = 'shopify.oauth.state.';
 
     // The HMAC key is DERIVED from APP_KEY (never APP_KEY itself) with this label.
     private const KEY_DERIVATION_LABEL = 'trayon.shopify.oauth.state.v1';
@@ -73,9 +81,15 @@ final class ShopifyOAuthState
 
     private const K_ISSUED_AT = 't';
 
+    public function __construct(
+        private readonly CacheRepository $cache,
+    ) {}
+
     /**
-     * Issue a signed, single-use state for one install attempt, parked in the ISSUING browser's
-     * session — only that browser can complete the install.
+     * Issue a signed, single-use state for one install attempt. The single-use nonce is parked in
+     * the shared server-side CACHE (TTL-bounded), not the session — the Partitioned session cookie
+     * does not survive the top-level OAuth round-trip. The $session param is retained for
+     * signature compatibility and is intentionally unused.
      *
      * @param  string  $flow  one of self::FLOWS
      */
@@ -94,9 +108,10 @@ final class ShopifyOAuthState
 
         $encoded = self::b64url(json_encode($payload, JSON_THROW_ON_ERROR));
 
-        // The single-use registry lives in the SESSION: verify() PULLS it, so a replay finds
-        // nothing — and a different browser never had it in the first place.
-        $session->put(self::SESSION_NONCE_PREFIX.$nonce, true);
+        // The single-use registry lives in the shared CACHE (TTL-bounded): verify() PULLS it, so a
+        // replay finds nothing. Cache — not the session — because the Partitioned session cookie
+        // does not survive the top-level OAuth round-trip.
+        $this->cache->put(self::CACHE_NONCE_PREFIX.$nonce, true, self::TTL_SECONDS);
 
         return $encoded.self::SEPARATOR.self::b64url($this->sign($encoded));
     }
@@ -149,9 +164,8 @@ final class ShopifyOAuthState
 
         $nonce = (string) ($payload[self::K_NONCE] ?? '');
 
-        // Single-use AND browser-bound: the nonce is consumed from THIS session. A replay pulls
-        // nothing; a callback in a stranger's browser pulls nothing.
-        if ($nonce === '' || $session->pull(self::SESSION_NONCE_PREFIX.$nonce) !== true) {
+        // Single-use: the nonce is consumed from the shared cache. A replay pulls nothing.
+        if ($nonce === '' || $this->cache->pull(self::CACHE_NONCE_PREFIX.$nonce) !== true) {
             return null;
         }
 
