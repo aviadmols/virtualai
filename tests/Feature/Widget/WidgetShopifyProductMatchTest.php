@@ -56,6 +56,33 @@ final class WidgetShopifyProductMatchTest extends TestCase
         $this->assertNull($response->json('product'));
     }
 
+    public function test_the_handle_match_stays_within_the_bound_site(): void
+    {
+        [, $siteA, $productA] = $this->shopifyShopWithProduct();
+
+        // A DIFFERENT account's shop with the SAME handle + its own confirmed product.
+        $accountB = Account::factory()->create();
+        $siteB = Site::factory()->forAccount($accountB)->create([
+            'platform' => Site::PLATFORM_SHOPIFY,
+            'allowed_origins' => [self::ORIGIN],
+        ]);
+        $productB = Tenant::run($accountB, fn (): Product => Product::factory()->forSite($siteB)->confirmed()->create([
+            'source' => Product::SOURCE_SHOPIFY,
+            'external_handle' => self::HANDLE,
+            'source_url' => 'https://other.myshopify.com/products/'.self::HANDLE,
+            'source_url_hash' => sha1('https://other.myshopify.com/products/'.self::HANDLE),
+            'main_image_url' => 'https://cdn.example.com/b.jpg',
+        ]));
+
+        // Booting with site A's key resolves A's product by handle — never B's (site-scoped).
+        $response = $this->withHeaders($this->widgetHeaders($siteA, self::ORIGIN))
+            ->getJson('/widget/v1/bootstrap?url='.urlencode(self::ORIGIN.'/products/'.self::HANDLE));
+
+        $response->assertOk();
+        $this->assertSame($productA->id, $response->json('product.id'));
+        $this->assertNotSame($productB->id, $response->json('product.id'));
+    }
+
     /** A confirmed Shopify product whose STORED url differs from the shopper's live url. */
     private function shopifyShopWithProduct(): array
     {

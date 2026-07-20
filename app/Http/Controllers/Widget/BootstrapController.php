@@ -137,6 +137,7 @@ final class BootstrapController
             ->where('site_id', $site->getKey())
             ->where('source_url_hash', sha1($url))
             ->where('status', Product::STATUS_CONFIRMED)
+            ->where('is_active', true)
             ->with('variants')
             ->first();
 
@@ -150,6 +151,7 @@ final class BootstrapController
                 ->where('source', Product::SOURCE_SHOPIFY)
                 ->where('external_handle', $handle)
                 ->where('status', Product::STATUS_CONFIRMED)
+                ->where('is_active', true)
                 ->with('variants')
                 ->first();
         }

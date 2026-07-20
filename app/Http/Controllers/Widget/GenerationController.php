@@ -158,12 +158,13 @@ final class GenerationController
         ]);
     }
 
-    /** A confirmed product within the bound site (account-scoped by the global scope). */
+    /** A confirmed, ACTIVE product within the bound site (account-scoped by the global scope). */
     private function findProduct(int $siteId, int $productId): ?Product
     {
         return Product::query()
             ->where('site_id', $siteId)
             ->where('status', Product::STATUS_CONFIRMED)
+            ->where('is_active', true)
             ->whereKey($productId)
             ->first();
     }
