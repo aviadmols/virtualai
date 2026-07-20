@@ -8,23 +8,26 @@
         <form wire:submit="save" class="fi-form grid gap-y-6">
             {{ $this->form }}
 
-            {{-- Button placement — set with the visual picker. --}}
-            <x-filament::section>
-                <x-slot name="heading">{{ __('appearance.placement.section') }}</x-slot>
-                <x-slot name="description">{{ __('appearance.placement.section_sub') }}</x-slot>
+            {{-- Button placement — set with the visual picker. Hidden for a Shopify store,
+                 which places the button via its theme app-embed block + the visibility rule. --}}
+            @unless ($this->isShopifySite())
+                <x-filament::section>
+                    <x-slot name="heading">{{ __('appearance.placement.section') }}</x-slot>
+                    <x-slot name="description">{{ __('appearance.placement.section_sub') }}</x-slot>
 
-                <div class="to-place-summary">
-                    <p class="to-place-summary__text">{{ $this->placementSummary() }}</p>
-                    <x-filament::button
-                        type="button"
-                        color="primary"
-                        icon="heroicon-o-cursor-arrow-rays"
-                        wire:click="openPicker"
-                    >
-                        {{ __('appearance.visual.pick') }}
-                    </x-filament::button>
-                </div>
-            </x-filament::section>
+                    <div class="to-place-summary">
+                        <p class="to-place-summary__text">{{ $this->placementSummary() }}</p>
+                        <x-filament::button
+                            type="button"
+                            color="primary"
+                            icon="heroicon-o-cursor-arrow-rays"
+                            wire:click="openPicker"
+                        >
+                            {{ __('appearance.visual.pick') }}
+                        </x-filament::button>
+                    </div>
+                </x-filament::section>
+            @endunless
 
             <div class="flex justify-end">
                 <x-filament::button type="submit">

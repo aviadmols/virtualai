@@ -54,6 +54,9 @@ class ViewSite extends ViewRecord
             Action::make('scan')
                 ->label(__('sites.scan.label'))
                 ->icon('heroicon-o-magnifying-glass')
+                // A Shopify shop syncs its catalog (Import), so the URL-scan fallback is only
+                // for custom (non-Shopify) sites — hidden for a connected Shopify store.
+                ->visible(fn (): bool => ! $this->getRecord()->isShopify())
                 ->modalHeading(__('sites.scan.heading'))
                 ->modalDescription(__('sites.scan.sub'))
                 ->modalSubmitActionLabel(__('sites.scan.submit'))

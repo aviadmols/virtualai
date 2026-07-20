@@ -482,6 +482,16 @@ class WidgetAppearanceSettings extends Page implements HasForms
             : null;
     }
 
+    /**
+     * A Shopify site places the button via its theme app-embed block (and the visibility rule
+     * above), so the CSS-anchor visual placement picker is irrelevant + confusing there — the
+     * blade hides that whole section for a Shopify store.
+     */
+    public function isShopifySite(): bool
+    {
+        return $this->site()?->isShopify() ?? false;
+    }
+
     /** The cached preview entry for the current token (account/site-scoped by the key), or null. */
     private function cachedPreview(): ?array
     {
