@@ -191,6 +191,10 @@ final class ShopifyOAuth
      * Exchange the one-time authorization code for the store's OFFLINE access token.
      * Any non-2xx / malformed body / transport error is the typed token_exchange_failed
      * (a 502 to the merchant) — never a 500, and never a logged token.
+     *
+     * expiring=1 so the INSTALL itself mints an EXPIRING (Admin-API-accepted) offline token —
+     * Shopify defaults to a non-expiring token the Admin API now rejects. This makes a plain
+     * (re)install produce a working token directly, without an embedded token-exchange round.
      */
     public function exchangeCode(string $shop, string $code): ShopifyAccessToken
     {
@@ -210,6 +214,7 @@ final class ShopifyOAuth
                     self::B_CLIENT_ID => $this->credentials->clientId(),
                     self::B_CLIENT_SECRET => $this->credentials->clientSecret(),
                     self::B_CODE => $code,
+                    self::B_EXPIRING => self::EXPIRING_TRUE,
                 ]);
         } catch (Throwable $e) {
             Log::warning(self::LOG_TRANSPORT_ERROR, ['shop_domain' => $shop, 'exception' => $e::class]);
@@ -231,10 +236,13 @@ final class ShopifyOAuth
             throw ShopifyOAuthException::tokenExchangeFailed($shop, $response->status());
         }
 
+        $expiresIn = $response->json(self::R_EXPIRES_IN);
+
         return new ShopifyAccessToken(
             accessToken: $token,
             scopes: (string) ($response->json(self::R_SCOPE) ?? config(self::CFG_SCOPES)),
             apiVersion: (string) config(self::CFG_API_VERSION),
+            expiresIn: is_numeric($expiresIn) ? (int) $expiresIn : null,
         );
     }
 

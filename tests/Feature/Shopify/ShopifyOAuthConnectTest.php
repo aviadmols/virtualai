@@ -102,6 +102,12 @@ class ShopifyOAuthConnectTest extends TestCase
         $this->assertSame((int) $account->id, (int) $connection->account_id);
         $this->assertSame(ShopifyConnection::STATUS_INSTALLED, $connection->status);
 
+        // The install requested an EXPIRING offline token (expiring=1) — the Admin API rejects
+        // the default non-expiring one, so a plain install must opt in.
+        Http::assertSent(fn ($request): bool => $request->url() === self::TOKEN_URL
+            && ($request->data()['expiring'] ?? null) === '1'
+            && ($request->data()['code'] ?? null) === self::CODE);
+
         // The offline token round-trips through the EncryptedJson cast...
         $this->assertSame(self::OFFLINE_TOKEN, $connection->accessToken());
         // ...and is NOT readable as plaintext in the column.
