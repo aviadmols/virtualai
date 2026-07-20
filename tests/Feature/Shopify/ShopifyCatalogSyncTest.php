@@ -92,7 +92,10 @@ class ShopifyCatalogSyncTest extends TestCase
         $products = Tenant::run($account, fn () => Product::query()->orderBy('id')->get());
         $this->assertCount(2, $products);
         $this->assertSame([self::GID_A, self::GID_B], $products->pluck('external_id')->all());
-        $this->assertTrue($products->every(fn (Product $p): bool => $p->status === Product::STATUS_DRAFT), 'an import NEVER auto-approves');
+        // Shopify-rail AUTO-CONFIRM: imported products with a usable image go LIVE immediately
+        // (the deliberate relaxation for the SHOPIFY rail — every field is confidence 1.0). The
+        // fixture products both carry a featuredImage, so both pass the gate and confirm.
+        $this->assertTrue($products->every(fn (Product $p): bool => $p->status === Product::STATUS_CONFIRMED), 'a Shopify import auto-confirms products that pass the gate');
         $this->assertTrue($products->every(fn (Product $p): bool => $p->source === Product::SOURCE_SHOPIFY));
 
         $this->assertFalse(Tenant::check()); // no tenant leaked into the next job

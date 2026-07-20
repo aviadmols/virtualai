@@ -12,6 +12,7 @@ use App\Http\Widget\WidgetContext;
 use App\Http\Widget\WidgetGateService;
 use App\Http\Widget\WidgetResponse;
 use App\Models\Banner;
+use App\Models\EndUser;
 use App\Models\Product;
 use App\Models\Site;
 use Illuminate\Http\JsonResponse;
@@ -33,6 +34,7 @@ final class BootstrapController
 {
     // === CONSTANTS ===
     private const QUERY_URL = 'url';
+
     private const QUERY_ANON_TOKEN = 'anon_token';
 
     // Throttle the "widget last seen" heartbeat so a busy PDP doesn't write per view.
@@ -56,7 +58,7 @@ final class BootstrapController
         // Lets the setup checklist auto-detect installation (throttled, best-effort).
         $this->touchWidgetSeen($site);
 
-        $product = $this->confirmedProductFor($request, (int) $site->getKey());
+        $product = $this->confirmedProductFor($request, $site);
         $endUser = $this->resolveEndUser($request, $site);
 
         $lead = $endUser !== null ? $this->gates->leadState($site, $endUser) : null;
@@ -111,8 +113,19 @@ final class BootstrapController
         }
     }
 
-    /** Match the CONFIRMED product for this PDP url within the bound site (account-scoped). */
-    private function confirmedProductFor(Request $request, int $siteId): ?Product
+    /**
+     * Match the CONFIRMED product for this PDP within the bound site (account-scoped).
+     *
+     * Two strategies, in order:
+     *  1. Exact source_url_hash — SCAN products (their source_url IS the page), plus any
+     *     Shopify product whose stored storefront URL happens to equal the shopper's URL.
+     *  2. Shopify /products/{handle} — the shopper's LIVE url (custom domain, ?variant=,
+     *     locale prefix, trailing slash, UTM) rarely equals the synthesized storefront URL,
+     *     so a Shopify site also matches by external_handle parsed from the path. Without
+     *     this, the theme-slot button mounts but bootstrap returns product:null and the
+     *     try-on can't run.
+     */
+    private function confirmedProductFor(Request $request, Site $site): ?Product
     {
         $url = (string) $request->query(self::QUERY_URL, '');
 
@@ -120,16 +133,46 @@ final class BootstrapController
             return null;
         }
 
-        return Product::query()
-            ->where('site_id', $siteId)
+        $product = Product::query()
+            ->where('site_id', $site->getKey())
             ->where('source_url_hash', sha1($url))
             ->where('status', Product::STATUS_CONFIRMED)
             ->with('variants')
             ->first();
+
+        if ($product !== null) {
+            return $product;
+        }
+
+        if ($site->isShopify() && ($handle = $this->shopifyHandleFromUrl($url)) !== null) {
+            return Product::query()
+                ->where('site_id', $site->getKey())
+                ->where('source', Product::SOURCE_SHOPIFY)
+                ->where('external_handle', $handle)
+                ->where('status', Product::STATUS_CONFIRMED)
+                ->with('variants')
+                ->first();
+        }
+
+        return null;
+    }
+
+    /** The Shopify product handle from a storefront URL's /products/{handle} path, or null. */
+    private function shopifyHandleFromUrl(string $url): ?string
+    {
+        $path = (string) parse_url($url, PHP_URL_PATH);
+
+        if ($path === '' || preg_match('#/products/([^/]+)#', $path, $m) !== 1) {
+            return null;
+        }
+
+        $handle = rawurldecode($m[1]);
+
+        return $handle !== '' ? $handle : null;
     }
 
     /** Resolve (create) the end user from the anon_token, if the widget sent one. */
-    private function resolveEndUser(Request $request, \App\Models\Site $site): ?\App\Models\EndUser
+    private function resolveEndUser(Request $request, Site $site): ?EndUser
     {
         $anonToken = (string) $request->query(self::QUERY_ANON_TOKEN, '');
 
@@ -148,7 +191,7 @@ final class BootstrapController
      *
      * @return array<string,mixed>
      */
-    private function clubPayload(Site $site, ?\App\Models\EndUser $endUser): array
+    private function clubPayload(Site $site, ?EndUser $endUser): array
     {
         return $this->resolveClubBlock($site, $endUser);
     }
@@ -202,7 +245,7 @@ final class BootstrapController
     /**
      * @return array<string,mixed>
      */
-    private function resolveClubBlock(Site $site, ?\App\Models\EndUser $endUser): array
+    private function resolveClubBlock(Site $site, ?EndUser $endUser): array
     {
         $config = ClubConfig::resolve($site->club_config);
 

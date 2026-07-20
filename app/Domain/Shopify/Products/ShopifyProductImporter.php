@@ -6,6 +6,9 @@ use App\Domain\Activity\ActivityRecorder;
 use App\Domain\Products\PersistProduct;
 use App\Domain\Products\PersistResult;
 use App\Domain\Scan\Map\MappedProduct;
+use App\Domain\Scan\Review\ConfirmScanAction;
+use App\Domain\Scan\Review\ConfirmScanInput;
+use App\Domain\Scan\Review\ScanConfirmBlockedException;
 use App\Domain\Shopify\Api\ShopifyApiException;
 use App\Models\ActivityEvent;
 use App\Models\Product;
@@ -43,6 +46,7 @@ final readonly class ShopifyProductImporter
         private ShopifyProductSource $source,
         private PersistProduct $persist,
         private ActivityRecorder $activity,
+        private ConfirmScanAction $confirm,
     ) {}
 
     /**
@@ -81,7 +85,37 @@ final readonly class ShopifyProductImporter
             actor: ActivityEvent::ACTOR_SYSTEM,
         );
 
+        $this->autoConfirmShopify($result->product);
+
         return $result;
+    }
+
+    /**
+     * Shopify-rail AUTO-CONFIRM: an imported product goes LIVE immediately — a deliberate
+     * relaxation of the no-auto-approve rule for the SHOPIFY rail ONLY (the merchant's own
+     * store record, every field at confidence 1.0). It runs the SAME server-side
+     * ConfirmScanAction/ConfirmGate the manual "Confirm all" uses — nothing is bypassed, and
+     * a product the gate still blocks (e.g. no image at all) stays DRAFT (fail-safe: the
+     * widget only serves CONFIRMED) and is NEVER force-confirmed. Re-syncs of an already
+     * CONFIRMED product are skipped (status !== DRAFT), so status never flip-flops. Uniform
+     * across the catalog walk, selection import, and products/update webhook.
+     */
+    private function autoConfirmShopify(Product $product): void
+    {
+        if ($product->source !== Product::SOURCE_SHOPIFY || $product->status !== Product::STATUS_DRAFT) {
+            return;
+        }
+
+        try {
+            $this->confirm->confirm($product, new ConfirmScanInput(
+                fieldValues: [],
+                selectors: [],
+                variants: [],
+                reviewedKeys: [],
+            ));
+        } catch (ScanConfirmBlockedException) {
+            // Still needs a human (no image, etc.) — stays DRAFT, never forced.
+        }
     }
 
     /**
