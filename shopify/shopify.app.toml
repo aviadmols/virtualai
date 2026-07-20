@@ -21,7 +21,9 @@ application_url = "https://go.vsio.app/shopify/app"
 embedded = true
 
 [access_scopes]
-scopes = "read_products,write_products,read_orders,read_themes"
+# read_orders (protected customer data) deferred to Phase 6 — requesting it without a
+# Protected-Customer-Data declaration makes Shopify 403 the whole Admin API.
+scopes = "read_products,write_products,read_themes"
 
 [auth]
 redirect_urls = [

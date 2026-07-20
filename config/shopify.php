@@ -13,9 +13,12 @@ use App\Domain\Shopify\Webhooks\HandleProductUpdateJob;
 defined('SHOPIFY_API_VERSION') || define('SHOPIFY_API_VERSION', '2026-04');
 
 // OAuth scopes — minimal by design (docs/shopify/DECISIONS.md §3): products for
-// sync + media push, orders for purchase attribution (protected-data level only),
-// themes (read) for the onboarding checklist's real "try-on button enabled" check.
-defined('SHOPIFY_SCOPES') || define('SHOPIFY_SCOPES', 'read_products,write_products,read_orders,read_themes');
+// sync + media push, themes (read) for the onboarding checklist's "try-on button
+// enabled" check. read_orders (purchase attribution) is DEFERRED to Phase 6: it is
+// "protected customer data", and requesting it WITHOUT a Protected-Customer-Data
+// declaration makes Shopify 403 the ENTIRE Admin API (TS-SHOPIFY: 403 on products +
+// themes). Re-add read_orders in Phase 6 together with the protected-data declaration.
+defined('SHOPIFY_SCOPES') || define('SHOPIFY_SCOPES', 'read_products,write_products,read_themes');
 
 // The Theme App Extension identity (shopify/extensions/trayon-widget). The uid keys the
 // theme-file checks (a block's type carries it) and, with the embed block's handle, the
@@ -110,7 +113,8 @@ return [
     'topics' => [
         'products/update',
         'products/delete',
-        'orders/paid',
+        // orders/paid is DEFERRED to Phase 6 with read_orders (protected customer data) —
+        // registering it needs the read_orders scope, which we no longer request.
         'app/uninstalled',
     ],
 
