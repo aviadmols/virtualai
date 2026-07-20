@@ -37,3 +37,9 @@ yarn-error.log
 
 # Generated Playwright verification screenshots (dev artifacts, not source)
 /tests/screenshots/
+
+# stray local artifacts
+.tmpmeasure/
+count()
+platform-login-success.png
+*.tmp
