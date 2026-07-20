@@ -78,6 +78,12 @@ final class OAuthController
     // rename never breaks it. Shopify 302s this to the admin.shopify.com embedded page.
     private const EMBEDDED_ADMIN_URL_TEMPLATE = 'https://%s/admin/apps/%s';
 
+    // The top-level hand-off page for install_new_shop. A 200 (not a 302) so the session
+    // cookie carrying the state nonce is committed BEFORE the cross-site round-trip to
+    // Shopify — otherwise the freshly-set partitioned cookie can be dropped and the
+    // callback fails the state check on the FIRST attempt (TS-INFRA-005).
+    private const VIEW_AUTHORIZE_REDIRECT = 'shopify.oauth.redirect';
+
     public function __construct(
         private readonly ShopifyOAuth $oauth,
         private readonly ShopifyOAuthState $state,
@@ -167,7 +173,12 @@ final class OAuthController
 
             Log::info(self::LOG_START, ['flow' => ShopifyOAuthState::FLOW_INSTALL_NEW_SHOP, 'shop_domain' => $shop]);
 
-            return redirect()->away($this->oauth->authorizeUrl($shop, $state, route(self::ROUTE_CALLBACK)));
+            // A 200 hand-off page (not a 302) so the state-nonce session cookie is committed
+            // before the top-level round-trip to Shopify (TS-INFRA-005). The nonce stays in
+            // THIS session, so the browser-binding CSRF wall is unchanged.
+            $authorizeUrl = $this->oauth->authorizeUrl($shop, $state, route(self::ROUTE_CALLBACK));
+
+            return response()->view(self::VIEW_AUTHORIZE_REDIRECT, ['authorizeUrl' => $authorizeUrl]);
         } catch (ShopifyOAuthException $e) {
             return $this->denied($e);
         }

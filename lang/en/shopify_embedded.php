@@ -50,6 +50,11 @@ return [
         'continue' => 'Continue to install Vsio',
     ],
 
+    'redirect' => [
+        'message' => 'Taking you to Shopify to approve Vsio…',
+        'continue' => 'Continue to Shopify',
+    ],
+
     'errors' => [
         'load_failed' => 'We couldn\'t load your account. Please reload the page.',
         'session_failed' => 'We couldn\'t sign you in inside Shopify. Open Vsio in a new tab instead.',

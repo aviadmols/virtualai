@@ -59,11 +59,35 @@ class ShopifyInstallNewShopTest extends TestCase
         $this->assertTrue(GlobalModels::isGlobal(ShopifyPendingInstall::class));
     }
 
-    public function test_the_shopify_entry_point_redirects_to_the_grant_screen(): void
+    public function test_the_shopify_entry_point_hands_off_to_the_grant_screen_via_a_cookie_committing_page(): void
     {
+        // A 200 hand-off page (not a 302) so the state-nonce session cookie is committed before
+        // the top-level round-trip to Shopify — a freshly-set partitioned cookie set on a redirect
+        // could be dropped, failing the callback's state check on the FIRST install (TS-INFRA-005).
         $response = $this->get(route('shopify.install', ['shop' => self::SHOP]));
 
-        $response->assertRedirectContains('https://'.self::SHOP.'/admin/oauth/authorize');
+        $response->assertOk();
+        $response->assertSee('https://'.self::SHOP.'/admin/oauth/authorize', false);
+    }
+
+    public function test_the_install_handoff_issues_a_state_the_same_session_callback_accepts(): void
+    {
+        $this->fakeTokenExchange();
+
+        // The hand-off page carries the authorize URL with the state issued into THIS session.
+        $handoff = $this->get(route('shopify.install', ['shop' => self::SHOP]));
+        $handoff->assertOk();
+
+        $state = $this->extractState($handoff->getContent());
+        $this->assertNotSame('', $state);
+
+        // Completing the callback in the SAME session (the merchant's browser) provisions the shop
+        // and returns embedded — proving the hand-off page's state survives to a real callback.
+        $callback = $this->get($this->signedCallback($state));
+
+        $callback->assertRedirect('https://'.self::SHOP.'/admin/apps/'.self::CLIENT_ID);
+        $this->assertSame(1, DB::table('shopify_connections')->count());
+        $this->assertSame(1, Account::query()->count());
     }
 
     public function test_an_authenticated_merchant_is_attached_directly_and_returns_to_shopify_admin(): void
@@ -260,6 +284,12 @@ class ShopifyInstallNewShopTest extends TestCase
             flow: ShopifyOAuthState::FLOW_INSTALL_NEW_SHOP,
             session: app('session.store'),
         );
+    }
+
+    /** Pull the OAuth state out of the authorize URL rendered on the hand-off page. */
+    private function extractState(string $html): string
+    {
+        return preg_match('/state=([A-Za-z0-9._-]+)/', $html, $m) === 1 ? $m[1] : '';
     }
 
     private function signedCallback(string $state): string

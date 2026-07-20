@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Domain\Tenancy\MerchantSiteTenancy;
+use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasTenants;
 use Filament\Panel;
@@ -27,12 +28,14 @@ use Illuminate\Support\Collection;
  */
 class User extends Authenticatable implements FilamentUser, HasTenants
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     // === CONSTANTS ===
     public const COLUMN_ACCOUNT_ID = 'account_id';
+
     private const PANEL_PLATFORM = 'platform';
+
     private const PANEL_MERCHANT = 'merchant';
 
     /**
@@ -99,8 +102,8 @@ class User extends Authenticatable implements FilamentUser, HasTenants
     /**
      * Panel access gate (required by Filament in non-local environments).
      * Platform = super-admins only; Merchant = account owners, PLUS super-admins who drill into
-     * a specific shop (they carry no account and land on a tenant URL; canAccessTenant + the
-     * tenant menu's "Exit to platform" bound their session to that one shop).
+     * a specific shop (they carry no account and land on a tenant URL; canAccessTenant bounds
+     * their session to that one shop; the super-admin reaches /platform directly).
      */
     public function canAccessPanel(Panel $panel): bool
     {

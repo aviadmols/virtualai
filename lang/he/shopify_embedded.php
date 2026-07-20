@@ -50,6 +50,11 @@ return [
         'continue' => 'המשך להתקנת Vsio',
     ],
 
+    'redirect' => [
+        'message' => 'מעבירים אותך ל-Shopify לאישור Vsio…',
+        'continue' => 'המשך ל-Shopify',
+    ],
+
     'errors' => [
         'load_failed' => 'לא הצלחנו לטעון את החשבון. רעננו את העמוד.',
         'session_failed' => 'לא הצלחנו לחבר אותך בתוך Shopify. פתחו את Vsio בכרטיסייה חדשה.',
