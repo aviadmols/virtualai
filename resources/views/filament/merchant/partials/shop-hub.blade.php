@@ -31,12 +31,35 @@
     <x-slot:description>{{ __('sites.hub.tools.sub') }}</x-slot:description>
 
     <div class="to-hub-links">
-        <x-to.hub-link
-            :href="$this->placementUrl()"
-            icon="heroicon-o-cursor-arrow-rays"
-            title="sites.hub.tools.placement.title"
-            sub="sites.hub.tools.placement.sub"
-        />
+        @if ($this->isShopifyHub() && $this->themeEditorUrl())
+            {{-- Enable the Vsio app-embed block. Opens the Shopify theme editor in the TOP
+                 frame (Shopify admin can't nest in our iframe). Replaces the welcome screen's
+                 "Open theme editor" step. --}}
+            <x-to.hub-link
+                :href="$this->themeEditorUrl()"
+                target="_top"
+                icon="heroicon-o-puzzle-piece"
+                title="sites.hub.tools.enable_theme.title"
+                sub="sites.hub.tools.enable_theme.sub"
+            />
+        @endif
+        @if ($this->isShopifyHub())
+            {{-- Shopify: the button is placed by the theme block, so the card opens the
+                 "where the button shows" rule (by tag / type / collection), not the picker. --}}
+            <x-to.hub-link
+                :href="$this->buttonRulesUrl()"
+                icon="heroicon-o-eye"
+                title="sites.hub.tools.button_rules.title"
+                sub="sites.hub.tools.button_rules.sub"
+            />
+        @else
+            <x-to.hub-link
+                :href="$this->placementUrl()"
+                icon="heroicon-o-cursor-arrow-rays"
+                title="sites.hub.tools.placement.title"
+                sub="sites.hub.tools.placement.sub"
+            />
+        @endif
         <x-to.hub-link
             :href="$this->historyUrl()"
             icon="heroicon-o-sparkles"

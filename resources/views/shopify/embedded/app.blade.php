@@ -208,18 +208,15 @@
 
     (async function boot() {
         try {
-            // 1. JWT -> partitioned session cookie (the bridge into the Filament panel).
+            // JWT -> partitioned session cookie (the bridge into the Filament panel), then go
+            // STRAIGHT to the dashboard. The store details + setup checklist that used to live
+            // on this welcome screen now live on the Overview inside the panel.
             const session = await authedFetch(SESSION_URL, { method: 'POST' });
             if (!session.ok) return fail();
             const sessionBody = await session.json();
             if (!sessionBody.ok || !sessionBody.dashboard_url) return fail();
 
-            // 2. The onboarding state.
-            const res = await authedFetch(BOOTSTRAP_URL);
-            if (!res.ok) return fail();
-            const data = await res.json();
-            if (!data.ok) return fail();
-            render(data);
+            window.location.replace(sessionBody.dashboard_url);
         } catch {
             fail();
         }

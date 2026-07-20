@@ -155,8 +155,9 @@ class WidgetAppearanceSettings extends Page implements HasForms
         ]);
 
         // Deep-link from the scan-review flow (?pick=1): open the picker straight onto
-        // the just-scanned product. Guarded so a bad param never 500s the page load.
-        if (filter_var(request()->query('pick'), FILTER_VALIDATE_BOOLEAN)) {
+        // the just-scanned product. NEVER for a Shopify shop (it has no visual picker — the
+        // button is placed by its theme block). Guarded so a bad param never 500s the load.
+        if (! $resolved->isShopify() && filter_var(request()->query('pick'), FILTER_VALIDATE_BOOLEAN)) {
             $this->openPicker();
         }
     }

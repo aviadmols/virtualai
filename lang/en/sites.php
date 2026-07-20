@@ -72,6 +72,14 @@ return [
                 'title' => 'Button placement',
                 'sub' => 'Pick where the Vsio button sits on your product page.',
             ],
+            'button_rules' => [
+                'title' => 'Where the button shows',
+                'sub' => 'Show the Try-it-on button on all products, or only by tag, type or collection.',
+            ],
+            'enable_theme' => [
+                'title' => 'Enable the button in your theme',
+                'sub' => 'Turn on the Vsio app-embed block in your Shopify theme editor.',
+            ],
             'history' => [
                 'title' => 'Try-on history',
                 'sub' => 'Every try-on your shoppers generated on this shop.',

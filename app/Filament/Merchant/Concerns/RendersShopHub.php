@@ -116,6 +116,44 @@ trait RendersShopHub
         return WidgetAppearanceSettings::getUrl(['site' => $this->hubSite()->getKey(), 'pick' => 1]);
     }
 
+    /** True for a Shopify shop — the hub swaps the visual-placement card for button rules. */
+    public function isShopifyHub(): bool
+    {
+        return $this->hubSite()->isShopify();
+    }
+
+    /** The connected store domain (Shopify), or null on a custom site. */
+    public function shopDomain(): ?string
+    {
+        return $this->hubSite()->shopifyConnection?->shop_domain;
+    }
+
+    /** The theme-editor deep link that activates the Vsio app-embed block in the main theme. */
+    public function themeEditorUrl(): ?string
+    {
+        $shop = $this->shopDomain();
+
+        if ($shop === null) {
+            return null;
+        }
+
+        return sprintf(
+            'https://%s/admin/themes/current/editor?context=apps&activateAppId=%s/%s',
+            $shop,
+            (string) config('shopify.theme_extension.uid'),
+            (string) config('shopify.theme_extension.embed_handle'),
+        );
+    }
+
+    /**
+     * The deep link to the appearance page (NO picker): a Shopify shop places the button via its
+     * theme block, so the hub sends the merchant to the "where the button shows" rule instead.
+     */
+    public function buttonRulesUrl(): string
+    {
+        return WidgetAppearanceSettings::getUrl(['site' => $this->hubSite()->getKey()]);
+    }
+
     /** The deep link to this shop's try-on history. */
     public function historyUrl(): string
     {
