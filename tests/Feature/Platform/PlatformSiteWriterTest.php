@@ -5,11 +5,13 @@ namespace Tests\Feature\Platform;
 use App\Domain\Platform\PlatformSiteWriter;
 use App\Exceptions\PlatformAccessRequiredException;
 use App\Models\Account;
+use App\Models\ShopifyConnection;
 use App\Models\Site;
 use App\Models\User;
 use App\Support\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -61,6 +63,43 @@ class PlatformSiteWriterTest extends TestCase
 
         $persisted = Tenant::run($accountB, fn () => Site::query()->whereKey($site->id)->value('name'));
         $this->assertSame('New name', $persisted);
+    }
+
+    public function test_super_admin_delete_wipes_the_site_and_frees_the_shop_domain(): void
+    {
+        Queue::fake(); // the deleted() hook queues a media purge
+
+        $account = Account::factory()->create();
+        $site = Site::factory()->forAccount($account)->create();
+        $connection = Tenant::run($account, fn (): ShopifyConnection => ShopifyConnection::factory()->forSite($site)->create([
+            'shop_domain' => 'clean-slate.myshopify.com',
+        ]));
+
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        app(PlatformSiteWriter::class)->delete($site);
+
+        // The site AND its Shopify connection are gone (cascade), freeing the unique shop_domain
+        // so the store can be installed fresh.
+        $this->assertFalse(Tenant::run($account, fn (): bool => Site::query()->whereKey($site->id)->exists()));
+        $this->assertDatabaseMissing('shopify_connections', ['id' => $connection->id]);
+        $this->assertDatabaseMissing('shopify_connections', ['shop_domain' => 'clean-slate.myshopify.com']);
+    }
+
+    public function test_a_merchant_cannot_delete_a_site_it_fails_loud_and_the_site_survives(): void
+    {
+        $account = Account::factory()->create();
+        $site = Site::factory()->forAccount($account)->create();
+        $this->actingAs(User::factory()->forAccount($account)->create());
+
+        try {
+            app(PlatformSiteWriter::class)->delete($site);
+            $this->fail('expected PlatformAccessRequiredException');
+        } catch (PlatformAccessRequiredException) {
+            // expected — a non-super-admin never deletes a site
+        }
+
+        $this->assertTrue(Tenant::run($account, fn (): bool => Site::query()->whereKey($site->id)->exists()));
     }
 
     public function test_a_merchant_cannot_use_the_writer_it_fails_loud(): void

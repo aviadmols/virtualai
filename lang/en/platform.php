@@ -422,6 +422,14 @@ return [
         'edit' => 'Edit',
         'saved' => 'Site created',
         'updated' => 'Site saved',
+        'delete' => [
+            'label' => 'Delete',
+            'heading' => 'Delete this site?',
+            'sub' => 'This permanently deletes the site and everything it owns — products, generations, credit history, banners and the Shopify connection. It frees the store domain so the app can be installed fresh. This cannot be undone.',
+            'confirm' => 'Delete everything',
+            'done' => 'Site deleted',
+            'done_body' => ':name and all its data were removed. The store can now be installed fresh.',
+        ],
         'embed' => [
             'label' => 'Install code',
             'heading' => 'Install snippet',

@@ -51,4 +51,23 @@ final class PlatformSiteWriter
             return $site;
         });
     }
+
+    /**
+     * Delete a site and everything it owns (super-admin only) — the clean-slate action.
+     *
+     * Runs inside the site's OWN account context so the delete and its `deleted` hook fire
+     * under the right tenant. The DB cascades every child row (products, generations, ledger,
+     * banners, activity events — and the Shopify connection, whose site_id is unique +
+     * cascadeOnDelete), which FREES the globally-unique shop_domain so the store can be
+     * installed fresh. The bucket media is purged by the model's deleted() hook. Not
+     * reversible — the paid history goes with it, which is exactly the point of a clean slate.
+     */
+    public function delete(Site $site): void
+    {
+        PlatformGuard::assert();
+
+        Tenant::run($site->account_id, static function () use ($site): void {
+            $site->delete();
+        });
+    }
 }

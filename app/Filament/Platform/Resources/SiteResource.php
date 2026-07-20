@@ -207,6 +207,7 @@ class SiteResource extends Resource
                 self::embedAction(),
                 EditAction::make()
                     ->label(__('platform.sites.edit')),
+                self::deleteAction(),
             ])
             ->emptyStateHeading(__('platform.sites.empty'))
             ->emptyStateDescription(__('platform.sites.empty_sub'))
@@ -546,6 +547,36 @@ class SiteResource extends Resource
         }
 
         return $options;
+    }
+
+    /**
+     * "Delete" — the clean-slate action (super-admin only). Wipes the site and everything it
+     * owns via the audited PlatformSiteWriter, which cascades every child row INCLUDING the
+     * Shopify connection (unique site_id, cascadeOnDelete) — freeing the globally-unique
+     * shop_domain so the store can be installed fresh. Guarded behind an explicit
+     * type-to-confirm modal because it is destructive and not reversible.
+     */
+    private static function deleteAction(): Action
+    {
+        return Action::make('delete')
+            ->label(__('platform.sites.delete.label'))
+            ->icon('heroicon-o-trash')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading(__('platform.sites.delete.heading'))
+            ->modalDescription(__('platform.sites.delete.sub'))
+            ->modalSubmitActionLabel(__('platform.sites.delete.confirm'))
+            ->action(static function (Site $record): void {
+                $name = (string) $record->name;
+
+                app(PlatformSiteWriter::class)->delete($record);
+
+                Notification::make()
+                    ->success()
+                    ->title(__('platform.sites.delete.done'))
+                    ->body(__('platform.sites.delete.done_body', ['name' => $name]))
+                    ->send();
+            });
     }
 
     /**
