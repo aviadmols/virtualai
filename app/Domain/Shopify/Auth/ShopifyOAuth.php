@@ -65,6 +65,8 @@ final class ShopifyOAuth
 
     private const R_SCOPE = 'scope';
 
+    private const R_EXPIRES_IN = 'expires_in';
+
     // Token-exchange grant: an App Bridge session token -> an EXPIRING offline access token.
     // Shopify no longer accepts non-expiring offline tokens for the Admin API, so the legacy
     // authorization-code offline token is refreshed to an expiring one on every embedded load.
@@ -81,6 +83,13 @@ final class ShopifyOAuth
     private const SUBJECT_TOKEN_TYPE_ID = 'urn:ietf:params:oauth:token-type:id_token';
 
     private const REQUESTED_TOKEN_TYPE_OFFLINE = 'urn:shopify:params:oauth:token-type:offline-access-token';
+
+    // THE fix for "Non-expiring access tokens are no longer accepted": Shopify defaults to a
+    // NON-expiring offline token unless the request opts in with expiring=1. Without this the
+    // exchange succeeds but every token it returns is rejected by the Admin API.
+    private const B_EXPIRING = 'expiring';
+
+    private const EXPIRING_TRUE = '1';
 
     private const CFG_TIMEOUT = 'services.shopify.timeout';
 
@@ -257,6 +266,7 @@ final class ShopifyOAuth
                     self::B_SUBJECT_TOKEN => $sessionToken,
                     self::B_SUBJECT_TOKEN_TYPE => self::SUBJECT_TOKEN_TYPE_ID,
                     self::B_REQUESTED_TOKEN_TYPE => self::REQUESTED_TOKEN_TYPE_OFFLINE,
+                    self::B_EXPIRING => self::EXPIRING_TRUE,
                 ]);
         } catch (Throwable $e) {
             Log::warning(self::LOG_TRANSPORT_ERROR, ['shop_domain' => $shop, 'exception' => $e::class]);
@@ -283,10 +293,13 @@ final class ShopifyOAuth
             throw ShopifyOAuthException::tokenExchangeFailed($shop, $response->status());
         }
 
+        $expiresIn = $response->json(self::R_EXPIRES_IN);
+
         return new ShopifyAccessToken(
             accessToken: $token,
             scopes: (string) ($response->json(self::R_SCOPE) ?? config(self::CFG_SCOPES)),
             apiVersion: (string) config(self::CFG_API_VERSION),
+            expiresIn: is_numeric($expiresIn) ? (int) $expiresIn : null,
         );
     }
 }

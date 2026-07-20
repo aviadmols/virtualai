@@ -43,9 +43,13 @@ final class ShopifyTokenExchangeTest extends TestCase
 
         $this->assertSame('shpat_expiring_abc', $token->accessToken);
         $this->assertSame('read_products,write_products,read_themes', $token->scopes);
+        // expires_in is parsed => this is the EXPIRING token the Admin API accepts.
+        $this->assertSame(86399, $token->expiresIn);
 
         // The exact Shopify token-exchange contract: the session token is the subject, the
-        // requested type is an OFFLINE access token, via the OAuth token-exchange grant.
+        // requested type is an OFFLINE access token, via the OAuth token-exchange grant, and —
+        // THE fix — expiring=1 so Shopify issues an EXPIRING (accepted) token, not the default
+        // non-expiring one the Admin API now rejects.
         Http::assertSent(function ($request): bool {
             $body = $request->data();
 
@@ -54,6 +58,7 @@ final class ShopifyTokenExchangeTest extends TestCase
                 && $body['subject_token'] === 'session.jwt.token'
                 && $body['subject_token_type'] === 'urn:ietf:params:oauth:token-type:id_token'
                 && $body['requested_token_type'] === 'urn:shopify:params:oauth:token-type:offline-access-token'
+                && $body['expiring'] === '1'
                 && $body['client_id'] === 'test-client-id'
                 && $body['client_secret'] === 'test-client-secret';
         });

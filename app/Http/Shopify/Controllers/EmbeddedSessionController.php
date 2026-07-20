@@ -78,7 +78,12 @@ final class EmbeddedSessionController
             $connection->needs_reauth = false;
             $connection->save();
 
-            Log::info(self::LOG_TOKEN_REFRESHED, ['shop_domain' => $context->shopDomain()]);
+            // expires_in present => Shopify returned an EXPIRING token (the expiring=1 opt-in
+            // worked). null would mean a non-expiring token the Admin API now rejects.
+            Log::info(self::LOG_TOKEN_REFRESHED, [
+                'shop_domain' => $context->shopDomain(),
+                'expires_in' => $token->expiresIn,
+            ]);
         } catch (\Throwable $e) {
             // The store keeps its previous token; the refresh retries on the next embedded load.
             Log::warning(self::LOG_TOKEN_FAILED, ['shop_domain' => $context->shopDomain(), 'error' => $e::class]);
