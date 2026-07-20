@@ -5,6 +5,7 @@ namespace App\Domain\Shopify\Auth;
 use App\Domain\Shopify\ShopifyCredentials;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -63,6 +64,23 @@ final class ShopifyOAuth
     private const R_ACCESS_TOKEN = 'access_token';
 
     private const R_SCOPE = 'scope';
+
+    // Token-exchange grant: an App Bridge session token -> an EXPIRING offline access token.
+    // Shopify no longer accepts non-expiring offline tokens for the Admin API, so the legacy
+    // authorization-code offline token is refreshed to an expiring one on every embedded load.
+    private const B_GRANT_TYPE = 'grant_type';
+
+    private const B_SUBJECT_TOKEN = 'subject_token';
+
+    private const B_SUBJECT_TOKEN_TYPE = 'subject_token_type';
+
+    private const B_REQUESTED_TOKEN_TYPE = 'requested_token_type';
+
+    private const GRANT_TOKEN_EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange';
+
+    private const SUBJECT_TOKEN_TYPE_ID = 'urn:ietf:params:oauth:token-type:id_token';
+
+    private const REQUESTED_TOKEN_TYPE_OFFLINE = 'urn:shopify:params:oauth:token-type:offline-access-token';
 
     private const CFG_TIMEOUT = 'services.shopify.timeout';
 
@@ -200,6 +218,67 @@ final class ShopifyOAuth
 
         if ($token === '') {
             Log::warning(self::LOG_EXCHANGE_FAILED, ['shop_domain' => $shop, 'status' => $response->status(), 'reason' => 'no_access_token']);
+
+            throw ShopifyOAuthException::tokenExchangeFailed($shop, $response->status());
+        }
+
+        return new ShopifyAccessToken(
+            accessToken: $token,
+            scopes: (string) ($response->json(self::R_SCOPE) ?? config(self::CFG_SCOPES)),
+            apiVersion: (string) config(self::CFG_API_VERSION),
+        );
+    }
+
+    /**
+     * Token exchange: turn a valid App Bridge SESSION token into an EXPIRING offline access
+     * token. Shopify no longer accepts non-expiring offline tokens (the legacy
+     * authorization-code offline token) for the Admin API, so the embedded app refreshes the
+     * store's token this way on load. Same fail-closed shape as exchangeCode; the 4xx body is
+     * logged (no secret) so an unexpected token-exchange rejection is diagnosable.
+     */
+    public function exchangeSessionToken(string $shop, string $sessionToken): ShopifyAccessToken
+    {
+        if (! self::isValidShopDomain($shop)) {
+            throw ShopifyOAuthException::invalidShop($shop);
+        }
+
+        if (! $this->isConfigured()) {
+            throw ShopifyOAuthException::notConfigured();
+        }
+
+        try {
+            $response = Http::asJson()
+                ->acceptJson()
+                ->timeout((int) (config(self::CFG_TIMEOUT) ?? self::DEFAULT_TIMEOUT))
+                ->post(self::SCHEME.$shop.self::PATH_ACCESS_TOKEN, [
+                    self::B_CLIENT_ID => $this->credentials->clientId(),
+                    self::B_CLIENT_SECRET => $this->credentials->clientSecret(),
+                    self::B_GRANT_TYPE => self::GRANT_TOKEN_EXCHANGE,
+                    self::B_SUBJECT_TOKEN => $sessionToken,
+                    self::B_SUBJECT_TOKEN_TYPE => self::SUBJECT_TOKEN_TYPE_ID,
+                    self::B_REQUESTED_TOKEN_TYPE => self::REQUESTED_TOKEN_TYPE_OFFLINE,
+                ]);
+        } catch (Throwable $e) {
+            Log::warning(self::LOG_TRANSPORT_ERROR, ['shop_domain' => $shop, 'exception' => $e::class]);
+
+            throw ShopifyOAuthException::tokenExchangeFailed($shop, 0);
+        }
+
+        if (! $response->successful()) {
+            Log::warning(self::LOG_EXCHANGE_FAILED, [
+                'shop_domain' => $shop,
+                'status' => $response->status(),
+                'grant' => 'token_exchange',
+                'body' => Str::limit((string) $response->body(), 300),
+            ]);
+
+            throw ShopifyOAuthException::tokenExchangeFailed($shop, $response->status());
+        }
+
+        $token = (string) ($response->json(self::R_ACCESS_TOKEN) ?? '');
+
+        if ($token === '') {
+            Log::warning(self::LOG_EXCHANGE_FAILED, ['shop_domain' => $shop, 'grant' => 'token_exchange', 'reason' => 'no_access_token']);
 
             throw ShopifyOAuthException::tokenExchangeFailed($shop, $response->status());
         }
