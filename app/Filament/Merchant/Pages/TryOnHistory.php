@@ -29,14 +29,17 @@ class TryOnHistory extends Page
     // === CONSTANTS ===
     protected static ?string $navigationIcon = 'heroicon-o-sparkles';
 
-    protected static ?string $navigationGroup = 'nav.sites';
+    // Single-shop model: the SITES group is retired, so try-on history sits as a
+    // top-level item right under the Overview (ungrouped).
+    protected static ?string $navigationGroup = null;
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 2;
 
     protected static string $view = 'filament.merchant.pages.try-on-history';
 
     // i18n keys (history.*).
     private const TITLE = 'history.title';
+
     private const NAV_LABEL = 'history.nav';
 
     /** The current shop's id (scalar — Livewire-safe; re-resolved through the scope). */
@@ -55,7 +58,7 @@ class TryOnHistory extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __(self::$navigationGroup);
+        return self::$navigationGroup === null ? null : __(self::$navigationGroup);
     }
 
     public function getTitle(): string|Htmlable

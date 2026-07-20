@@ -3,16 +3,17 @@
 namespace App\Filament\Merchant\Pages;
 
 use App\Filament\Merchant\Widgets\CreditBannerWidget;
-use App\Filament\Merchant\Widgets\MerchantKpiWidget;
+use App\Filament\Merchant\Widgets\ShopHubWidget;
 use Filament\Pages\Dashboard as BaseDashboard;
 
 /**
- * M1 — the merchant panel home. Overrides Filament's stock Dashboard to surface,
- * top-to-bottom: the A10 credit banner (low/out-of-credit), then the A1 KPI band.
+ * M1 — the merchant panel home ("Overview"). Surfaces, top-to-bottom: the A10 credit
+ * banner (low/out-of-credit), then the per-shop HUB (the same surface as the ViewSite
+ * page): KPI band, "Manage this shop" quick-links, install code, products, activity.
  *
- * The page itself renders no data — each widget resolves the signed-in account
- * (auth()->user()->account) and reads the typed DashboardMetrics snapshot, so all
- * aggregation lives in the builder, never on this page or in a Blade.
+ * The page renders no data itself — each widget resolves the CURRENT SHOP TENANT
+ * (Filament::getTenant()), so all aggregation lives in the builder / RendersShopHub,
+ * never on this page or in a Blade.
  */
 class Dashboard extends BaseDashboard
 {
@@ -35,12 +36,12 @@ class Dashboard extends BaseDashboard
         return __('dashboard.title');
     }
 
-    /** Banner first (A10), then the KPI band (A1). Order is the contract. */
+    /** Banner first (A10), then the per-shop hub. Order is the contract. */
     public function getWidgets(): array
     {
         return [
             CreditBannerWidget::class,
-            MerchantKpiWidget::class,
+            ShopHubWidget::class,
         ];
     }
 

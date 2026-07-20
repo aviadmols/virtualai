@@ -4,9 +4,9 @@ namespace App\Providers\Filament;
 
 use App\Filament\Merchant\Pages\Dashboard;
 use App\Filament\Merchant\Pages\Tenancy\EditSiteProfile;
-use App\Filament\Merchant\Pages\Tenancy\RegisterSite;
 use App\Http\Middleware\BindMerchantAccount;
 use App\Http\Middleware\HtmlDirection;
+use App\Http\Middleware\ShopifyFrameAncestors;
 use App\Models\Site;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -34,13 +34,21 @@ class MerchantPanelProvider extends PanelProvider
 {
     // === CONSTANTS ===
     private const PANEL_ID = 'merchant';
+
     private const PANEL_PATH = 'merchant';
+
     private const THEME = 'resources/css/filament/merchant/theme.css';
+
     private const RESOURCE_NS = 'App\\Filament\\Merchant\\Resources';
+
     private const PAGE_NS = 'App\\Filament\\Merchant\\Pages';
+
     private const WIDGET_NS = 'App\\Filament\\Merchant\\Widgets';
+
     private const RESOURCE_DIR = 'Filament/Merchant/Resources';
+
     private const PAGE_DIR = 'Filament/Merchant/Pages';
+
     private const WIDGET_DIR = 'Filament/Merchant/Widgets';
 
     // OpenRouter look: Inter (Latin) is loaded via ->font(); Assistant covers
@@ -48,6 +56,7 @@ class MerchantPanelProvider extends PanelProvider
     // Bunny (a privacy-friendly Google Fonts mirror). The --to-font token stacks
     // them so HE never falls back. Weights 400–700 match the OpenRouter range.
     private const FONT_FAMILY = 'Inter';
+
     private const HEBREW_FONT_HEAD = '<link rel="preconnect" href="https://fonts.bunny.net">'
         .'<link href="https://fonts.bunny.net/css?family=assistant:400,500,600,700&display=swap" rel="stylesheet" />';
 
@@ -57,7 +66,6 @@ class MerchantPanelProvider extends PanelProvider
      * resolve via __() from the nav lang file.
      */
     private const NAV_GROUPS = [
-        'nav.sites',
         'nav.leads',
         'nav.marketing',
         'nav.credits',
@@ -71,12 +79,20 @@ class MerchantPanelProvider extends PanelProvider
             ->id(self::PANEL_ID)
             ->path(self::PANEL_PATH)
             ->login()
-            // SHOP-centric: the tenant is a Site (the "shop"), routed by its unique slug. The
-            // switcher + per-shop URLs come from Filament tenancy; ownership is enforced by
-            // User::getTenants / canAccessTenant (the ACCOUNT stays the security boundary).
+            // Direct sign-in for SSO-provisioned merchants. A Shopify install auto-creates the
+            // owner with a RANDOM password (they only ever authenticate via the embedded session
+            // token), so the account-menu profile page lets them set a password — and correct
+            // their login email — to ALSO sign in at go.vsio.app/merchant/login directly.
+            // NOTE: email-based ->passwordReset() is deferred until SMTP is configured — with the
+            // `log` mailer it cannot deliver and would write reset tokens to the log. The in-panel
+            // profile set-password is the recovery path until then.
+            ->profile()
+            // SHOP-centric + SINGLE-SHOP: the tenant is a Site (the "shop"), routed by its
+            // unique slug, and per-shop URLs come from Filament tenancy. Account = one shop
+            // (auto-provisioned at install / created by the super-admin), so the switcher
+            // (tenantMenu) and self-service add-site (tenantRegistration) are intentionally
+            // omitted; ownership is still enforced by User::getTenants / canAccessTenant.
             ->tenant(Site::class, slugAttribute: Site::TENANT_SLUG_FIELD)
-            ->tenantMenu()
-            ->tenantRegistration(RegisterSite::class)
             ->tenantProfile(EditSiteProfile::class)
             ->colors(self::colors())
             ->font(self::FONT_FAMILY)
@@ -107,7 +123,7 @@ class MerchantPanelProvider extends PanelProvider
                 // The panel renders inside the Shopify admin iframe (partitioned session
                 // cookie). frame-ancestors names the exact shop when the embedded session
                 // bridge stamped one, else the static Shopify pair — never an open frame.
-                \App\Http\Middleware\ShopifyFrameAncestors::class.':'.\App\Http\Middleware\ShopifyFrameAncestors::MODE_PANEL,
+                ShopifyFrameAncestors::class.':'.ShopifyFrameAncestors::MODE_PANEL,
             ])
             ->authMiddleware([
                 Authenticate::class,

@@ -2,11 +2,13 @@
 
 namespace App\Filament\Merchant\Resources;
 
+use App\Domain\Sites\StoreCategory;
 use App\Filament\Merchant\Resources\SiteResource\Pages\CreateSite;
 use App\Filament\Merchant\Resources\SiteResource\Pages\EditSite;
 use App\Filament\Merchant\Resources\SiteResource\Pages\ListSites;
 use App\Filament\Merchant\Resources\SiteResource\Pages\ViewSite;
 use App\Models\Site;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
@@ -40,18 +42,24 @@ class SiteResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-globe-alt';
 
-    // Attaches to the locked nav order in MerchantPanelProvider::NAV_GROUPS.
+    // Single-shop model: this resource is HIDDEN from the merchant nav
+    // (shouldRegisterNavigation() = false), so the group/sort are inert — kept only for
+    // the platform-side "all shops" list convention. The retired merchant SITES group is
+    // no longer in MerchantPanelProvider::NAV_GROUPS.
     protected static ?string $navigationGroup = 'nav.sites';
 
     protected static ?int $navigationSort = 1;
 
     // i18n label keys (sites.*) — never a literal string in the resource.
     private const LABEL_TITLE = 'sites.title';
+
     private const LABEL_SINGULAR = 'sites.singular';
+
     private const NAV_LABEL = 'sites.title';
 
     // Derived setup-state tokens + their plain-badge tones (not the §5 machine).
     private const STATE_READY = 'ready';
+
     private const STATE_PENDING = 'pending';
 
     public static function getModelLabel(): string
@@ -69,6 +77,16 @@ class SiteResource extends Resource
         return __(self::$navigationGroup);
     }
 
+    /**
+     * Single-shop model: the Sites list is hidden from the merchant nav. The routes stay
+     * registered — ViewSite (the per-shop hub) + EditSite are still reachable by deep-link
+     * (e.g. from the Overview), and the Overview widget renders the same hub for the home.
+     */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -82,10 +100,10 @@ class SiteResource extends Resource
                     ->placeholder(__('sites.field.domain_placeholder'))
                     ->url()
                     ->maxLength(255),
-                \Filament\Forms\Components\Select::make('product_category')
+                Select::make('product_category')
                     ->label(__('sites.field.category'))
                     ->helperText(__('sites.field.category_help'))
-                    ->options(\App\Domain\Sites\StoreCategory::options())
+                    ->options(StoreCategory::options())
                     ->native(false),
                 TagsInput::make('allowed_origins')
                     ->label(__('sites.field.origins'))

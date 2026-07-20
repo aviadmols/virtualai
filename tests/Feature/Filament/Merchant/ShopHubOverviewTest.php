@@ -4,8 +4,9 @@ namespace Tests\Feature\Filament\Merchant;
 
 use App\Domain\Activity\ActivityRecorder;
 use App\Filament\Merchant\Resources\SiteResource\Pages\ViewSite;
-use App\Models\ActivityEvent;
+use App\Filament\Merchant\Widgets\ShopHubWidget;
 use App\Models\Account;
+use App\Models\ActivityEvent;
 use App\Models\EndUser;
 use App\Models\Product;
 use App\Models\Site;
@@ -67,6 +68,57 @@ class ShopHubOverviewTest extends TestCase
                 // Recent-activity strip header.
                 ->assertSee(__('sites.hub.activity.title'));
         });
+    }
+
+    public function test_overview_widget_renders_the_hub_for_the_bound_shop(): void
+    {
+        // The tenant-bound Overview widget renders the SAME hub as the record-bound
+        // ViewSite page (shared RendersShopHub) — KPI band + quick-links + install code
+        // + activity — resolved from Filament::getTenant(), not the auth user.
+        Tenant::run($this->accountA->id, function (): void {
+            Livewire::test(ShopHubWidget::class)
+                ->assertOk()
+                ->assertSee(__('sites.hub.kpi.products'))
+                ->assertSee(__('sites.hub.kpi.balance'))
+                ->assertSee(__('sites.hub.tools.placement.title'))
+                ->assertSee(__('sites.hub.tools.privacy.title'))
+                ->assertSee(__('sites.hub.activity.title'))
+                // The install snippet carries the shop's PUBLIC site_key.
+                ->assertSee($this->site->site_key);
+        });
+    }
+
+    public function test_regenerate_on_the_overview_widget_rotates_the_public_key(): void
+    {
+        // The destructive key rotation is an interactive Livewire action on the WIDGET host
+        // (not a page) — prove it rotates the PUBLIC site_key through the Livewire update and
+        // stays account-scoped (the whole call runs inside the shop's bound account).
+        Tenant::run($this->accountA->id, function (): void {
+            $oldKey = $this->site->fresh()->site_key;
+
+            Livewire::test(ShopHubWidget::class)
+                ->call('regenerate')
+                ->assertOk();
+
+            $this->assertNotSame(
+                $oldKey,
+                $this->site->fresh()->site_key,
+                'the public site_key should rotate through the widget action',
+            );
+        });
+    }
+
+    public function test_overview_widget_fails_closed_without_a_bound_shop_tenant(): void
+    {
+        // No shop tenant bound → hubSite() must THROW (fail-closed), never default to some
+        // other shop. Exercise the guard directly (the tenant-aware panel would otherwise
+        // enforce its own tenancy before the widget renders).
+        Filament::setTenant(null);
+        $widget = new ShopHubWidget;
+
+        $this->expectException(\RuntimeException::class);
+
+        \Closure::bind(fn () => $this->hubSite(), $widget, ShopHubWidget::class)();
     }
 
     public function test_hub_kpi_band_counts_only_this_shops_data(): void
