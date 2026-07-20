@@ -1531,6 +1531,53 @@ The lookup axis. File each entry under exactly one category; cross-link the rest
   [[tests/Feature/Shopify/ShopifyEmbeddedEntryTest.php]],
   [[tests/Feature/Infra/PredeployCheckTest.php]]
 
+### TS-INFRA-005 — embedded `install_new_shop` failed `invalid_state` on the FIRST attempt: the state-nonce session cookie (`SameSite=None; Secure; Partitioned`) was set on the install 302 and dropped before the OAuth round-trip; a refresh then worked
+- **Date:** 2026-07-19
+- **Category:** infra/railway/horizon
+- **Severity:** major
+- **Status:** resolved (code) — live re-test on a real first install pending
+- **Recurrence:** 1
+- **Tags:** `shopify`, `embedded`, `oauth`, `install`, `invalid_state`, `samesite-none`, `partitioned-cookie`, `chips`, `session`, `breakout`, `top-level`, `works-on-refresh`
+
+- **SYMPTOM:** After the breakout page escaped top-level to `/shopify/install` and the merchant
+  approved Shopify's grant screen, the callback returned a broken page —
+  `Shopify install failed: The OAuth state nonce is missing, forged, expired, or already used.
+  (code: invalid_state)` — OUTSIDE the admin. Refreshing / retrying the install then SUCCEEDED
+  (the shop + owner auto-provisioned and the app connected).
+- **CONTEXT/TRIGGER:** `install_new_shop` from the Shopify admin (embedded app → breakout →
+  `/shopify/install` → Shopify authorize → `/shopify/oauth/callback`). First install in a browser
+  with no prior `go.vsio.app` top-level session cookie.
+- **ROOT CAUSE:** `OAuthController::install()` issued the single-use, browser-bound state nonce
+  into the SESSION (`ShopifyOAuthState::issue` → `$session->put`) and returned a **302** to
+  Shopify's authorize URL. The session cookie is globally `SameSite=None; Secure; Partitioned`
+  (the CHIPS contract for the embedded panel, TS-INFRA-004). A freshly-created session cookie SET
+  ON A REDIRECT response, in a top-level context reached via `window.open(_top)` from the admin
+  iframe, can be dropped by the browser before the cross-site OAuth round-trip — so the callback
+  ran under a DIFFERENT (empty) session, `$session->pull(nonce)` found nothing, and the state
+  check failed closed. On the second attempt the cookie already existed → it worked (the classic
+  "works on refresh" signature).
+- **SOLUTION:** `install()` now returns a **200 hand-off page**
+  (`resources/views/shopify/oauth/redirect.blade.php`) that commits the session cookie first, then
+  navigates the top-level frame to Shopify's authorize URL (`window.location.replace` + a
+  `<meta http-equiv=refresh>` and manual-link fallback). The nonce STILL lives in the session —
+  the browser-binding CSRF wall (and the `test_a_state_stolen_from_another_browser…` guard) is
+  UNCHANGED; only the cookie-commit timing is fixed. This is Shopify's canonical "set the cookie
+  top-level before redirecting" pattern. `connect_existing_site` (`start()`) is untouched — it
+  begins from the authenticated panel where the session cookie is already committed.
+  Local verification: full Shopify + install/state suites PASS (incl. the browser-binding +
+  phished-grant security tests); Pint clean.
+  > NOT YET RE-VERIFIED ON A LIVE INSTALL. A real first-time install from Shopify Admin (fresh
+  > browser, confirm no `invalid_state` on the first attempt) is the release check.
+- **PREVENTION:**
+  - When a session cookie is `SameSite=None; Partitioned`, never rely on it being committed by a
+    302 that starts a cross-site OAuth round-trip. Set it on a 200 the browser fully loads, THEN
+    redirect.
+  - Keep the OAuth state session-bound (browser-binding is the CSRF/login-CSRF wall); fix cookie
+    DELIVERY, not the security model.
+- **RELATED:** [[TS-INFRA-004]], [[app/Http/Shopify/Controllers/OAuthController.php]],
+  [[resources/views/shopify/oauth/redirect.blade.php]],
+  [[app/Domain/Shopify/Auth/ShopifyOAuthState.php]], [[config/session.php]]
+
 ## filament/admin
 
 ### TS-FILAMENT-001 — platform cross-account read: the EAGER-LOAD relation re-applies the global scope (variants return 0); + Livewire route-param vs typed property collision
