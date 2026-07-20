@@ -26,11 +26,16 @@ php artisan view:cache   || true
 # so scans/generations don't pile up. A respawn loop self-heals a crashed worker.
 # --timeout 110 stays under the redis retry_after (120) to avoid double-processing.
 # Disable once a dedicated worker exists by setting WEB_INLINE_WORKER=false.
+#
+# Queue ORDER is priority: the shopper money path (generations) is first and always
+# preempts; `bulk` (the merchant catalog import / mass image jobs) is near the end so it
+# can never starve a shopper generation, but IS processed — without it a "Import products"
+# run sits Queued forever (no other processor exists on a single-service deploy).
 if [ "${WEB_INLINE_WORKER:-true}" != "false" ]; then
     (
         while true; do
             php artisan queue:work redis \
-                --queue=generations,scans,webhooks,media,default \
+                --queue=generations,scans,webhooks,media,bulk,default \
                 --sleep=3 --tries=3 --timeout=110 --max-time=3600 || true
             sleep 2
         done
