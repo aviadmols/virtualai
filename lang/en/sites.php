@@ -80,6 +80,10 @@ return [
                 'title' => 'Enable the button in your theme',
                 'sub' => 'Turn on the Vsio app-embed block in your Shopify theme editor.',
             ],
+            'prompt' => [
+                'title' => 'Try-on prompt',
+                'sub' => 'Tune the wording of the try-on and weave in your product fields.',
+            ],
             'history' => [
                 'title' => 'Try-on history',
                 'sub' => 'Every try-on your shoppers generated on this shop.',

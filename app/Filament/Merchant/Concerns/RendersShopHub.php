@@ -11,6 +11,7 @@ use App\Filament\Merchant\Pages\Gallery;
 use App\Filament\Merchant\Pages\PrivacySettings;
 use App\Filament\Merchant\Pages\ReviewProduct;
 use App\Filament\Merchant\Pages\TryOnHistory;
+use App\Filament\Merchant\Pages\TryOnPrompt;
 use App\Filament\Merchant\Pages\WidgetAppearanceSettings;
 use App\Filament\Merchant\Resources\EndUserResource;
 use App\Models\Product;
@@ -158,6 +159,12 @@ trait RendersShopHub
     public function historyUrl(): string
     {
         return TryOnHistory::getUrl();
+    }
+
+    /** The deep link to the per-shop try-on PROMPT editor (tune the prompt + product fields). */
+    public function promptUrl(): string
+    {
+        return TryOnPrompt::getUrl();
     }
 
     /** The deep link to this shop's registered users / leads list. */

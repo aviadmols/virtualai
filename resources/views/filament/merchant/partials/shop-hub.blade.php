@@ -61,6 +61,12 @@
             />
         @endif
         <x-to.hub-link
+            :href="$this->promptUrl()"
+            icon="heroicon-o-pencil-square"
+            title="sites.hub.tools.prompt.title"
+            sub="sites.hub.tools.prompt.sub"
+        />
+        <x-to.hub-link
             :href="$this->historyUrl()"
             icon="heroicon-o-sparkles"
             title="sites.hub.tools.history.title"
