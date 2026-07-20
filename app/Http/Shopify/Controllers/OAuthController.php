@@ -173,9 +173,9 @@ final class OAuthController
 
             Log::info(self::LOG_START, ['flow' => ShopifyOAuthState::FLOW_INSTALL_NEW_SHOP, 'shop_domain' => $shop]);
 
-            // A 200 hand-off page (not a 302) so the state-nonce session cookie is committed
-            // before the top-level round-trip to Shopify (TS-INFRA-005). The nonce stays in
-            // THIS session, so the browser-binding CSRF wall is unchanged.
+            // A top-level 200 hand-off page navigates the browser to Shopify's grant screen.
+            // The state nonce lives in the shared cache (not the session), so it survives the
+            // cross-site OAuth round-trip regardless of the Partitioned session cookie.
             $authorizeUrl = $this->oauth->authorizeUrl($shop, $state, route(self::ROUTE_CALLBACK));
 
             return response()->view(self::VIEW_AUTHORIZE_REDIRECT, ['authorizeUrl' => $authorizeUrl]);
@@ -209,8 +209,11 @@ final class OAuthController
                 throw ShopifyOAuthException::invalidShop($request->query(self::Q_SHOP));
             }
 
-            // 3. OUR signed, short-lived, single-use, BROWSER-BOUND state (the CSRF wall of
-            //    the install): a state issued to another session cannot be redeemed here.
+            // 3. OUR signed, short-lived, SINGLE-USE state (the CSRF wall of the install): the
+            //    signature is unforgeable and the nonce is consumed once (shared cache). It is
+            //    NOT browser-bound — store-theft on the account-bearing connect flow is refused
+            //    by the account re-check below; install_new_shop provisions a fresh HMAC-verified
+            //    shop, so there is nothing to steal.
             $payload = $this->state->verify((string) $request->query(self::Q_STATE, ''), $request->session());
 
             if ($payload === null) {

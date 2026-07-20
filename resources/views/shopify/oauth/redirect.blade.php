@@ -1,11 +1,9 @@
 <!DOCTYPE html>
-{{-- Top-level OAuth hand-off. install() renders THIS 200 page (not a 302) so the session
-     cookie that carries the single-use, browser-bound state nonce is COMMITTED in the
-     browser BEFORE the cross-site round-trip to Shopify. A freshly-set
-     SameSite=None; Secure; Partitioned session cookie can be dropped when it is set on a
-     redirect response, which left the callback's session without the nonce (invalid_state)
-     on the FIRST install attempt (it only worked once the cookie already existed). The
-     browser-binding is unchanged — the nonce still lives in this session. --}}
+{{-- Top-level OAuth hand-off. install() renders this 200 page and navigates the browser to
+     Shopify's grant screen. The single-use state nonce lives in the shared server-side cache
+     (NOT the session), so it survives the cross-site OAuth round-trip regardless of the
+     SameSite=None; Secure; Partitioned session cookie — which a Partitioned cookie does not
+     reliably carry across a top-level cross-site redirect (that was the invalid_state cause). --}}
 <html lang="{{ app()->getLocale() }}" dir="{{ app()->getLocale() === 'he' ? 'rtl' : 'ltr' }}">
 <head>
     <meta charset="utf-8">

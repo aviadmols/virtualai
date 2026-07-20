@@ -7,6 +7,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -109,7 +110,13 @@ final class ShopifyGraphQLClient
             }
 
             if (! $response->successful()) {
-                Log::warning(self::LOG_ERROR, ['shop_domain' => $shop, 'status' => $response->status()]);
+                Log::warning(self::LOG_ERROR, [
+                    'shop_domain' => $shop,
+                    'status' => $response->status(),
+                    // Shopify's 4xx body states WHY (missing scope / protected customer data /
+                    // deprecated token); it carries no secret. Bounded so the log line stays small.
+                    'body' => Str::limit((string) $response->body(), 600),
+                ]);
 
                 throw ShopifyApiException::http($shop, $response->status());
             }
