@@ -20,17 +20,30 @@ final class StartGenerationRequest extends FormRequest
 {
     // === CONSTANTS ===
     public const FIELD_PHOTO = 'photo';            // base64 / data-URL string
+
     public const FIELD_PHOTO_FILE = 'photo_file';  // multipart fallback
+
     public const FIELD_HEIGHT = 'height';
+
     public const FIELD_PRODUCT_ID = 'product_id';
+
     public const FIELD_VARIANT_ID = 'variant_id';
+
     public const FIELD_CLIENT_REQUEST_ID = 'client_request_id';
+
     public const FIELD_CONSENT = 'consent';
+
     public const FIELD_ANON_TOKEN = 'anon_token';
+
     public const FIELD_EXTRA = 'extra';
+
+    // The chosen global style preset id — a TOP-LEVEL field (NOT inside `extra`, whose whitelist
+    // would silently drop it). Resolved + applied server-side; a stale/foreign id is fail-open.
+    public const FIELD_STYLE_ID = 'style_id';
 
     // Height sanity range (cm). A try-on prompt needs a plausible human height.
     public const HEIGHT_MIN_CM = 50;
+
     public const HEIGHT_MAX_CM = 260;
 
     // Optional body/age/gender/angle hints the widget may add.
@@ -56,6 +69,7 @@ final class StartGenerationRequest extends FormRequest
             self::FIELD_CLIENT_REQUEST_ID => ['required', 'string', 'max:128'],
             self::FIELD_CONSENT => ['accepted'], // must be true/1/"yes"/"on" — consent is mandatory
             self::FIELD_ANON_TOKEN => ['required', 'string', 'min:8', 'max:128'],
+            self::FIELD_STYLE_ID => ['sometimes', 'nullable', 'integer'],
             self::FIELD_EXTRA => ['sometimes', 'array'],
             self::FIELD_EXTRA.'.body' => ['sometimes', 'nullable', 'string', 'max:40'],
             self::FIELD_EXTRA.'.age' => ['sometimes', 'nullable', 'string', 'max:20'],
@@ -76,6 +90,14 @@ final class StartGenerationRequest extends FormRequest
             self::FIELD_PHOTO_FILE.'.mimetypes' => __('widget_api.validation.photo_mime'),
             self::FIELD_PHOTO_FILE.'.max' => __('widget_api.validation.photo_size'),
         ];
+    }
+
+    /** The chosen style preset id, or null. Fail-open downstream (the applier ignores a bad id). */
+    public function styleId(): ?int
+    {
+        $value = $this->input(self::FIELD_STYLE_ID);
+
+        return ($value === null || $value === '') ? null : (int) $value;
     }
 
     /** Only the whitelisted extra-attr keys are carried forward (never arbitrary input). */

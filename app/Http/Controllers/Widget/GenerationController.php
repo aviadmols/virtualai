@@ -110,6 +110,7 @@ final class GenerationController
                 clientRequestId: (string) $request->input(StartGenerationRequest::FIELD_CLIENT_REQUEST_ID),
                 photoConsent: true, // FormRequest already required `consent` to be accepted
                 extraAttrs: $request->extraAttrs(),
+                styleId: $request->styleId(),
             ));
         } catch (GenerationStartException $e) {
             // A 4xx-class start problem (consent / not-confirmed / variant mismatch).

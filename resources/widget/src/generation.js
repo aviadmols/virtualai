@@ -56,6 +56,7 @@ export async function submit(inputs) {
     clientRequestId: state.clientRequestId,
     consent: true,
     anonToken: state.anonToken,
+    styleId: inputs.styleId ?? null,
     extra: inputs.extra || {},
   });
 

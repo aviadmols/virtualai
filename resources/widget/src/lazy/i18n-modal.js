@@ -22,6 +22,8 @@ export const MODAL_MESSAGES = {
     'height.unit_cm': 'cm',
     'height.errors.range': 'Enter a height between :min and :max cm',
 
+    'styles.label': 'Choose a style (optional)',
+
     'details.toggle': 'Add details (optional)',
     'details.body': 'Body type',
     'details.age': 'Age range',
@@ -115,6 +117,8 @@ export const MODAL_MESSAGES = {
     'height.label': 'הגובה שלכם',
     'height.unit_cm': 'ס"מ',
     'height.errors.range': 'הזינו גובה בין :min ל-:max ס"מ',
+
+    'styles.label': 'בחרו סגנון (לא חובה)',
 
     'details.toggle': 'הוספת פרטים (לא חובה)',
     'details.body': 'מבנה גוף',

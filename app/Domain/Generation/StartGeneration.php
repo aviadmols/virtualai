@@ -7,6 +7,7 @@ use App\Domain\Ai\ImagePayload;
 use App\Domain\Credits\IdempotencyKey;
 use App\Domain\Media\MediaStorage;
 use App\Models\ActivityEvent;
+use App\Models\EndUser;
 use App\Models\Generation;
 use App\Models\Site;
 use Illuminate\Support\Facades\DB;
@@ -92,6 +93,7 @@ final class StartGeneration
                 'meta' => [
                     Generation::META_HEIGHT => $request->userHeight,
                     Generation::META_EXTRA_ATTRS => $request->extraAttrs,
+                    Generation::META_STYLE_ID => $request->styleId,
                     Generation::META_VARIANT_SNAPSHOT => (array) ($request->variant?->options ?? []),
                     Generation::META_RETENTION_DAYS => $request->endUser->site?->retention_days
                         ?? Site::DEFAULT_RETENTION_DAYS,
@@ -144,7 +146,7 @@ final class StartGeneration
     }
 
     /** Stamp the use-my-photo consent timestamp (the provable basis to process the photo). */
-    private function recordPhotoConsent(\App\Models\EndUser $endUser): void
+    private function recordPhotoConsent(EndUser $endUser): void
     {
         if ($endUser->hasPhotoConsent()) {
             return;

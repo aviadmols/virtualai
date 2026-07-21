@@ -194,6 +194,7 @@ export const GEN_FIELD = {
   clientRequestId: 'client_request_id',
   consent: 'consent',
   anonToken: 'anon_token',
+  styleId: 'style_id',
   extra: 'extra',
 };
 

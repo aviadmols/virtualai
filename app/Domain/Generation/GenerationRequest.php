@@ -34,5 +34,7 @@ final readonly class GenerationRequest
         public string $clientRequestId,
         public bool $photoConsent,
         public array $extraAttrs = [],
+        // The shopper's chosen global style preset (null = the try-on operation's default look).
+        public ?int $styleId = null,
     ) {}
 }

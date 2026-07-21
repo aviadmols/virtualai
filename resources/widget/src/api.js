@@ -91,6 +91,7 @@ export function createGeneration(payload) {
       [GEN_FIELD.clientRequestId]: payload.clientRequestId,
       [GEN_FIELD.consent]: payload.consent,
       [GEN_FIELD.anonToken]: payload.anonToken,
+      [GEN_FIELD.styleId]: payload.styleId ?? null,
       [GEN_FIELD.extra]: payload.extra || {},
     },
   });

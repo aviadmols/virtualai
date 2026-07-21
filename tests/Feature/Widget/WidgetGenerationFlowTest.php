@@ -4,11 +4,13 @@ namespace Tests\Feature\Widget;
 
 use App\Domain\Generation\GenerateTryOnJob;
 use App\Models\Account;
+use App\Models\AiOperation;
 use App\Models\CreditLedger;
 use App\Models\EndUser;
 use App\Models\Generation;
 use App\Models\Product;
 use App\Models\Site;
+use App\Models\StylePreset;
 use App\Support\Tenant;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -50,6 +52,27 @@ final class WidgetGenerationFlowTest extends TestCase
         $this->assertIsInt($response->json('generation.id'));
 
         Queue::assertPushed(GenerateTryOnJob::class, 1);
+    }
+
+    public function test_a_chosen_style_id_is_stored_on_the_generation_meta(): void
+    {
+        Queue::fake();
+        $ctx = $this->makeSiteContext();
+        $preset = StylePreset::create([
+            'name' => 'noir',
+            'operation_key' => AiOperation::KEY_TRY_ON_GENERATION,
+            'user_prompt' => 'A film-noir look.',
+            'status' => StylePreset::STATUS_APPROVED,
+            'is_active' => true,
+        ]);
+
+        // style_id is a TOP-LEVEL field (not inside `extra`, which would drop it).
+        $this->withHeaders($this->widgetHeaders($ctx['site'], $ctx['origin']))
+            ->postJson('/widget/v1/generations', $this->body($ctx) + ['style_id' => $preset->id])
+            ->assertStatus(201);
+
+        $gen = Tenant::run($ctx['account'], fn (): Generation => Generation::query()->firstOrFail());
+        $this->assertSame($preset->id, (int) ($gen->meta[Generation::META_STYLE_ID] ?? null));
     }
 
     public function test_double_click_same_client_request_id_collapses_to_one_generation(): void

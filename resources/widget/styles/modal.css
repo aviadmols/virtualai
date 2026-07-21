@@ -691,3 +691,62 @@
     transform: none;
   }
 }
+
+/* Style slider — pick a look from thumbnails (the try-on Style Presets). */
+.ton-styles {
+  margin-block-end: var(--ton-space-gallery);
+}
+
+.ton-styles__label {
+  margin-block-end: var(--ton-space-2);
+  color: var(--ton-ink-2);
+  font-size: var(--ton-fs-upload);
+}
+
+.ton-styles__track {
+  display: flex;
+  gap: var(--ton-space-3);
+  overflow-x: auto;
+  padding-block-end: var(--ton-space-2);
+  scrollbar-width: none;
+}
+
+.ton-styles__track::-webkit-scrollbar {
+  display: none;
+}
+
+.ton-style {
+  flex: none;
+  width: var(--ton-thumb-w);
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--ton-radius-control);
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--ton-t-fast), transform var(--ton-t-fast);
+}
+
+.ton-style:hover {
+  transform: translateY(-2px);
+}
+
+.ton-style--on {
+  border-color: var(--ton-accent);
+}
+
+.ton-style__img {
+  display: block;
+  width: 100%;
+  height: var(--ton-thumb-h);
+  object-fit: cover;
+}
+
+.ton-style__name {
+  display: block;
+  padding: var(--ton-space-2);
+  color: var(--ton-ink-2);
+  font-size: var(--ton-fs-disclaimer);
+  text-align: center;
+}

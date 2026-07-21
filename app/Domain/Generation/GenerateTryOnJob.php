@@ -7,6 +7,7 @@ use App\Domain\Ai\AiOperationResolver;
 use App\Domain\Ai\ImagePayload;
 use App\Domain\Ai\OpenRouterException;
 use App\Domain\Ai\OperationConfig;
+use App\Domain\Ai\StylePresetApplier;
 use App\Domain\Ai\TryOnGenerationCaller;
 use App\Domain\Ai\TryOnResult;
 use App\Domain\Credits\CreditDenied;
@@ -144,6 +145,9 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         // fall back to the scanned product_type, then the generic global prompt.
         $promptType = $site->product_category ?: $product->product_type;
         $config = $this->resolver()->for(self::OPERATION_KEY, $site, $promptType);
+
+        // Apply the shopper's chosen STYLE (swaps only the prompt; fail-open on a stale id).
+        $config = app(StylePresetApplier::class)->applyTo($config, $generation->meta[Generation::META_STYLE_ID] ?? null);
 
         // Fail EARLY on a mis-configured flat-rate model (BytePlus with no per-image
         // price), BEFORE reserving or calling the provider — so no render is wasted on a

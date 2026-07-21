@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Domain\Activity\ActivityRecorder;
 use App\Models\Concerns\BelongsToAccount;
+use Database\Factories\GenerationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -28,15 +29,19 @@ use RuntimeException;
  */
 class Generation extends Model
 {
-    /** @use HasFactory<\Database\Factories\GenerationFactory> */
+    /** @use HasFactory<GenerationFactory> */
     use BelongsToAccount, HasFactory;
 
     // === CONSTANTS ===
     // The status machine states.
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_PROCESSING = 'processing';
+
     public const STATUS_SUCCEEDED = 'succeeded';
+
     public const STATUS_FAILED = 'failed';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     public const STATUSES = [
@@ -65,11 +70,19 @@ class Generation extends Model
     // Meta keys — the structured snapshot a generation carries (height, attrs, the
     // variant + prompt snapshots, the resolved failure detail, retention bookkeeping).
     public const META_HEIGHT = 'user_height';
+
     public const META_EXTRA_ATTRS = 'extra_attrs';
+
+    public const META_STYLE_ID = 'style_preset_id';
+
     public const META_VARIANT_SNAPSHOT = 'variant_snapshot';
+
     public const META_PROMPT_SNAPSHOT = 'prompt_snapshot';
+
     public const META_FAILURE_MESSAGE = 'failure_message';
+
     public const META_OPENROUTER_GENERATION_ID = 'openrouter_generation_id';
+
     public const META_RETENTION_DAYS = 'retention_days';
 
     // status / idempotency_key / image paths / cost are set by the pipeline, never

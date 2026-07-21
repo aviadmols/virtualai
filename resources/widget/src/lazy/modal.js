@@ -38,7 +38,7 @@ let galleryItems = []; // the shopper's past looks (fetched once per open)
 let activeThumb = null; // the generation id currently being viewed from the strip
 
 // The working draft for the current intent (kept across step changes / retries).
-let draft = { photo: null, height: '', extra: {}, consent: false };
+let draft = { photo: null, height: '', extra: {}, consent: false, styleId: null };
 
 /** Does this site's popup ask for the shopper's height? Off by default. */
 function asksHeight() {
@@ -127,11 +127,12 @@ function renderSetup() {
   renderDropzone(preview, fileInput, errorBox, refresh);
 
   const strip = el('div', { class: 'ton-gallery' });
+  const styles = buildStyles();
   const height = asksHeight() ? buildHeight(refresh) : null;
   const details = buildDetails();
   const consent = asksConsent() ? buildConsent(refresh) : null;
 
-  const body = el('div', {}, [preview, strip, height, details, consent, cta, errorBox].filter(Boolean));
+  const body = el('div', {}, [preview, strip, styles, height, details, consent, cta, errorBox].filter(Boolean));
   mount(body, triesChip());
   updateCta(cta);
 
@@ -208,6 +209,40 @@ function buildHeight(refresh) {
   });
   field.appendChild(input);
   return field;
+}
+
+/**
+ * The optional STYLE slider — a horizontal row of look thumbnails (config.styles, shipped by the
+ * bootstrap). Clicking one sets draft.styleId (click again to clear); the server applies that
+ * style's prompt. Absent/empty styles render nothing (the default look is used).
+ */
+function buildStyles() {
+  const styles = state.config?.styles || [];
+  if (!styles.length) return null;
+
+  const wrap = el('div', { class: 'ton-styles' });
+  wrap.appendChild(el('div', { class: 'ton-styles__label', text: t('styles.label') }));
+
+  const cards = [];
+  const track = el('div', { class: 'ton-styles__track' });
+
+  styles.forEach((style) => {
+    const card = el('button', { class: 'ton-style', attrs: { type: 'button', title: style.label || '' } });
+    card.appendChild(el('img', { class: 'ton-style__img', attrs: { src: style.image_url, alt: style.label || '' } }));
+    if (style.label) card.appendChild(el('span', { class: 'ton-style__name', text: style.label }));
+
+    card.addEventListener('click', () => {
+      const wasOn = draft.styleId === style.id;
+      draft.styleId = wasOn ? null : style.id;
+      cards.forEach((c) => c.classList.toggle('ton-style--on', !wasOn && c === card));
+    });
+
+    cards.push(card);
+    track.appendChild(card);
+  });
+
+  wrap.appendChild(track);
+  return wrap;
 }
 
 function buildDetails() {
@@ -382,6 +417,7 @@ async function onSubmit(cta, errorBox) {
   const out = await gen.submit({
     photo: draft.photo,
     height: asksHeight() ? Number(draft.height) : null,
+    styleId: draft.styleId,
     extra: draft.extra,
   });
 
@@ -669,6 +705,7 @@ async function resubmit() {
   const out = await gen.submit({
     photo: draft.photo,
     height: asksHeight() ? Number(draft.height) : null,
+    styleId: draft.styleId,
     extra: draft.extra,
   });
   button.setBusy(false);

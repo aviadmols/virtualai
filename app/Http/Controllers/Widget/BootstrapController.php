@@ -16,6 +16,7 @@ use App\Models\Banner;
 use App\Models\EndUser;
 use App\Models\Product;
 use App\Models\Site;
+use App\Models\StylePreset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -82,6 +83,8 @@ final class BootstrapController
                 // Resolved with defaults so the widget always gets a complete, valid look.
                 // Height + consent checkboxes default OFF; merchants opt in from appearance.
                 'appearance' => WidgetAppearance::resolve($site->widget_appearance, $site->product_category),
+                // Approved try-on style presets for the popup's style slider (id + label + thumb).
+                'styles' => $this->stylesPayload(),
             ],
             'lead' => [
                 'registered' => $endUser?->isRegistered() ?? false,
@@ -249,6 +252,31 @@ final class BootstrapController
                     ],
                 ];
             })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The approved try-on style presets for the popup's style slider. GLOBAL (a curated library,
+     * not per-site). Each carries its thumbnail — the admin's generated sample, else the uploaded
+     * reference — via a short-lived signed URL (fine for the widget: bootstrap → render is
+     * immediate). A preset with no viewable image is skipped. Capped by the approved set itself.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function stylesPayload(): array
+    {
+        $media = app(MediaStorage::class);
+
+        return StylePreset::query()
+            ->approvedForOperations(StylePreset::SURFACE_OPERATIONS[StylePreset::SURFACE_TRY_ON])
+            ->get(['id', 'name', 'sample_image_path', 'reference_image_path'])
+            ->map(static fn (StylePreset $p): array => [
+                'id' => (int) $p->id,
+                'label' => (string) $p->name,
+                'image_url' => $media->signedUrl($p->sample_image_path ?? $p->reference_image_path),
+            ])
+            ->filter(static fn (array $s): bool => $s['image_url'] !== null)
             ->values()
             ->all();
     }
