@@ -16,6 +16,7 @@ use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -60,7 +61,7 @@ class MerchantPanelProvider extends PanelProvider
     // The Vsio wordmark (public/vsio-logo.svg) replaces the text brand name in the sidebar/header.
     private const BRAND_LOGO = 'vsio-logo.svg';
 
-    private const BRAND_LOGO_HEIGHT = '1.9rem';
+    private const BRAND_LOGO_HEIGHT = '2.25rem';
 
     private const HEBREW_FONT_HEAD = '<link rel="preconnect" href="https://fonts.bunny.net">'
         .'<link href="https://fonts.bunny.net/css?family=assistant:400,500,600,700&display=swap" rel="stylesheet" />';
@@ -106,6 +107,12 @@ class MerchantPanelProvider extends PanelProvider
             ->renderHook(
                 PanelsRenderHook::HEAD_START,
                 static fn (): HtmlString => new HtmlString(self::HEBREW_FONT_HEAD),
+            )
+            // A persistent credit-balance chip + Buy CTA in the topbar (tenant-scoped; the view
+            // null-guards the no-tenant routes like login).
+            ->renderHook(
+                PanelsRenderHook::TOPBAR_END,
+                static fn (): View => view('filament.merchant.partials.topbar-credits'),
             )
             ->viteTheme(self::THEME)
             ->sidebarCollapsibleOnDesktop()

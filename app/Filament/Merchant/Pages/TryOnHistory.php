@@ -27,7 +27,7 @@ use Illuminate\Support\Collection;
 class TryOnHistory extends Page
 {
     // === CONSTANTS ===
-    protected static ?string $navigationIcon = 'heroicon-o-sparkles';
+    protected static ?string $navigationIcon = 'heroicon-o-clock';
 
     // Single-shop model: the SITES group is retired, so try-on history sits as a
     // top-level item right under the Overview (ungrouped).

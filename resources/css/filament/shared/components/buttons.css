@@ -42,9 +42,10 @@
     cursor: not-allowed;
 }
 
-/* primary — the single filled brand accent; inverts to an outline on hover. */
+/* primary — the single filled brand accent; inverts to an outline on hover. The merchant sets
+   --toa-btn-primary-bg to the indigo->violet gradient; the platform (no hook) keeps the flat fill. */
 .to-btn--primary {
-    background: var(--toa-accent);
+    background: var(--toa-btn-primary-bg, var(--toa-accent));
     color: var(--toa-accent-on);
     border-color: var(--toa-accent);
 }

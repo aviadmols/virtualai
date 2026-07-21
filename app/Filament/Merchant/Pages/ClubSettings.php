@@ -49,7 +49,7 @@ use Illuminate\Support\Facades\RateLimiter;
 class ClubSettings extends Page
 {
     // === CONSTANTS ===
-    protected static ?string $navigationIcon = 'heroicon-o-user-group';
+    protected static ?string $navigationIcon = 'heroicon-o-gift';
 
     protected static ?string $navigationGroup = 'nav.settings';
 
@@ -82,15 +82,22 @@ class ClubSettings extends Page
     // Preview cache + rate limit (mirrors WidgetAppearanceSettings) — headless renders
     // cost money, so cache briefly + cap the live "Load preview" attempts per site.
     private const PREVIEW_CACHE_TTL_MINUTES = 10;
+
     private const PREVIEW_RATE_MAX = 20;
+
     private const PREVIEW_RATE_DECAY = 60;
 
     // i18n keys — never a literal in the page.
     private const NAV_LABEL = 'club.settings.nav';
+
     private const TITLE = 'club.settings.title';
+
     private const SAVED = 'club.settings.saved';
+
     private const SAVE_FAILED = 'club.settings.errors.save_failed';
+
     private const ERROR_PREFIX = 'club.settings.errors.';
+
     private const PICK_LOAD_FAILED = 'club.zones.errors.load_failed';
 
     // Maps the discount field's Livewire prop for a mapped field error.
@@ -109,6 +116,7 @@ class ClubSettings extends Page
 
     /**
      * Per-surface verified price-zone selectors: surface => list of selectors.
+     *
      * @var array<string,array<int,string>>
      */
     public array $priceZones = [

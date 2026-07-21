@@ -31,7 +31,7 @@ class PrivacySettings extends Page
 
     protected static ?string $navigationGroup = 'nav.settings';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 5;
 
     protected static string $view = 'filament.merchant.pages.privacy-settings';
 
@@ -43,6 +43,7 @@ class PrivacySettings extends Page
     // are this surface's contract (the backend stores them as opaque blobs); the widget
     // + lead card read them later. Flagged to product-ux-architect for the catalog.
     private const GALLERY_SHOW_KEY = 'show_in_gallery';
+
     private const PRIVACY_BLUR_KEY = 'blur_source_photo';
 
     // Maps the service's reason → the field whose error line it renders under.
@@ -54,9 +55,13 @@ class PrivacySettings extends Page
 
     // i18n keys.
     private const TITLE = 'settings.privacy.title';
+
     private const NAV_LABEL = 'settings.privacy.nav';
+
     private const NOTIFY_SAVED = 'settings.privacy.saved';
+
     private const NOTIFY_SAVE_FAILED = 'settings.privacy.errors.save_failed';
+
     private const ERROR_PREFIX = 'settings.privacy.errors.';
 
     /** The bound site id (scalar — Livewire-safe; the model re-resolves on demand). */

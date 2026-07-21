@@ -34,7 +34,7 @@ class TryOnPrompt extends Page implements HasForms
     use InteractsWithForms;
 
     // === CONSTANTS ===
-    protected static ?string $navigationIcon = 'heroicon-o-sparkles';
+    protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-bottom-center-text';
 
     protected static ?string $navigationGroup = 'nav.settings';
 

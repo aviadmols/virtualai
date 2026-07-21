@@ -1,0 +1,77 @@
+/* ============================================================================
+ * Topbar credit chip + Buy CTA (merchant panel only — imported by merchant/theme.css). A balance
+ * pill (warn-toned when low) and a gradient Buy button, both linking to Buy Credits. Token-backed,
+ * logical properties (mirrors in HE).
+ * ==========================================================================*/
+.to-topbar-credits {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-2);
+    margin-inline-end: var(--to-space-2);
+}
+
+.to-topbar-credits__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-1);
+    padding: var(--to-space-1) var(--to-space-3);
+    border-radius: var(--to-r-pill);
+    border: var(--to-bw-input) solid var(--toa-border);
+    background: var(--toa-surface-alt);
+    color: var(--to-ink);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    text-decoration: none;
+    transition: border-color var(--to-t-fast), background var(--to-t-fast);
+}
+
+.to-topbar-credits__pill:hover {
+    border-color: var(--toa-border-strong);
+}
+
+.to-topbar-credits__pill--low {
+    border-color: var(--to-warn);
+    color: var(--to-warn);
+    background: var(--to-warn-bg);
+}
+
+.to-topbar-credits__icon {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+    color: var(--to-ink-subtle);
+}
+
+.to-topbar-credits__pill--low .to-topbar-credits__icon {
+    color: var(--to-warn);
+}
+
+.to-topbar-credits__buy {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-1);
+    padding: var(--to-space-1) var(--to-space-3);
+    border-radius: var(--to-r-pill);
+    background: var(--toa-grad-accent, var(--toa-accent));
+    color: var(--toa-accent-on);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    text-decoration: none;
+    box-shadow: var(--to-shadow-accent-glow);
+    transition: box-shadow var(--to-t-fast), transform var(--to-t-fast);
+}
+
+.to-topbar-credits__buy:hover {
+    background: var(--toa-grad-accent-hover, var(--toa-accent-hover));
+}
+
+.to-topbar-credits__buy-icon {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+
+/* On narrow topbars the Buy label collapses to the icon; the balance pill always stays. */
+@media (max-width: 40rem) {
+    .to-topbar-credits__buy-label {
+        display: none;
+    }
+}

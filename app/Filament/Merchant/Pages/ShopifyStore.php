@@ -42,7 +42,7 @@ class ShopifyStore extends Page
 
     protected static ?string $navigationGroup = 'nav.settings';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 6;
 
     protected static string $view = 'filament.merchant.pages.shopify-store';
 

@@ -5,6 +5,12 @@
 return [
     'balance' => 'Credit balance',
 
+    // The persistent topbar credit chip + Buy CTA.
+    'topbar' => [
+        'balance' => 'Your spendable credit',
+        'buy' => 'Buy credits',
+    ],
+
     // A1 balance band on the ledger page.
     'kpi' => [
         'spendable' => 'Spendable credit',

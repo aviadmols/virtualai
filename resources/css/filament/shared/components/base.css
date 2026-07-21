@@ -109,9 +109,16 @@
     position: absolute;
     inset-block: var(--to-space-1);
     inset-inline-start: 0;
-    inline-size: var(--to-bw-input-focus);
-    background-color: var(--toa-accent-line);
+    inline-size: var(--to-nav-rail-w, var(--to-bw-input-focus));
+    /* The merchant sets --toa-nav-rail to a gradient; the platform (which sets neither var) keeps
+       the flat accent-line bar. background covers both a solid color and an image gradient. */
+    background: var(--toa-nav-rail, var(--toa-accent-line));
     border-radius: var(--to-r-pill);
+}
+
+/* The active item's ICON picks up the accent (safe for both panels — additive). */
+.fi-sidebar-item-active .fi-sidebar-item-icon {
+    color: var(--toa-accent);
 }
 
 /* Brand wordmark / logo area sits on the paper rail. */
