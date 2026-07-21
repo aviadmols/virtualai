@@ -19,12 +19,27 @@
                 @foreach($this->presets() as $preset)
                     <button
                         type="button"
-                        class="to-buy__card @if($preset['selected']) is-selected @endif"
+                        @class([
+                            'to-buy__card',
+                            'to-buy__card--featured' => $preset['featured'],
+                            'is-selected' => $preset['selected'],
+                        ])
                         role="radio"
                         aria-checked="{{ $preset['selected'] ? 'true' : 'false' }}"
                         wire:click="selectAmount({{ $preset['usd'] }})"
                     >
+                        @if($preset['featured'])
+                            <span class="to-buy__pill">{{ __('credits.buy.badge_popular') }}</span>
+                        @endif
+
                         <span class="to-buy__amount">{{ $preset['display'] }}</span>
+
+                        @if($preset['tryOns'] !== null)
+                            <span class="to-buy__estimate">{{ __('credits.buy.estimate', ['count' => $preset['tryOns']]) }}</span>
+                        @endif
+
+                        <span class="to-buy__hint">{{ __($preset['hint']) }}</span>
+
                         @if($preset['selected'])
                             <span class="to-buy__check" aria-hidden="true">
                                 <x-filament::icon icon="heroicon-m-check-circle" class="to-buy__check-glyph" />

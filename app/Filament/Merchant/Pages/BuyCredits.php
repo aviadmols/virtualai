@@ -2,10 +2,13 @@
 
 namespace App\Filament\Merchant\Pages;
 
+use App\Domain\Ai\AiOperationResolver;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Credits\Payments\PurchaseInitiator;
+use App\Domain\Generation\CreditEstimator;
 use App\Filament\Merchant\Concerns\ResolvesShopAccount;
 use App\Models\Account;
+use App\Models\AiOperation;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
@@ -43,9 +46,25 @@ class BuyCredits extends Page
     // value converts to face-value micro-USD via CreditMath and passes to the initiator.
     public const PRESET_USD = [10, 25, 50, 100];
 
+    // The single FEATURED (recommended) preset — gradient ring + "Most popular" pill.
+    private const FEATURED_USD = 50;
+
+    // Per-preset tier-hint i18n key (the line under each amount). CONST-at-top; never a view literal.
+    private const PRESET_HINT = [
+        10 => 'credits.buy.tiers.starter',
+        25 => 'credits.buy.tiers.standard',
+        50 => 'credits.buy.tiers.scale',
+        100 => 'credits.buy.tiers.pro',
+    ];
+
+    // The operation whose resolved estimate drives the "≈ N try-ons" line.
+    private const TRY_ON_OPERATION = AiOperation::KEY_TRY_ON_GENERATION;
+
     // The return-status flag the provider redirects back with (read on mount).
     private const STATUS_SUCCESS = 'success';
+
     private const STATUS_CANCEL = 'cancel';
+
     private const STATUS_FAILURE = 'failure';
 
     // The provider name the webhook route is keyed by (callback target).
@@ -53,10 +72,15 @@ class BuyCredits extends Page
 
     // i18n keys — never a literal in the page.
     private const TITLE = 'credits.buy.title';
+
     private const NAV_LABEL = 'credits.buy.nav';
+
     private const NOTIFY_SUCCESS = 'credits.buy.success';
+
     private const NOTIFY_FAILED = 'credits.buy.errors.failed';
+
     private const NOTIFY_INIT_ERROR = 'credits.buy.errors.init';
+
     private const NOTIFY_NO_AMOUNT = 'credits.buy.no_amount';
 
     /** The selected preset amount in whole USD (null until the merchant picks one). */
@@ -101,14 +125,47 @@ class BuyCredits extends Page
         }
     }
 
-    /** The preset cards as render-ready descriptors (amount + display + selected flag). */
+    /** The preset cards as render-ready descriptors (amount, display, selected/featured flags, tier hint, try-on estimate). */
     public function presets(): array
     {
-        return array_map(fn (int $usd): array => [
-            'usd' => $usd,
-            'display' => '$'.number_format($usd),
-            'selected' => $this->selectedUsd === $usd,
-        ], self::PRESET_USD);
+        $perTryOnMicro = $this->perTryOnMicroUsd();
+
+        return array_map(function (int $usd) use ($perTryOnMicro): array {
+            $tryOns = $perTryOnMicro !== null
+                ? number_format(intdiv(CreditMath::usdToMicro((float) $usd), $perTryOnMicro))
+                : null;
+
+            return [
+                'usd' => $usd,
+                'display' => '$'.number_format($usd),
+                'selected' => $this->selectedUsd === $usd,
+                'featured' => $usd === self::FEATURED_USD,
+                'hint' => self::PRESET_HINT[$usd],
+                'tryOns' => $tryOns,
+            ];
+        }, self::PRESET_USD);
+    }
+
+    /**
+     * The SELLING micro-USD one try-on is estimated to cost, for the "≈ N try-ons" line — the
+     * resolved try_on_generation reservation estimate (estimate x markup), single-sourced through
+     * CreditEstimator. Returns null (the line is omitted) when the operation carries no positive
+     * estimate or cannot be resolved, so the page never invents a number. Reads only the
+     * platform-global operation config (no tenant leg).
+     */
+    private function perTryOnMicroUsd(): ?int
+    {
+        try {
+            $config = app(AiOperationResolver::class)->for(self::TRY_ON_OPERATION);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if ($config->estimatedCostMicroUsd === null || $config->estimatedCostMicroUsd <= 0) {
+            return null;
+        }
+
+        return app(CreditEstimator::class)->estimateMicroUsd($config);
     }
 
     /**

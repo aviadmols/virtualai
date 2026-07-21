@@ -21,34 +21,42 @@
     margin: 0;
 }
 
-/* Responsive auto-fit grid of preset cards. */
+/* Grid of tall pricing cards; padding-block-start leaves room for the featured pill over the top edge. */
 .to-buy__grid {
     display: grid;
     gap: var(--to-space-4);
-    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    padding-block-start: var(--to-space-4);
 }
 
-/* One preset card — an accessible radio button styled as a tile. */
+/* One pricing card — an accessible radio as a tall tile: pill (featured) + huge amount + estimate +
+   hint. Feature-card treatment: large radius + layered soft shadow lifting on hover. --to-buy-fill
+   is a component-local fill hook so the featured double-background tracks the selected tint. */
 .to-buy__card {
+    --to-buy-fill: var(--toa-surface);
     position: relative;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding-block: var(--to-space-6);
-    padding-inline: var(--to-space-4);
-    background: var(--toa-surface);
+    gap: var(--to-space-2);
+    min-block-size: var(--to-space-48);
+    padding-block: var(--to-space-8);
+    padding-inline: var(--to-space-5);
+    background: var(--to-buy-fill);
     border: var(--to-bw-input) solid var(--toa-border);
     border-radius: var(--toa-radius-card);
+    box-shadow: var(--to-shadow-layered);
     color: var(--to-ink);
     font-family: var(--to-font);
-    cursor: pointer;
     text-align: center;
-    transition: border-color var(--to-t-fast), background-color var(--to-t-fast),
-                box-shadow var(--to-t-fast);
+    cursor: pointer;
+    transition: border-color var(--to-t-fast), box-shadow var(--to-t-base);
 }
 
 .to-buy__card:hover {
     border-color: var(--toa-accent);
+    box-shadow: var(--to-shadow-layered-hover);
 }
 
 .to-buy__card:focus-visible {
@@ -56,15 +64,64 @@
     box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-focus);
 }
 
+/* Selected — soft accent fill, accent border, and the accent glow. */
 .to-buy__card.is-selected {
+    --to-buy-fill: var(--toa-accent-soft);
     border-color: var(--toa-accent);
-    background: var(--toa-accent-soft);
+    box-shadow: var(--to-shadow-accent-glow);
+}
+
+/* Featured (recommended) — a gradient ring via a padding-box/border-box double background. The
+   padding-box layer uses --to-buy-fill, so it tints to accent-soft when the card is also selected. */
+.to-buy__card--featured {
+    border-color: transparent;
+    border-width: var(--to-bw-input-focus);
+    background:
+        linear-gradient(var(--to-buy-fill), var(--to-buy-fill)) padding-box,
+        var(--toa-grad-accent) border-box;
+}
+
+.to-buy__card--featured:hover,
+.to-buy__card--featured.is-selected {
+    border-color: transparent;
+}
+
+/* "Most popular" pill — floats over the top edge, centred without a transform. Warm ramp, paper text. */
+.to-buy__pill {
+    position: absolute;
+    inset-block-start: calc(-0.5 * var(--to-space-6));
+    inset-inline: 0;
+    margin-inline: auto;
+    inline-size: fit-content;
+    padding-block: var(--to-space-1);
+    padding-inline: var(--to-space-3);
+    border-radius: var(--to-r-pill);
+    background: var(--toa-grad-warm);
+    color: var(--to-paper);
+    font-size: var(--toa-type-eyebrow-size);
+    font-weight: var(--to-fw-bold);
+    letter-spacing: var(--to-track-eyebrow);
+    text-transform: uppercase;
+    white-space: nowrap;
+    box-shadow: var(--to-shadow-soft);
 }
 
 .to-buy__amount {
     font-size: var(--toa-type-kpi-size);
-    font-weight: var(--to-fw-bold);
-    line-height: 1.1;
+    font-weight: var(--to-fw-heavy);
+    line-height: var(--to-lh-title);
+}
+
+.to-buy__estimate {
+    color: var(--toa-accent);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-buy__hint {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    line-height: var(--to-lh-medium);
 }
 
 /* The selected check sits at the inline-end top corner (RTL-safe). */
