@@ -51,6 +51,34 @@ final readonly class OperationConfig
     ) {}
 
     /**
+     * A clone with the USER prompt overridden. A style preset swaps ONLY the user prompt, keeping
+     * the operation's model, quality, aspect, provider, cost hints AND system prompt intact — so
+     * the guardrails/system framing stay and only the "look" changes. The new prompt still
+     * substitutes {{tokens}} via substituteUser (strtr, never Blade).
+     */
+    public function withUserPrompt(string $userPrompt): self
+    {
+        return new self(
+            operationKey: $this->operationKey,
+            model: $this->model,
+            fallbackModel: $this->fallbackModel,
+            systemPrompt: $this->systemPrompt,
+            userPrompt: $userPrompt,
+            imageQuality: $this->imageQuality,
+            aspectRatio: $this->aspectRatio,
+            params: $this->params,
+            creditMultiplier: $this->creditMultiplier,
+            promptVersion: $this->promptVersion,
+            estimatedCostMicroUsd: $this->estimatedCostMicroUsd,
+            inputSchema: $this->inputSchema,
+            provider: $this->provider,
+            fallbackProvider: $this->fallbackProvider,
+            modelCostHintMicroUsd: $this->modelCostHintMicroUsd,
+            fallbackModelCostHintMicroUsd: $this->fallbackModelCostHintMicroUsd,
+        );
+    }
+
+    /**
      * The authoritative flat-rate per-image price (micro-USD) to charge for the PRIMARY
      * model on a flat-rate provider: the resolved per-model cost hint, falling back to
      * the operation estimate. Returns null when neither is a positive price (so parseCost
