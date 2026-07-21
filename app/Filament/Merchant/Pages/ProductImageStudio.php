@@ -2,6 +2,8 @@
 
 namespace App\Filament\Merchant\Pages;
 
+use App\Domain\Ai\AspectRatios;
+use App\Domain\Ai\ImageQualities;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\ProductImages\BatchResult;
@@ -23,6 +25,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -86,6 +89,21 @@ class ProductImageStudio extends Page
     private const FIELD_PRODUCTS = 'product_ids';
 
     private const FIELD_ESTIMATE = 'estimate';
+
+    // Per-generation choices (Image Studio v2).
+    private const FIELD_NOTES = 'notes';
+
+    private const FIELD_ASPECT = 'aspect_ratio';
+
+    private const FIELD_QUALITY = 'image_quality';
+
+    private const FIELD_NOTES_LABEL = 'product_images.generate.notes';
+
+    private const FIELD_NOTES_HELP = 'product_images.generate.notes_help';
+
+    private const FIELD_ASPECT_LABEL = 'product_images.generate.aspect';
+
+    private const FIELD_QUALITY_LABEL = 'product_images.generate.quality';
 
     // i18n keys — never a literal in the page.
     private const TITLE = 'product_images.title';
@@ -478,6 +496,26 @@ class ProductImageStudio extends Page
                     ->required()
                     ->live(),
 
+                Select::make(self::FIELD_ASPECT)
+                    ->label(__(self::FIELD_ASPECT_LABEL))
+                    ->options($this->aspectOptions())
+                    ->default('')
+                    ->native(false),
+
+                Select::make(self::FIELD_QUALITY)
+                    ->label(__(self::FIELD_QUALITY_LABEL))
+                    ->options($this->qualityOptions())
+                    ->default('')
+                    ->native(false),
+
+                // Free-text art direction (e.g. "background #f5f5f0, softer shadow"). Appended to
+                // the prompt as DATA (strtr, never evaluated); empty leaves the style prompt as-is.
+                Textarea::make(self::FIELD_NOTES)
+                    ->label(__(self::FIELD_NOTES_LABEL))
+                    ->helperText(__(self::FIELD_NOTES_HELP))
+                    ->rows(3)
+                    ->maxLength(500),
+
                 Select::make(self::FIELD_PRODUCTS)
                     ->label(__(self::FIELD_PRODUCTS_LABEL))
                     ->helperText(__(self::FIELD_PRODUCTS_HELP))
@@ -500,6 +538,9 @@ class ProductImageStudio extends Page
                     operationKey: $operationKey,
                     sourcePick: (string) $data[self::FIELD_SOURCE],
                     styleId: $styleId,
+                    notes: $data[self::FIELD_NOTES] ?? null,
+                    aspectRatio: $data[self::FIELD_ASPECT] ?? null,
+                    imageQuality: $data[self::FIELD_QUALITY] ?? null,
                 );
 
                 $this->notifyResult($result);
@@ -822,6 +863,30 @@ class ProductImageStudio extends Page
 
         foreach (ProductImageBatch::SOURCE_PICKS as $pick) {
             $options[$pick] = __('product_images.source.'.$pick);
+        }
+
+        return $options;
+    }
+
+    /** Aspect-ratio choices: "" = keep the style's default, then the curated ratios. @return array<string,string> */
+    private function aspectOptions(): array
+    {
+        $options = ['' => __('ai_choices.aspect.default')];
+
+        foreach (AspectRatios::OPTIONS as $value => $suffix) {
+            $options[$value] = __('ai_choices.aspect.'.$suffix);
+        }
+
+        return $options;
+    }
+
+    /** Image-quality choices: "" = keep the style's default, then standard / high. @return array<string,string> */
+    private function qualityOptions(): array
+    {
+        $options = ['' => __('ai_choices.quality.default')];
+
+        foreach (ImageQualities::OPTIONS as $value => $suffix) {
+            $options[$value] = __('ai_choices.quality.'.$suffix);
         }
 
         return $options;

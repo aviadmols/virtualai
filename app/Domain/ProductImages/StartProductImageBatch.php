@@ -4,6 +4,8 @@ namespace App\Domain\ProductImages;
 
 use App\Domain\Activity\ActivityRecorder;
 use App\Domain\Ai\AiOperationResolver;
+use App\Domain\Ai\AspectRatios;
+use App\Domain\Ai\ImageQualities;
 use App\Domain\Ai\OperationConfig;
 use App\Domain\Credits\CreditDenied;
 use App\Domain\Credits\CreditGate;
@@ -122,6 +124,9 @@ final class StartProductImageBatch
         ?string $clientRequestId = null,
         ?int $sourceAssetId = null,
         ?int $styleId = null,
+        ?string $notes = null,
+        ?string $aspectRatio = null,
+        ?string $imageQuality = null,
     ): BatchResult {
         $plan = $this->plan($site, $productIds, $operationKey, $sourcePick);
         $account = $site->account;
@@ -166,6 +171,9 @@ final class StartProductImageBatch
             $clientRequestId ?? ProductAsset::REQUEST_BATCH,
             $sourceAssetId,
             $styleId,
+            $notes,
+            $aspectRatio,
+            $imageQuality,
         );
     }
 
@@ -179,6 +187,9 @@ final class StartProductImageBatch
         string $clientRequestId,
         ?int $sourceAssetId = null,
         ?int $styleId = null,
+        ?string $notes = null,
+        ?string $aspectRatio = null,
+        ?string $imageQuality = null,
     ): BatchResult {
         $total = $plan->count() + count($plan->skippedProductIds);
 
@@ -186,6 +197,11 @@ final class StartProductImageBatch
             'site_id' => $site->getKey(),
             'operation_key' => $operationKey,
             'source_pick' => $sourcePick,
+            // The per-batch generation choices — every asset in this batch shares them, the worker
+            // reads them back to build the config, and they are folded into each idempotency key.
+            'notes' => ($notes = trim((string) $notes)) === '' ? null : $notes,
+            'aspect_ratio' => AspectRatios::normalize($aspectRatio),
+            'image_quality' => ImageQualities::normalize($imageQuality),
             'total' => $total,
             'estimate_per_asset_micro_usd' => $plan->estimatePerAssetMicroUsd,
             'estimate_micro_usd' => $plan->totalMicroUsd(),
@@ -280,6 +296,14 @@ final class StartProductImageBatch
             modelId: $config->model,
             modelParams: $config->params,
             clientRequestId: $clientRequestId,
+            // The output-deciding choices carried on the batch (+ the chosen style): a different
+            // style / note / ratio / quality is a different image, so it must vary the key.
+            extra: [
+                'style_id' => $styleId,
+                'notes' => (string) $batch->notes,
+                'aspect_ratio' => (string) $batch->aspect_ratio,
+                'image_quality' => (string) $batch->image_quality,
+            ],
         );
 
         try {

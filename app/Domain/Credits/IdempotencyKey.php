@@ -95,7 +95,13 @@ final class IdempotencyKey
      * passes a fresh id, which VARIES the key on purpose and mints a new, separately-charged
      * asset. account_id stays the first segment (the ledger's unique index depends on it).
      *
+     * $extra carries the per-generation CHOICES that also decide the output — the chosen style
+     * preset, the art-direction note, an aspect-ratio / quality override. They belong in the
+     * fingerprint so a DIFFERENT choice is a genuinely different image (never a false "already
+     * exists" that skips it), and the SAME choice still dedups a double-clicked batch.
+     *
      * @param  array<string,mixed>  $modelParams  the resolved sampler bag (seed/temperature/...)
+     * @param  array<string,mixed>  $extra  output-deciding choices (style_id, notes, aspect, quality)
      */
     public static function forProductAsset(
         int $accountId,
@@ -107,9 +113,11 @@ final class IdempotencyKey
         string $modelId,
         array $modelParams,
         string $clientRequestId,
+        array $extra = [],
     ): string {
         $params = $modelParams;
         ksort($params);
+        ksort($extra);
 
         $fingerprint = sha1((string) json_encode([
             'product_id' => $productId,
@@ -118,6 +126,7 @@ final class IdempotencyKey
             'prompt_version' => $promptVersion,
             'model_id' => $modelId,
             'model_params' => $params,
+            'extra' => $extra,
         ]));
 
         return implode(':', [

@@ -99,13 +99,9 @@
         </x-filament::section>
     @endif
 
-    {{-- REVIEW grid. The whole section shares ONE Alpine lightbox: a tile dispatches its signed
-         URL, the overlay below shows it full-screen. --}}
-    <x-filament::section
-        x-data="{ lightbox: null }"
-        x-on:open-lightbox.window="lightbox = $event.detail.src"
-        x-on:keydown.escape.window="lightbox = null"
-    >
+    {{-- REVIEW grid. A tile dispatches its signed URL on click; the standalone lightbox host at
+         the end of the page (its own Alpine scope) catches it and shows it full-screen. --}}
+    <x-filament::section>
         <x-slot:heading>{{ __('product_images.review.heading') }}</x-slot:heading>
         <x-slot:description>{{ __('product_images.review.sub') }}</x-slot:description>
 
@@ -262,16 +258,22 @@
             />
         @endif
 
-        {{-- Full-screen preview. Click anywhere (or Esc) to close. --}}
-        <div class="to-studio-lightbox" x-show="lightbox" x-cloak
-             x-transition.opacity
-             x-on:click="lightbox = null"
-             role="dialog" aria-modal="true">
-            <button type="button" class="to-studio-lightbox__close" x-on:click="lightbox = null"
-                    :aria-label="@js(__('product_images.lightbox.close'))">
-                <x-filament::icon icon="heroicon-o-x-mark" />
-            </button>
-            <img class="to-studio-lightbox__img" :src="lightbox" alt="" />
-        </div>
     </x-filament::section>
+
+    {{-- Standalone full-screen preview host. It lives in its OWN Alpine scope and the overlay is
+         rendered ONLY while an image is open (template x-if), so when closed it is not in the DOM
+         at all — it can never dim the page or swallow a click. Esc / a click closes it. --}}
+    <div x-data="{ src: null }"
+         x-on:open-lightbox.window="src = $event.detail.src"
+         x-on:keydown.escape.window="src = null">
+        <template x-if="src">
+            <div class="to-studio-lightbox" x-on:click="src = null" role="dialog" aria-modal="true">
+                <button type="button" class="to-studio-lightbox__close" x-on:click="src = null"
+                        :aria-label="@js(__('product_images.lightbox.close'))">
+                    <x-filament::icon icon="heroicon-o-x-mark" />
+                </button>
+                <img class="to-studio-lightbox__img" :src="src" alt="" />
+            </div>
+        </template>
+    </div>
 </x-filament-panels::page>

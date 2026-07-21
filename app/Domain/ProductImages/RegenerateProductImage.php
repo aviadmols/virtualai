@@ -66,6 +66,11 @@ final readonly class RegenerateProductImage
             sourcePick: (string) ($source->batch?->source_pick ?? ProductImageBatch::SOURCE_MAIN),
             clientRequestId: $this->intentId($source),
             sourceAssetId: (int) $source->getKey(),
+            // Reproduce the SAME look: carry the source's style + the batch's note/ratio/quality.
+            styleId: $source->style_preset_id !== null ? (int) $source->style_preset_id : null,
+            notes: $source->batch?->notes,
+            aspectRatio: $source->batch?->aspect_ratio,
+            imageQuality: $source->batch?->image_quality,
         );
     }
 

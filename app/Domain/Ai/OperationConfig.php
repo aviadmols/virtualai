@@ -17,6 +17,12 @@ use App\Domain\Ai\Contracts\ImageGenerationProvider;
  */
 final readonly class OperationConfig
 {
+    // === CONSTANTS ===
+    // How appended merchant art-direction joins the base user prompt: a labelled separator so the
+    // model reads the note as EXTRA styling instructions, not part of the base task.
+    private const NOTE_SEPARATOR = "\n\nAdditional art direction from the merchant"
+        .' (apply where it does not conflict with the above): ';
+
     /**
      * @param  array<string,mixed>  $params  sampler bag: seed, temperature, top_p, max_tokens, ...
      * @param  array<string,mixed>|null  $inputSchema  strict JSON schema (product_scan)
@@ -58,14 +64,65 @@ final readonly class OperationConfig
      */
     public function withUserPrompt(string $userPrompt): self
     {
+        return $this->copyWith(userPrompt: $userPrompt);
+    }
+
+    /**
+     * A clone with extra merchant art-direction APPENDED to the user prompt (e.g. "background
+     * #f5f5f0", small tweaks). Empty/null is a no-op. The note is DATA: it is appended to the
+     * template and substituted with strtr like the rest — never evaluated (RCE-safe). A labelled
+     * separator keeps it distinct from the base instructions for the model.
+     */
+    public function withAppendedUserPrompt(?string $note): self
+    {
+        $note = trim((string) $note);
+
+        if ($note === '') {
+            return $this;
+        }
+
+        return $this->copyWith(userPrompt: $this->userPrompt.self::NOTE_SEPARATOR.$note);
+    }
+
+    /**
+     * A clone with the aspect ratio overridden (e.g. the merchant picks 4:5 for a batch). Null/
+     * empty keeps the operation's configured ratio — the override only ever SETS a value.
+     */
+    public function withAspectRatio(?string $aspectRatio): self
+    {
+        $aspectRatio = trim((string) $aspectRatio);
+
+        return $aspectRatio === '' ? $this : $this->copyWith(aspectRatio: $aspectRatio);
+    }
+
+    /**
+     * A clone with the image quality overridden (standard | high). Null/empty keeps the operation's
+     * configured quality — the override only ever SETS a value.
+     */
+    public function withImageQuality(?string $imageQuality): self
+    {
+        $imageQuality = trim((string) $imageQuality);
+
+        return $imageQuality === '' ? $this : $this->copyWith(imageQuality: $imageQuality);
+    }
+
+    /**
+     * One immutable-clone helper: every override method funnels through here so the (long)
+     * constructor is written once. Only the named fields change; everything else is carried over.
+     */
+    private function copyWith(
+        ?string $userPrompt = null,
+        ?string $imageQuality = null,
+        ?string $aspectRatio = null,
+    ): self {
         return new self(
             operationKey: $this->operationKey,
             model: $this->model,
             fallbackModel: $this->fallbackModel,
             systemPrompt: $this->systemPrompt,
-            userPrompt: $userPrompt,
-            imageQuality: $this->imageQuality,
-            aspectRatio: $this->aspectRatio,
+            userPrompt: $userPrompt ?? $this->userPrompt,
+            imageQuality: $imageQuality ?? $this->imageQuality,
+            aspectRatio: $aspectRatio ?? $this->aspectRatio,
             params: $this->params,
             creditMultiplier: $this->creditMultiplier,
             promptVersion: $this->promptVersion,

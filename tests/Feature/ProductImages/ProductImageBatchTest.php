@@ -153,10 +153,70 @@ class ProductImageBatchTest extends TestCase
             modelId: 'fal-ai/nano-banana/edit',
             modelParams: ['temperature' => 0.2, 'top_p' => 0.9],
             clientRequestId: ProductAsset::REQUEST_BATCH,
+            // A plain batch carries no style / note / ratio / quality — but the choices ARE part
+            // of the fingerprint, so a batch that picked any of them mints a different image.
+            extra: ['style_id' => null, 'notes' => '', 'aspect_ratio' => '', 'image_quality' => ''],
         );
 
         $this->assertSame($expected, $asset->idempotency_key);
         $this->assertStringStartsWith('product_asset:'.$shop['account']->getKey().':', $asset->idempotency_key);
+    }
+
+    /**
+     * A per-generation CHOICE (note / ratio / quality) is part of the image identity: it varies
+     * the key (so the same product with a different look is NOT skipped as a duplicate) and is
+     * kept on the batch for the worker to apply.
+     */
+    public function test_a_generation_choice_varies_the_key_and_is_kept_on_the_batch(): void
+    {
+        $shop = $this->makeShop();
+
+        $this->start($shop); // a plain batch first
+
+        Tenant::run($shop['account'], function () use ($shop): void {
+            $result = app(StartProductImageBatch::class)->handle(
+                site: $shop['site'],
+                productIds: [(int) $shop['product']->getKey()],
+                operationKey: AiOperation::KEY_PACKSHOT_GENERATION,
+                sourcePick: ProductImageBatch::SOURCE_MAIN,
+                notes: 'warm beige background #f5f5f0',
+                aspectRatio: '4:5',
+                imageQuality: 'high',
+            );
+
+            // The choice made it a genuinely different image — never skipped as an existing one.
+            $this->assertSame(1, $result->queued);
+
+            $batch = ProductImageBatch::query()->latest('id')->firstOrFail();
+            $this->assertSame('warm beige background #f5f5f0', $batch->notes);
+            $this->assertSame('4:5', $batch->aspect_ratio);
+            $this->assertSame('high', $batch->image_quality);
+
+            $keys = ProductAsset::query()->orderBy('id')->pluck('idempotency_key')->all();
+            $this->assertCount(2, $keys);
+            $this->assertNotSame($keys[0], $keys[1], 'A different choice must vary the idempotency key.');
+        });
+    }
+
+    /** An unknown aspect ratio / quality is dropped to null — a selector can never feed a provider a value it rejects. */
+    public function test_an_unknown_aspect_or_quality_is_dropped(): void
+    {
+        $shop = $this->makeShop();
+
+        Tenant::run($shop['account'], function () use ($shop): void {
+            app(StartProductImageBatch::class)->handle(
+                site: $shop['site'],
+                productIds: [(int) $shop['product']->getKey()],
+                operationKey: AiOperation::KEY_PACKSHOT_GENERATION,
+                sourcePick: ProductImageBatch::SOURCE_MAIN,
+                aspectRatio: '999:1',
+                imageQuality: 'ultra',
+            );
+
+            $batch = ProductImageBatch::query()->latest('id')->firstOrFail();
+            $this->assertNull($batch->aspect_ratio);
+            $this->assertNull($batch->image_quality);
+        });
     }
 
     /** A product with nothing in the chosen slot is SKIPPED — never generated from another photo. */

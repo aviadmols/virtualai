@@ -20,6 +20,7 @@ use App\Models\Account;
 use App\Models\CreditLedger;
 use App\Models\Product;
 use App\Models\ProductAsset;
+use App\Models\ProductImageBatch;
 use App\Models\Site;
 use App\Support\Tenant;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -149,6 +150,19 @@ final class SubmitProductImageJob extends TenantAwareJob implements ShouldBeUniq
 
         // Apply the merchant's chosen STYLE (swaps only the user prompt; fail-open on a stale id).
         $config = app(StylePresetApplier::class)->applyTo($config, $asset->style_preset_id);
+
+        // Apply the batch's per-generation choices: append the free-text art-direction note, and
+        // override aspect ratio / image quality when the merchant set them. Each is a no-op on an
+        // empty value, so an untouched choice keeps the operation's configured default. Money is
+        // unchanged — none of these alters the model or its per-image price.
+        $batch = $asset->batch_id !== null ? ProductImageBatch::query()->find($asset->batch_id) : null;
+
+        if ($batch !== null) {
+            $config = $config
+                ->withAppendedUserPrompt($batch->notes)
+                ->withAspectRatio($batch->aspect_ratio)
+                ->withImageQuality($batch->image_quality);
+        }
 
         // A flat-rate model with NO configured price could never charge honestly -> refuse BEFORE
         // reserving or rendering (no wasted spend upstream, no dishonest charge here).
