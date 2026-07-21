@@ -3,11 +3,14 @@
 namespace App\Filament\Merchant\Pages;
 
 use App\Domain\Ai\MentionTags;
+use App\Domain\Generation\ProductFacts;
 use App\Models\AiOperation;
+use App\Models\Product;
 use App\Models\Prompt;
 use App\Models\Site;
 use App\Support\Tenant;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -42,6 +45,12 @@ class TryOnPrompt extends Page implements HasForms
     private const OPERATION = AiOperation::KEY_TRY_ON_GENERATION;
 
     private const FIELD_PROMPT = 'user_prompt';
+
+    // The product-preview picker (drives which metafield tokens the chips offer).
+    private const FIELD_PRODUCT = 'product_id';
+
+    // How many products the preview picker offers.
+    private const PRODUCT_LIMIT = 50;
 
     private const NAV_LABEL = 'try_on_prompt.nav';
 
@@ -108,6 +117,15 @@ class TryOnPrompt extends Page implements HasForms
     {
         return $form
             ->schema([
+                // Pick a product to preview + insert ITS real metafield tokens (optional). The list
+                // of chips below reacts to this choice; the prompt itself is product-agnostic.
+                Select::make(self::FIELD_PRODUCT)
+                    ->label(__('try_on_prompt.field.product'))
+                    ->helperText(__('try_on_prompt.field.product_help'))
+                    ->options(fn (): array => $this->productOptions())
+                    ->searchable()
+                    ->live(),
+
                 Textarea::make(self::FIELD_PROMPT)
                     ->label(__('try_on_prompt.field.label'))
                     ->helperText(__('try_on_prompt.field.help'))
@@ -119,22 +137,56 @@ class TryOnPrompt extends Page implements HasForms
             ->statePath('data');
     }
 
-    /** The product-field tokens (raw names) the merchant may weave in. */
-    public function tokens(): array
+    /** The shop's ACTIVE products (account-scoped) for the token-preview picker. @return array<int,string> */
+    public function productOptions(): array
     {
-        return MentionTags::PRODUCT_METAFIELD_TOKENS;
+        if ($this->siteId === null) {
+            return [];
+        }
+
+        return Product::query()
+            ->where('site_id', $this->siteId)
+            ->active()
+            ->orderBy('name')
+            ->limit(self::PRODUCT_LIMIT)
+            ->pluck('name', 'id')
+            ->all();
     }
 
     /**
-     * The tokens as ready-to-type examples — each wrapped in the strtr braces (e.g.
-     * "{{materials}}"). Built here, not in Blade, so the view never embeds literal echo
-     * braces (which the Blade compiler mis-parses).
+     * The tokens the merchant can weave in, in two groups: the FIXED product fields (always
+     * available) and — when a product is picked — that product's real METAFIELDS with a live value
+     * preview. Each token is {token, label, value} so the view can show what it resolves to.
      *
-     * @return array<int,string>
+     * @return array{fixed: array<int,array{token:string,label:string,value:?string}>, metafields: array<int,array{token:string,label:string,value:string}>}
      */
-    public function tokenExamples(): array
+    public function tokenGroups(): array
     {
-        return array_map(static fn (string $token): string => '{{'.$token.'}}', $this->tokens());
+        $fixed = array_map(
+            // display carries the strtr-wrapped form; the view echoes it directly (Blade
+            // mis-parses a literal {{ }} written inline).
+            static fn (string $token): array => ['token' => $token, 'display' => '{{'.$token.'}}', 'label' => $token, 'value' => null],
+            MentionTags::PRODUCT_METAFIELD_TOKENS,
+        );
+
+        $metafields = [];
+        $productId = $this->data[self::FIELD_PRODUCT] ?? null;
+
+        if ($this->siteId !== null && $productId !== null && $productId !== '') {
+            $product = Product::query()
+                ->where('site_id', $this->siteId)
+                ->whereKey((int) $productId)
+                ->first();
+
+            if ($product !== null) {
+                $metafields = array_map(
+                    static fn (array $mf): array => $mf + ['display' => '{{'.$mf['token'].'}}'],
+                    ProductFacts::availableMetafields($product),
+                );
+            }
+        }
+
+        return ['fixed' => $fixed, 'metafields' => $metafields];
     }
 
     public function save(): void

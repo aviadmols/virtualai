@@ -92,6 +92,25 @@ class ShopifyProductMapperTest extends TestCase
         $this->assertSame([], $mapped->variantRows[0]['options']);
     }
 
+    public function test_text_metafields_are_kept_and_reference_or_empty_ones_are_dropped(): void
+    {
+        $node = $this->productNode([
+            'metafields' => ['nodes' => [
+                ['namespace' => 'custom', 'key' => 'material', 'type' => 'single_line_text_field', 'value' => 'Organic cotton'],
+                ['namespace' => 'custom', 'key' => 'chart', 'type' => 'metaobject_reference', 'value' => 'gid://shopify/Metaobject/1'],
+                ['namespace' => 'custom', 'key' => 'empty', 'type' => 'single_line_text_field', 'value' => ''],
+            ]],
+        ]);
+
+        $metafields = app(ShopifyProductMapper::class)->map($node, self::SHOP)->raw['shopify']['metafields'];
+
+        // Only the text metafield with a value survives — a metaobject reference (a gid) and a
+        // blank field never reach the prompt-token pool.
+        $this->assertCount(1, $metafields);
+        $this->assertSame('material', $metafields[0]['key']);
+        $this->assertSame('Organic cotton', $metafields[0]['value']);
+    }
+
     public function test_materials_come_from_a_real_material_axis_not_a_keyword_guess(): void
     {
         $mapped = app(ShopifyProductMapper::class)->map($this->productNode(), self::SHOP);

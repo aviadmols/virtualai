@@ -26,6 +26,10 @@ final class ShopifyProductQueries
     // product rarely sits in many collections; 25 is ample and keeps the query cost modest.
     public const COLLECTIONS_PER_PRODUCT = 25;
 
+    // Product metafields (the merchant's own custom fields) — the pool the try-on prompt editor
+    // offers as {{mf_*}} tokens. 30 covers a rich custom-data setup without bloating the query.
+    public const METAFIELDS_PER_PRODUCT = 30;
+
     // The one field set both the catalog walk and the single-product fetch select.
     private const PRODUCT_FIELDS = <<<'GRAPHQL'
     fragment ProductFields on Product {
@@ -38,6 +42,7 @@ final class ShopifyProductQueries
       vendor
       tags
       collections(first: COLLECTIONS_LIMIT) { nodes { handle title } }
+      metafields(first: METAFIELDS_LIMIT) { nodes { namespace key type value } }
       status
       onlineStoreUrl
       featuredImage { url altText }
@@ -121,6 +126,7 @@ final class ShopifyProductQueries
             'VARIANTS_LIMIT' => (string) self::VARIANTS_PER_PRODUCT,
             'IMAGES_LIMIT' => (string) self::IMAGES_PER_PRODUCT,
             'COLLECTIONS_LIMIT' => (string) self::COLLECTIONS_PER_PRODUCT,
+            'METAFIELDS_LIMIT' => (string) self::METAFIELDS_PER_PRODUCT,
         ]);
 
         return $document."\n".$fragment;

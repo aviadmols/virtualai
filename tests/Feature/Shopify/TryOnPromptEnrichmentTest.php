@@ -105,6 +105,31 @@ class TryOnPromptEnrichmentTest extends TestCase
         $this->assertLessThan(600, strlen($facts->description), 'marketing copy must not flood the image prompt');
     }
 
+    public function test_product_metafields_become_bounded_tokens_and_are_listed_for_the_editor(): void
+    {
+        $product = Product::factory()->make([
+            'scan_raw' => ['shopify' => ['metafields' => [
+                ['namespace' => 'custom', 'key' => 'material', 'type' => 'single_line_text_field', 'value' => '<b>Organic cotton</b>'],
+                ['namespace' => 'custom', 'key' => 'care', 'type' => 'list.single_line_text_field', 'value' => '["Machine wash","Do not bleach"]'],
+                ['namespace' => 'custom', 'key' => 'blank', 'type' => 'single_line_text_field', 'value' => '   '],
+            ]]],
+        ]);
+
+        $vars = ProductFacts::for($product, null)->toVars();
+
+        // HTML stripped; a list metafield joined; a blank one contributes no token.
+        $this->assertSame('Organic cotton', $vars[ProductFacts::metafieldToken('custom', 'material')]);
+        $this->assertSame('Machine wash, Do not bleach', $vars[ProductFacts::metafieldToken('custom', 'care')]);
+        $this->assertArrayNotHasKey(ProductFacts::metafieldToken('custom', 'blank'), $vars);
+
+        // The editor list carries token + label + value for each usable metafield.
+        $available = ProductFacts::availableMetafields($product);
+        $tokens = array_column($available, 'token');
+        $this->assertContains('mf_custom_material', $tokens);
+        $this->assertContains('mf_custom_care', $tokens);
+        $this->assertNotContains('mf_custom_blank', $tokens);
+    }
+
     public function test_a_nested_dimension_group_is_skipped_not_stringified(): void
     {
         // TS-PDPSCAN-007: a nested group (the merchant's visual picks / a size map) blew

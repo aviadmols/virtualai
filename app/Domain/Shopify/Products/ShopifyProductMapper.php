@@ -49,6 +49,25 @@ final class ShopifyProductMapper
     // The materials key inside physical_dimensions (ProductFacts reads it back).
     public const DIMENSION_MATERIALS = 'materials';
 
+    // Metafield types whose stored `value` is human TEXT we can weave into a prompt. Reference
+    // types (metaobject/file/product) store a gid; rich_text/json store a blob — all excluded.
+    private const METAFIELD_TEXT_TYPES = [
+        'single_line_text_field',
+        'multi_line_text_field',
+        'list.single_line_text_field',
+        'number_integer',
+        'number_decimal',
+        'boolean',
+        'color',
+        'rating',
+        'dimension',
+        'weight',
+        'volume',
+        'url',
+        'date',
+        'date_time',
+    ];
+
     // Config key holding the platform-default OS 2.0 selectors (role => css).
     private const CFG_SELECTORS = 'shopify.selectors';
 
@@ -90,6 +109,7 @@ final class ShopifyProductMapper
                     'vendor' => $node['vendor'] ?? null,
                     'tags' => $node['tags'] ?? [],
                     'collections' => $this->collections($node),
+                    'metafields' => $this->metafields($node),
                     'options' => $node['options'] ?? [],
                 ],
             ],
@@ -131,6 +151,47 @@ final class ShopifyProductMapper
             if ($handle !== '' || $title !== '') {
                 $out[] = ['handle' => $handle, 'title' => $title];
             }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The product's TEXT metafields (the merchant's own custom fields), each as
+     * {namespace, key, type, value}. Only value-as-TEXT types are kept — reference metafields
+     * (metaobject / file / product) store a gid and rich_text/json store a blob, neither of which
+     * belongs in a try-on prompt. This is what the prompt editor offers as {{mf_*}} tokens.
+     *
+     * @return array<int,array{namespace:string,key:string,type:string,value:string}>
+     */
+    private function metafields(array $node): array
+    {
+        $nodes = $node['metafields']['nodes'] ?? [];
+
+        if (! is_array($nodes)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($nodes as $m) {
+            if (! is_array($m)) {
+                continue;
+            }
+
+            $type = (string) ($m['type'] ?? '');
+            $key = (string) ($m['key'] ?? '');
+            $value = (string) ($m['value'] ?? '');
+
+            if ($key === '' || $value === '' || ! in_array($type, self::METAFIELD_TEXT_TYPES, true)) {
+                continue;
+            }
+
+            $out[] = [
+                'namespace' => (string) ($m['namespace'] ?? ''),
+                'key' => $key,
+                'type' => $type,
+                'value' => $value,
+            ];
         }
 
         return $out;

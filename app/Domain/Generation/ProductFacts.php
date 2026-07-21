@@ -35,6 +35,18 @@ final readonly class ProductFacts
 
     public const VAR_PRODUCT_DETAILS = 'product_details';
 
+    // The prefix for a per-product metafield token — {{mf_custom_material}} etc. The merchant's
+    // own custom fields, synced into scan_raw.shopify.metafields, become weavable placeholders.
+    public const VAR_METAFIELD_PREFIX = 'mf_';
+
+    // A metafield value is a hint, not an essay — bound it like the description.
+    private const METAFIELD_VALUE_MAX = 200;
+
+    // Where the mapper persists the product's text metafields (ShopifyProductMapper::metafields).
+    private const RAW_ROOT = 'shopify';
+
+    private const RAW_METAFIELDS = 'metafields';
+
     // A description is context, not an essay: long marketing copy dilutes the image
     // prompt and burns tokens.
     private const DESCRIPTION_MAX = 500;
@@ -62,6 +74,8 @@ final readonly class ProductFacts
         public string $materials,
         public string $options,
         public string $dimensions,
+        /** @var array<string,string> token => value, for the product's synced metafields */
+        public array $metafields = [],
     ) {}
 
     /** Read the facts off a product + the selected variant (both already tenant-scoped). */
@@ -74,7 +88,47 @@ final readonly class ProductFacts
             materials: self::materials($physical),
             options: self::options($variant),
             dimensions: self::dimensions($physical),
+            metafields: self::metafieldVars($product),
         );
+    }
+
+    /**
+     * The deterministic token name for a metafield — the SAME derivation the prompt editor shows
+     * and the generation reads, so {{mf_custom_material}} always resolves. Non-alphanumerics fold
+     * to underscores (a strtr placeholder must be a plain identifier).
+     */
+    public static function metafieldToken(string $namespace, string $key): string
+    {
+        $slug = static fn (string $s): string => (string) preg_replace('/[^a-z0-9]+/', '_', mb_strtolower(trim($s)));
+
+        return self::VAR_METAFIELD_PREFIX.trim($slug($namespace).'_'.$slug($key), '_');
+    }
+
+    /**
+     * The metafield tokens a product actually offers, for the prompt editor: each is
+     * {token, label ("namespace.key"), value (cleaned preview)}. Empty when the product has none.
+     *
+     * @return array<int,array{token:string,label:string,value:string}>
+     */
+    public static function availableMetafields(Product $product): array
+    {
+        $out = [];
+
+        foreach (self::rawMetafields($product) as $mf) {
+            $value = self::metafieldValue((string) ($mf['value'] ?? ''));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $out[] = [
+                'token' => self::metafieldToken((string) ($mf['namespace'] ?? ''), (string) ($mf['key'] ?? '')),
+                'label' => trim((string) ($mf['namespace'] ?? '').'.'.(string) ($mf['key'] ?? ''), '.'),
+                'value' => $value,
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -91,7 +145,7 @@ final readonly class ProductFacts
             self::VAR_OPTIONS => $this->options,
             self::VAR_DIMENSIONS => $this->dimensions,
             self::VAR_PRODUCT_DETAILS => $this->productDetails(),
-        ];
+        ] + $this->metafields;
     }
 
     /**
@@ -114,6 +168,69 @@ final readonly class ProductFacts
         }
 
         return implode(' ', $parts);
+    }
+
+    /**
+     * The product's metafields as prompt vars (token => cleaned value), read from the synced
+     * scan_raw.shopify.metafields. A blank value contributes no token.
+     *
+     * @return array<string,string>
+     */
+    private static function metafieldVars(Product $product): array
+    {
+        $vars = [];
+
+        foreach (self::rawMetafields($product) as $mf) {
+            $value = self::metafieldValue((string) ($mf['value'] ?? ''));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $vars[self::metafieldToken((string) ($mf['namespace'] ?? ''), (string) ($mf['key'] ?? ''))] = $value;
+        }
+
+        return $vars;
+    }
+
+    /** The raw text-metafield list persisted by the mapper. @return array<int,array<string,mixed>> */
+    private static function rawMetafields(Product $product): array
+    {
+        $raw = is_array($product->scan_raw) ? $product->scan_raw : [];
+        $list = $raw[self::RAW_ROOT][self::RAW_METAFIELDS] ?? [];
+
+        return is_array($list) ? $list : [];
+    }
+
+    /**
+     * Clean a metafield value for a prompt: a `list.*` JSON array becomes "a, b, c"; HTML is
+     * stripped, whitespace collapsed, and the result bounded. Anything unusable becomes ''.
+     */
+    private static function metafieldValue(string $value): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        // A list metafield stores a JSON array of scalars.
+        if (str_starts_with($value, '[')) {
+            $decoded = json_decode($value, true);
+
+            if (is_array($decoded)) {
+                $parts = array_filter(array_map(
+                    static fn (mixed $v): string => is_scalar($v) ? trim((string) $v) : '',
+                    $decoded,
+                ), static fn (string $v): bool => $v !== '');
+
+                $value = implode(', ', $parts);
+            }
+        }
+
+        $text = trim((string) preg_replace('/\s+/u', ' ', strip_tags($value)));
+
+        return $text === '' ? '' : Str::limit($text, self::METAFIELD_VALUE_MAX);
     }
 
     /** Plain-text, bounded product description (HTML never reaches the model). */

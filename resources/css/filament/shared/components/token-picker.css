@@ -1,0 +1,122 @@
+/* ============================================================================
+ * The try-on prompt token picker: clickable chips of the product's fields (fixed + the selected
+ * product's real metafields) and the "@" token menu. Insert-at-caret is Alpine; this is only the
+ * look. Token-backed, logical properties (mirrors in HE).
+ * TOKENS: --toa-surface --toa-surface-alt --toa-border --toa-accent --toa-accent-soft --to-ink
+ *   --to-ink-muted --to-ink-subtle --to-r-control --to-r-card --to-space-* --to-shadow-hover
+ *   --toa-type-caption-size --to-fw-medium --to-t-fast --to-z-* [x-cloak]
+ * ==========================================================================*/
+.to-prompt-editor {
+    position: relative;
+}
+
+.to-token-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+}
+
+.to-token-group + .to-token-group {
+    margin-block-start: var(--to-space-4);
+}
+
+.to-token-group__label {
+    margin: 0;
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-token-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--to-space-2);
+}
+
+/* A chip = one insertable token. The metafield variant also shows its live value. */
+.to-token-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--to-space-2);
+    padding: var(--to-space-1) var(--to-space-2);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-control);
+    background: var(--toa-surface-alt);
+    color: var(--to-ink);
+    cursor: pointer;
+    transition: border-color var(--to-t-fast), background var(--to-t-fast);
+}
+
+.to-token-chip:hover {
+    border-color: var(--toa-accent);
+    background: var(--toa-accent-soft);
+}
+
+.to-token-chip__name {
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    color: var(--toa-accent);
+}
+
+.to-token-chip__value {
+    max-inline-size: 12rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-caption-size);
+}
+
+.to-token-empty {
+    margin: 0;
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-caption-size);
+}
+
+/* The "@" menu — a floating list anchored to the editor (not caret-perfect; the chips are the
+ * primary path). Hidden until Alpine opens it; x-cloak avoids a first-paint flash. */
+.to-token-menu {
+    position: absolute;
+    inset-block-start: var(--to-space-2);
+    inset-inline-start: var(--to-space-2);
+    z-index: var(--to-z-dropdown, 40);
+    max-block-size: 16rem;
+    inline-size: min(22rem, 90%);
+    overflow-y: auto;
+    padding: var(--to-space-1);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-card);
+    background: var(--toa-surface);
+    box-shadow: var(--to-shadow-hover);
+}
+
+.to-token-menu__item {
+    display: flex;
+    flex-direction: column;
+    inline-size: 100%;
+    gap: 2px;
+    padding: var(--to-space-2);
+    border: 0;
+    border-radius: var(--to-r-control);
+    background: none;
+    text-align: start;
+    cursor: pointer;
+}
+
+.to-token-menu__item:hover {
+    background: var(--toa-accent-soft);
+}
+
+.to-token-menu__name {
+    color: var(--toa-accent);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-token-menu__value {
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-caption-size);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
