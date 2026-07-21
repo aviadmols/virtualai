@@ -12,6 +12,7 @@ use Filament\Facades\Filament;
 use Filament\Resources\Resource;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -48,7 +49,9 @@ class EndUserResource extends Resource
 
     // i18n label keys (leads.*).
     private const LABEL_SINGULAR = 'leads.singular';
+
     private const NAV_LABEL = 'leads.title';
+
     private const EXPORT_LABEL = 'leads.export';
 
     /** Narrow the leads list to the ACTIVE shop (Filament tenant) on top of the account scope. */
@@ -81,10 +84,9 @@ class EndUserResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('full_name')
+                ViewColumn::make('full_name')
                     ->label(__('leads.col.name'))
-                    ->weight('medium')
-                    ->placeholder(__('leads.anonymous'))
+                    ->view('filament.merchant.resources.end-user.columns.identity')
                     ->searchable(['full_name', 'email'])
                     ->sortable(),
                 TextColumn::make('email')

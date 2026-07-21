@@ -46,6 +46,7 @@ class CreditLedgerResource extends Resource
 
     // i18n label keys (credits.*).
     private const LABEL_SINGULAR = 'credits.singular';
+
     private const NAV_LABEL = 'credits.ledger.title';
 
     public static function getModelLabel(): string
@@ -96,6 +97,7 @@ class CreditLedgerResource extends Resource
                     ->label(__('credits.ledger.col.amount'))
                     ->formatStateUsing(static fn (int $state): string => self::signedUsd($state))
                     ->color(static fn (int $state): string => $state < 0 ? 'danger' : 'success')
+                    ->weight('medium')
                     ->alignEnd()
                     ->sortable(),
                 TextColumn::make('balance_after_micro_usd')

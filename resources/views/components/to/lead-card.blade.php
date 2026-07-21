@@ -24,6 +24,7 @@
 ])
 <div {{ $attributes->class(['to-lead-card']) }}>
     <div class="to-lead-card__header">
+        <x-to.avatar :name="$name" :email="$email" size="lg" />
         <div class="to-lead-card__identity">
             <span class="to-lead-card__name">{{ $name ?: ($email ?: __('leads.anonymous')) }}</span>
             <div class="to-lead-card__contact">
