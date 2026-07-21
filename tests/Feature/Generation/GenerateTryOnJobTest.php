@@ -5,6 +5,7 @@ namespace Tests\Feature\Generation;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Generation\GenerateTryOnJob;
 use App\Domain\Generation\GenerationFailureCode;
+use App\Domain\Media\MediaStorage;
 use App\Models\ActivityEvent;
 use App\Models\AiModel;
 use App\Models\AiOperation;
@@ -94,7 +95,7 @@ class GenerateTryOnJobTest extends TestCase
         $this->runJob($context, $generation);
         $generation->refresh();
 
-        $media = app(\App\Domain\Media\MediaStorage::class);
+        $media = app(MediaStorage::class);
         $signed = $media->signedUrl($generation->result_image_path);
 
         // The persisted ref is an opaque disk key, NOT a URL.
@@ -216,6 +217,7 @@ class GenerateTryOnJobTest extends TestCase
     // === BytePlus (flat-rate provider) money-path — the cost_unavailable fix ===
 
     private const BYTEPLUS_BASE = 'https://ark.ap-southeast.bytepluses.com/api/v3';
+
     private const BYTEPLUS_GEN = self::BYTEPLUS_BASE.'/images/generations';
 
     /**

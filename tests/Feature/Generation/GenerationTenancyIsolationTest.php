@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Generation;
 
+use App\Domain\Credits\CreditMath;
 use App\Domain\Generation\GenerateTryOnJob;
 use App\Models\CreditLedger;
 use App\Models\Generation;
@@ -56,7 +57,7 @@ class GenerationTenancyIsolationTest extends TestCase
         $this->runJob($contextB, $genB);
         $this->assertFalse(Tenant::check(), 'Tenant leaked after Account B generation');
 
-        $expectedCharge = \App\Domain\Credits\CreditMath::chargeMicroUsd(0.40, 2.5);
+        $expectedCharge = CreditMath::chargeMicroUsd(0.40, 2.5);
 
         // Each account charged exactly once, on its OWN ledger.
         $aCharges = Tenant::run($contextA['account'], fn () => CreditLedger::query()->where('type', CreditLedger::TYPE_CHARGE)->get());

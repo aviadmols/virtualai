@@ -68,9 +68,15 @@ class AiOperation extends Model
     // generated frame images + storyboard data and composes the final one-call video prompt.
     public const KEY_STORYBOARD_VIDEO_DIRECTOR = 'storyboard_video_director';
 
+    // Slice E: the PREFLIGHT pass before a try-on render — a vision model validates the shopper
+    // photo (usable at all?) and refines the prompt for fidelity. Advisory + fail-open: when this
+    // operation is missing/inactive or errors, the try-on runs exactly as before.
+    public const KEY_TRY_ON_PREFLIGHT = 'try_on_preflight';
+
     public const KEYS = [
         self::KEY_PRODUCT_SCAN,
         self::KEY_TRY_ON_GENERATION,
+        self::KEY_TRY_ON_PREFLIGHT,
         self::KEY_BANNER_GENERATION,
         self::KEY_PACKSHOT_GENERATION,
         self::KEY_ON_MODEL_GENERATION,

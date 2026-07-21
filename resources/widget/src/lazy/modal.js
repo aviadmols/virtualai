@@ -228,7 +228,17 @@ function buildStyles() {
 
   styles.forEach((style) => {
     const card = el('button', { class: 'ton-style', attrs: { type: 'button', title: style.label || '' } });
-    card.appendChild(el('img', { class: 'ton-style__img', attrs: { src: style.image_url, alt: style.label || '' } }));
+    // Before/After: when a reference (before_url) exists, stack it under the sample inside a frame
+    // so the CSS cross-fades the two. Otherwise the single sample image shows on its own.
+    if (style.before_url) {
+      const frame = el('div', { class: 'ton-style__frame' }, [
+        el('img', { class: 'ton-style__img ton-style__img--before', attrs: { src: style.before_url, alt: '' } }),
+        el('img', { class: 'ton-style__img ton-style__img--after', attrs: { src: style.image_url, alt: style.label || '' } }),
+      ]);
+      card.appendChild(frame);
+    } else {
+      card.appendChild(el('img', { class: 'ton-style__img', attrs: { src: style.image_url, alt: style.label || '' } }));
+    }
     if (style.label) card.appendChild(el('span', { class: 'ton-style__name', text: style.label }));
 
     card.addEventListener('click', () => {
@@ -469,6 +479,9 @@ function renderOutcome(out) {
     case gen.OUTCOME.rateLimited:
       renderState('state.rate_limited', null);
       break;
+    case gen.OUTCOME.photoRejected:
+      renderPhotoRejected();
+      break;
     case gen.OUTCOME.timeout:
       renderError('loading.timeout');
       break;
@@ -478,6 +491,26 @@ function renderOutcome(out) {
     default:
       renderError('result.error_body');
   }
+}
+
+/**
+ * The preflight rejected the shopper's photo (Slice E). Not a failure and not a charge — the
+ * shopper simply needs a clearer photo, so the ONLY affordance is "change photo" (a re-run of the
+ * same photo would be rejected again). Never blamed, never billed.
+ */
+function renderPhotoRejected() {
+  mount(
+    el('div', { class: 'ton-center' }, [
+      el('div', { class: 'ton-center__title', text: t('result.photo_rejected_title') }),
+      el('div', { class: 'ton-upload__hint', text: t('result.photo_rejected_body') }),
+      el('button', {
+        class: 'ton-cta',
+        attrs: { type: 'button' },
+        text: t('upload.replace'),
+        on: { click: onChangePhoto },
+      }),
+    ]),
+  );
 }
 
 /** The shopper's own photo, blurred + breathing, under the loader. The strip + actions are gone. */

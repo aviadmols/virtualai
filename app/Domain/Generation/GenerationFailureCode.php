@@ -42,6 +42,11 @@ final class GenerationFailureCode
     // image at the chosen slot). Caught BEFORE reserving or calling anything.
     public const SOURCE_IMAGE_MISSING = 'source_image_missing';
 
+    // Slice E: the preflight vision pass judged the shopper photo unusable (no person visible,
+    // unreadably dark, …). Caught BEFORE reserving or rendering — no charge, no free try burned,
+    // and the shopper gets a "please use a clearer photo" instead of a bad paid render.
+    public const PHOTO_REJECTED = 'photo_rejected';
+
     public const CODES = [
         self::SIGNUP_REQUIRED,
         self::POST_SIGNUP_LIMIT,
@@ -54,5 +59,6 @@ final class GenerationFailureCode
         self::INTERNAL_ERROR,
         self::POLL_TIMEOUT,
         self::SOURCE_IMAGE_MISSING,
+        self::PHOTO_REJECTED,
     ];
 }

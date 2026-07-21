@@ -3,6 +3,7 @@
 namespace Tests\Feature\Generation;
 
 use App\Domain\Credits\IdempotencyKey;
+use App\Domain\Media\MediaStorage;
 use App\Models\Account;
 use App\Models\EndUser;
 use App\Models\Generation;
@@ -29,7 +30,9 @@ use Illuminate\Support\Sleep;
 trait GenerationTestSupport
 {
     private const OR_BASE = 'https://openrouter.ai/api/v1';
+
     private const PNG_BYTES = "\x89PNG\r\n\x1a\nTRYON-RESULT-BYTES";
+
     private const SOURCE_BYTES = "\x89PNG\r\n\x1a\nSHOPPER-PHOTO-BYTES";
 
     protected function bootGenerationEnv(): void
@@ -108,7 +111,7 @@ trait GenerationTestSupport
             ]);
 
             // Store a source photo so loadSourceImage finds it (signed URL path).
-            $stored = app(\App\Domain\Media\MediaStorage::class)->storeSource(
+            $stored = app(MediaStorage::class)->storeSource(
                 (int) $endUser->account_id,
                 (int) $endUser->site_id,
                 (int) $generation->id,
@@ -121,25 +124,54 @@ trait GenerationTestSupport
         });
     }
 
-    /** Mock a successful OpenRouter image response carrying the given cost. */
+    /**
+     * Mock a successful OpenRouter image response carrying the given cost. The SAME endpoint also
+     * serves the Slice E preflight (a json_schema request) — answered with a "usable" verdict so the
+     * try-on proceeds; a request WITHOUT response_format is the image generation.
+     */
     protected function fakeOpenRouterSuccess(float $costUsd = 0.40): void
     {
         $dataUrl = 'data:image/png;base64,'.base64_encode(self::PNG_BYTES);
 
         Http::fake([
-            self::OR_BASE.'/chat/completions' => Http::response([
-                'id' => 'or-gen-123',
-                'model' => 'google/gemini-2.5-flash-image',
-                'usage' => ['cost' => $costUsd],
-                'choices' => [[
-                    'message' => [
-                        'role' => 'assistant',
-                        'content' => '',
-                        'images' => [['type' => 'image_url', 'image_url' => ['url' => $dataUrl]]],
-                    ],
-                ]],
-            ], 200),
+            self::OR_BASE.'/chat/completions' => function ($request) use ($costUsd, $dataUrl) {
+                if ($this->isPreflightRequest($request)) {
+                    return $this->preflightResponse(true);
+                }
+
+                return Http::response([
+                    'id' => 'or-gen-123',
+                    'model' => 'google/gemini-2.5-flash-image',
+                    'usage' => ['cost' => $costUsd],
+                    'choices' => [[
+                        'message' => [
+                            'role' => 'assistant',
+                            'content' => '',
+                            'images' => [['type' => 'image_url', 'image_url' => ['url' => $dataUrl]]],
+                        ],
+                    ]],
+                ], 200);
+            },
         ]);
+    }
+
+    /** True when the chat/completions request is the Slice E preflight (a strict-JSON call). */
+    protected function isPreflightRequest($request): bool
+    {
+        return isset($request->data()['response_format']);
+    }
+
+    /** A preflight verdict response: usable (optionally with a refinement note) or a rejection. */
+    protected function preflightResponse(bool $usable, string $reason = '', string $refinement = '')
+    {
+        $verdict = json_encode(['usable' => $usable, 'reason' => $reason, 'prompt_refinement' => $refinement]);
+
+        return Http::response([
+            'id' => 'or-preflight',
+            'model' => 'google/gemini-2.5-flash',
+            'usage' => ['cost' => 0.002],
+            'choices' => [['message' => ['role' => 'assistant', 'content' => $verdict]]],
+        ], 200);
     }
 
     /** Mock an OpenRouter 5xx outage (every attempt + fallback fails). */
@@ -156,14 +188,20 @@ trait GenerationTestSupport
         $dataUrl = 'data:image/png;base64,'.base64_encode(self::PNG_BYTES);
 
         Http::fake([
-            self::OR_BASE.'/chat/completions' => Http::response([
-                'id' => 'or-gen-nocost',
-                'model' => 'google/gemini-2.5-flash-image',
-                // no usage.cost
-                'choices' => [[
-                    'message' => ['images' => [['image_url' => ['url' => $dataUrl]]]],
-                ]],
-            ], 200),
+            self::OR_BASE.'/chat/completions' => function ($request) use ($dataUrl) {
+                if ($this->isPreflightRequest($request)) {
+                    return $this->preflightResponse(true);
+                }
+
+                return Http::response([
+                    'id' => 'or-gen-nocost',
+                    'model' => 'google/gemini-2.5-flash-image',
+                    // no usage.cost
+                    'choices' => [[
+                        'message' => ['images' => [['image_url' => ['url' => $dataUrl]]]],
+                    ]],
+                ], 200);
+            },
             // The generation cost-lookup endpoint also returns no cost.
             self::OR_BASE.'/generation*' => Http::response(['data' => []], 200),
         ]);

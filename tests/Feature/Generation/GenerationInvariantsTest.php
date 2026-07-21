@@ -67,8 +67,8 @@ class GenerationInvariantsTest extends TestCase
             $code = file_get_contents($file);
 
             // No direct ledger insert / balance write in the pipeline.
-            $this->assertStringNotContainsString("CreditLedger::create", $code, "Direct ledger write in $file");
-            $this->assertStringNotContainsString("balance_micro_usd", $code, "Direct balance write in $file");
+            $this->assertStringNotContainsString('CreditLedger::create', $code, "Direct ledger write in $file");
+            $this->assertStringNotContainsString('balance_micro_usd', $code, "Direct balance write in $file");
             $this->assertStringNotContainsString("DB::table('credit_ledger')", $code, "Raw ledger insert in $file");
         }
     }

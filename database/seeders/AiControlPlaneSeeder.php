@@ -75,6 +75,15 @@ class AiControlPlaneSeeder extends Seeder
 
     private const TRYON_ASPECT_RATIO = '3:4';
 
+    // --- Try-on PREFLIGHT (Slice E): a cheap VISION+TEXT pass (no image output) that judges the
+    // shopper photo + returns prompt refinement. Platform-absorbed cost (never charged to the
+    // merchant); modest estimate. A text model with vision — same family as the scan extractor.
+    private const PREFLIGHT_DEFAULT_MODEL = 'google/gemini-2.5-flash';
+
+    private const PREFLIGHT_FALLBACK_MODEL = 'openai/gpt-4o-mini';
+
+    private const PREFLIGHT_ESTIMATE_MICRO_USD = 2_000;
+
     // --- Product Image Studio (packshot_generation + on_model_generation) ---
     // Default: fal's nano-banana EDIT model (image-to-image; it TRANSFORMS the supplied product
     // photo). fal returns no inline USD cost -> the flat-rate hint below IS the authoritative
@@ -168,9 +177,76 @@ class AiControlPlaneSeeder extends Seeder
     {
         $this->seedScanOperation();
         $this->seedTryOnOperation();
+        $this->seedPreflightOperation();
         $this->seedBannerOperation();
         $this->seedProductImageOperations();
         $this->seedCategoryPrompts();
+    }
+
+    /**
+     * Seed the try-on PREFLIGHT operation (Slice E) — a vision pass that validates the shopper
+     * photo and returns prompt-refinement guidance. Strict-JSON output (usable/reason/refinement),
+     * temperature 0 for a stable verdict. Platform cost, never billed to the merchant; fail-open in
+     * the pipeline, so an absent/edited config just skips the pass.
+     */
+    private function seedPreflightOperation(): void
+    {
+        AiOperation::updateOrCreate(
+            ['operation_key' => AiOperation::KEY_TRY_ON_PREFLIGHT],
+            [
+                'label' => 'Try-On Preflight',
+                'default_model' => self::PREFLIGHT_DEFAULT_MODEL,
+                'fallback_model' => self::PREFLIGHT_FALLBACK_MODEL,
+                'image_quality' => null,
+                'aspect_ratio' => null,
+                'params' => ['temperature' => 0, 'top_p' => 1, 'max_tokens' => 1024],
+                'input_schema' => $this->preflightSchema(),
+                'retention_days' => 30,
+                'estimated_cost_micro_usd' => self::PREFLIGHT_ESTIMATE_MICRO_USD,
+                'credit_multiplier' => null,
+            ],
+        );
+
+        $this->seedModel(AiOperation::KEY_TRY_ON_PREFLIGHT, self::PREFLIGHT_DEFAULT_MODEL, 'Gemini 2.5 Flash', isDefault: true, costHint: 2_000, unit: AiModel::UNIT_PER_1K_TOKENS);
+        $this->seedModel(AiOperation::KEY_TRY_ON_PREFLIGHT, self::PREFLIGHT_FALLBACK_MODEL, 'GPT-4o mini', isFallback: true, costHint: 1_500, unit: AiModel::UNIT_PER_1K_TOKENS);
+
+        Prompt::updateOrCreate(
+            [
+                'scope' => Prompt::SCOPE_GLOBAL,
+                'operation_key' => AiOperation::KEY_TRY_ON_PREFLIGHT,
+                'product_type' => null,
+                'account_id' => null,
+                'site_id' => null,
+            ],
+            [
+                'system_prompt' => 'You are a strict pre-check for a virtual try-on. Judge ONLY the FIRST image (the shopper photo). Return JSON matching the schema and nothing else.',
+                'user_prompt' => "The first image is a shopper who wants to try on {{product_name}} ({{variant}}). The second image is the product.\n"
+                    ."Set usable=false ONLY when the first image cannot produce a meaningful try-on: no person is visible, it is far too dark/blurry, or it is clearly not a photo of a person. When usable=false, give a short shopper-friendly reason.\n"
+                    .'When usable=true, set prompt_refinement to a short instruction (one or two sentences) that would make the try-on more faithful for THIS photo — noting the visible pose, framing, lighting and body orientation to preserve. Never mention this check to the shopper.',
+                'version' => 1,
+                'is_active' => true,
+            ],
+        );
+    }
+
+    /**
+     * The strict JSON schema for the preflight verdict (usable + reason + refinement). Mirrors the
+     * keys TryOnPreflight reads. All fields required (strict mode); reason/refinement may be empty.
+     *
+     * @return array<string,mixed>
+     */
+    private function preflightSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'additionalProperties' => false,
+            'required' => ['usable', 'reason', 'prompt_refinement'],
+            'properties' => [
+                'usable' => ['type' => 'boolean', 'description' => 'Can the shopper photo produce a meaningful try-on?'],
+                'reason' => ['type' => 'string', 'description' => 'When not usable, a short shopper-friendly reason; otherwise empty.'],
+                'prompt_refinement' => ['type' => 'string', 'description' => 'When usable, short guidance to make the try-on faithful; otherwise empty.'],
+            ],
+        ];
     }
 
     /**

@@ -91,6 +91,10 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
     // usable cost (provider-neutral — OpenRouter lag or a flat-rate price that vanished).
     private const MSG_COST_UNAVAILABLE = 'platform.generation.cost_unavailable';
 
+    // Stamped on a PHOTO_REJECTED cancel (Slice E) when the preflight model gave no specific
+    // reason — the admin-facing fallback in the activity log.
+    private const MSG_PHOTO_REJECTED = 'platform.generation.photo_rejected';
+
     public function __construct(
         int $accountId,
         public readonly int $siteId,
@@ -164,6 +168,20 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
         if (! $this->passesCreditGate($generation, $endUser, $estimate)) {
             return;
         }
+
+        // --- PREFLIGHT (Slice E): validate the shopper photo + refine the prompt for fidelity ---
+        // Runs AFTER both gates (never preflight a try-on the shopper/merchant could not run) and
+        // BEFORE reserve: a rejected photo cancels here, so it never reserves, charges, or burns a
+        // free try. Fail-OPEN — any preflight problem leaves the try-on exactly as it was.
+        $preflight = $this->runPreflight($generation, $product, $site);
+
+        if (! $preflight->usable) {
+            $this->cancelOnPhoto($generation, $preflight->reason);
+
+            return;
+        }
+
+        $config = $config->withAppendedUserPrompt($preflight->refinement);
 
         // --- RESERVE before the model call (the held estimate already subtracted from spendable) ---
         $reservation = $this->reservations()->reserve($endUser->account, $generation->idempotency_key, $estimate);
@@ -355,6 +373,67 @@ final class GenerateTryOnJob extends TenantAwareJob implements ShouldBeUnique
             'failure_code' => GenerationFailureCode::AI_COST_NOT_CONFIGURED,
             'message' => $message,
             'model' => $config->model,
+        ]);
+    }
+
+    /**
+     * The preflight verdict (Slice E). Builds the shopper + product images and a small context bag
+     * and hands them to TryOnPreflight. FAIL-OPEN at every step: a missing photo (the main path
+     * reports that), an unreadable image, or any preflight error returns pass() so the try-on runs.
+     */
+    private function runPreflight(Generation $generation, Product $product, Site $site): PreflightResult
+    {
+        $signed = $this->media()->signedUrl($generation->source_image_path);
+
+        if ($signed === null) {
+            return PreflightResult::pass(); // no photo to judge — the main call handles the miss
+        }
+
+        try {
+            $shopper = ImagePayload::fromUrl($signed);
+            $variant = $generation->variant;
+            $productImage = ImagePayload::fromUrl($variant?->image_url ?: $product->main_image_url);
+        } catch (Throwable) {
+            return PreflightResult::pass();
+        }
+
+        $vars = [
+            self::VAR_PRODUCT_NAME => (string) $product->name,
+            self::VAR_PRODUCT_TYPE => (string) $product->product_type,
+            self::VAR_VARIANT => $this->variantLabel($generation),
+            self::VAR_HEIGHT => (string) ($generation->meta[Generation::META_HEIGHT] ?? ''),
+        ];
+
+        $promptType = $site->product_category ?: $product->product_type;
+
+        return app(TryOnPreflight::class)->run($site, $promptType, $shopper, $productImage, $vars);
+    }
+
+    /**
+     * Cancel a try-on whose shopper photo the preflight rejected (Slice E). Detected BEFORE the
+     * reserve and the model call — no reservation was taken and no charge ran, so this is a
+     * pending -> cancelled exit (like a gate denial). The model's own reason (for the merchant's
+     * activity log) is stamped into the failure message; the widget shows its own friendly copy
+     * off the PHOTO_REJECTED code. No free try is consumed (only a charged success consumes one).
+     */
+    private function cancelOnPhoto(Generation $generation, ?string $reason): void
+    {
+        $message = $reason !== null && trim($reason) !== '' ? trim($reason) : (string) __(self::MSG_PHOTO_REJECTED);
+
+        $generation->forceFill([
+            'failure_code' => GenerationFailureCode::PHOTO_REJECTED,
+            'meta' => array_merge($generation->meta ?? [], [
+                Generation::META_FAILURE_MESSAGE => $message,
+            ]),
+        ])->save();
+
+        $generation->transitionTo(Generation::STATUS_CANCELLED, [
+            'failure_code' => GenerationFailureCode::PHOTO_REJECTED,
+        ]);
+
+        $this->recordActivity(ActivityEvent::KIND_GENERATION_FAILED, $generation, [
+            'failure_code' => GenerationFailureCode::PHOTO_REJECTED,
+            'message' => $message,
         ]);
     }
 

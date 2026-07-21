@@ -743,6 +743,39 @@
   object-fit: cover;
 }
 
+/* Before/After: the reference + the sample stacked; the sample (after) cross-fades to reveal the
+ * reference (before). Hover pins the before so the shopper can compare. Reduced-motion shows the
+ * sample steady. */
+.ton-style__frame {
+  position: relative;
+  height: var(--ton-thumb-h);
+}
+
+.ton-style__frame .ton-style__img {
+  position: absolute;
+  inset: 0;
+}
+
+.ton-style__img--after {
+  animation: ton-style-fade 5s ease-in-out infinite;
+}
+
+@keyframes ton-style-fade {
+  0%, 42% { opacity: 1; }
+  50%, 92% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.ton-style:hover .ton-style__img--after {
+  animation: none;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ton-style__img--after { animation: none; opacity: 1; }
+  .ton-style:hover .ton-style__img--after { opacity: 1; }
+}
+
 .ton-style__name {
   display: block;
   padding: var(--ton-space-2);

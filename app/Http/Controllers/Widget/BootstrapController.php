@@ -274,7 +274,11 @@ final class BootstrapController
             ->map(static fn (StylePreset $p): array => [
                 'id' => (int) $p->id,
                 'label' => (string) $p->name,
+                // image_url = the shown thumbnail (the generated sample, else the reference).
+                // before_url = the uploaded reference, when a sample exists — the widget cross-fades
+                // the two into a Before/After card. Null before_url means show image_url alone.
                 'image_url' => $media->signedUrl($p->sample_image_path ?? $p->reference_image_path),
+                'before_url' => $p->sample_image_path !== null ? $media->signedUrl($p->reference_image_path) : null,
             ])
             ->filter(static fn (array $s): bool => $s['image_url'] !== null)
             ->values()

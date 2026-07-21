@@ -50,6 +50,9 @@ export const MODAL_MESSAGES = {
     'result.regenerate': 'Create it again',
     'result.error': 'Something went wrong',
     'result.error_body': "You weren't charged. Let's try that again.",
+    'result.photo_rejected_title': "Let's use a clearer photo",
+    'result.photo_rejected_body':
+      "We couldn't use that photo for a try-on. Upload a clear, well-lit, full-body photo of one person — you weren't charged.",
     'result.add_to_cart': 'Add to cart',
 
     'gallery.title': 'Your looks',
@@ -145,6 +148,9 @@ export const MODAL_MESSAGES = {
     'result.regenerate': 'ליצור שוב',
     'result.error': 'משהו השתבש',
     'result.error_body': 'לא חויבתם. בואו ננסה שוב.',
+    'result.photo_rejected_title': 'בואו נשתמש בתמונה ברורה יותר',
+    'result.photo_rejected_body':
+      'לא הצלחנו להשתמש בתמונה הזו להדמיה. העלו תמונה ברורה, מוארת ובגוף מלא של אדם אחד — לא חויבתם.',
     'result.add_to_cart': 'הוספה לעגלה',
 
     'gallery.title': 'הלוקים שלכם',

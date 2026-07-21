@@ -19,10 +19,15 @@ import * as pending from './pending.js';
 
 const SLEEP = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// The one generation failure_code the widget renders specially (Slice E preflight). The server
+// stamps it on a photo the preflight judged unusable; every OTHER failure stays the generic error.
+const FAILURE_PHOTO_REJECTED = 'photo_rejected';
+
 /** Result codes the modal/result screens render (never expose server internals). */
 export const OUTCOME = {
   succeeded: 'succeeded',
   failed: 'failed',
+  photoRejected: 'photo_rejected', // preflight rejected the shopper photo — "change photo", no charge
   timeout: 'timeout',
   signupRequired: 'signup_required',
   postSignupLimit: 'post_signup_limit', // registered, but out of post-signup tries — NOT a signup loop
@@ -117,7 +122,9 @@ async function poll(generationId) {
         return { outcome: OUTCOME.succeeded, resultUrl: g.result_url };
       }
       if (g.status === GEN_STATUS.failed || g.status === GEN_STATUS.cancelled) {
-        return { outcome: OUTCOME.failed };
+        return {
+          outcome: g.failure_code === FAILURE_PHOTO_REJECTED ? OUTCOME.photoRejected : OUTCOME.failed,
+        };
       }
     }
 

@@ -21,9 +21,13 @@ final readonly class TryOnHistoryItem
     // === CONSTANTS ===
     // Outcome tokens mirror the generation status the badge resolves through (§5 map).
     public const STATUS_SUCCEEDED = 'succeeded';
+
     public const STATUS_FAILED = 'failed';
+
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_PROCESSING = 'processing';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     public function __construct(

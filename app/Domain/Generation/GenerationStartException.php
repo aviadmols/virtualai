@@ -17,7 +17,9 @@ final class GenerationStartException extends RuntimeException
 {
     // === CONSTANTS ===
     public const REASON_PHOTO_CONSENT_REQUIRED = 'photo_consent_required';
+
     public const REASON_PRODUCT_NOT_CONFIRMED = 'product_not_confirmed';
+
     public const REASON_VARIANT_MISMATCH = 'variant_mismatch';
 
     public function __construct(

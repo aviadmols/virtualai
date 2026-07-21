@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Generation;
 
+use App\Domain\Credits\CreditLedgerService;
+use App\Domain\Credits\IdempotencyKey;
 use App\Domain\Generation\GenerateTryOnJob;
 use App\Domain\Generation\GenerationFailureCode;
 use App\Models\Account;
@@ -9,6 +11,8 @@ use App\Models\ActivityEvent;
 use App\Models\CreditLedger;
 use App\Models\EndUser;
 use App\Models\Generation;
+use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Site;
 use App\Support\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -75,10 +79,10 @@ class GenerationGatesTest extends TestCase
         $context = $this->makeContext();
         // Drain the merchant's balance via an admin adjustment (through the ledger writer).
         Tenant::run($context['account'], function () use ($context) {
-            app(\App\Domain\Credits\CreditLedgerService::class)->adjustment(
+            app(CreditLedgerService::class)->adjustment(
                 $context['account'],
                 -self::FIVE_DOLLARS_MICRO,
-                \App\Domain\Credits\IdempotencyKey::forAdjustment($context['account']->id, 'drain'),
+                IdempotencyKey::forAdjustment($context['account']->id, 'drain'),
                 'drain for test',
             );
         });
@@ -133,14 +137,14 @@ class GenerationGatesTest extends TestCase
 
         $context = ['account' => $account, 'site' => $site] + Tenant::run($account, function () use ($account, $site) {
             $endUser = EndUser::factory()->forSite($site)->registered()->state(['generations_used' => 5])->create();
-            $product = \App\Models\Product::factory()->forSite($site)->confirmed()->create(['product_type' => 'footwear']);
-            $variant = \App\Models\ProductVariant::factory()->forProduct($product)->create(['options' => ['size' => 'M']]);
+            $product = Product::factory()->forSite($site)->confirmed()->create(['product_type' => 'footwear']);
+            $variant = ProductVariant::factory()->forProduct($product)->create(['options' => ['size' => 'M']]);
 
             // Drain the account so the credit gate fails.
-            app(\App\Domain\Credits\CreditLedgerService::class)->adjustment(
+            app(CreditLedgerService::class)->adjustment(
                 $account,
                 -self::FIVE_DOLLARS_MICRO,
-                \App\Domain\Credits\IdempotencyKey::forAdjustment($account->id, 'drain'),
+                IdempotencyKey::forAdjustment($account->id, 'drain'),
                 'drain',
             );
 

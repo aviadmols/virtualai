@@ -962,5 +962,6 @@ return [
     'generation' => [
         'cost_not_configured' => 'Try-on could not run: the model ":model" is a BytePlus model with no per-image price. Set its price (in USD) on the AI models page before using it.',
         'cost_unavailable' => 'The model produced an image but returned no usable cost, so nothing was charged. Check the model on the AI models page.',
+        'photo_rejected' => 'The preflight check judged the shopper photo unusable for a try-on, so nothing was reserved or charged.',
     ],
 ];
