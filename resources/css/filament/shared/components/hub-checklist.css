@@ -1,0 +1,82 @@
+/* ============================================================================
+ * The Overview onboarding checklist — the 4 steps that get a new shop live. A done step gets a
+ * gradient-filled check dot + struck label; an open step shows a "do it" CTA. The whole card hides
+ * once every step is done (in the view). Token-backed, logical properties.
+ * ==========================================================================*/
+.to-check {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-3);
+}
+
+.to-check__step {
+    display: flex;
+    align-items: center;
+    gap: var(--to-space-3);
+}
+
+.to-check__dot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--to-space-6);
+    block-size: var(--to-space-6);
+    border-radius: 50%;
+    border: var(--to-bw-input-focus) solid var(--toa-border);
+    color: transparent;
+}
+
+.to-check__step--done .to-check__dot {
+    background: var(--toa-grad-accent, var(--toa-accent));
+    border-color: transparent;
+    color: var(--toa-accent-on);
+}
+
+.to-check__dot svg {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+
+.to-check__body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-inline-size: 0;
+}
+
+.to-check__label {
+    color: var(--to-ink);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-check__step--done .to-check__label {
+    color: var(--to-ink-muted);
+    text-decoration: line-through;
+}
+
+.to-check__sub {
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-caption-size);
+}
+
+.to-check__cta {
+    flex: none;
+    padding: var(--to-space-1) var(--to-space-3);
+    border-radius: var(--to-r-control);
+    background: var(--toa-accent-soft);
+    color: var(--toa-accent);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    text-decoration: none;
+    transition: background var(--to-t-fast);
+}
+
+.to-check__cta:hover {
+    background: var(--toa-accent-line);
+    color: var(--toa-accent-on);
+}

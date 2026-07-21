@@ -1,0 +1,123 @@
+/* ============================================================================
+ * Overview welcome header + hero showcase (merchant Overview / ViewSite hub). The greeting names
+ * the shop; the strip is a horizontal, scroll-snapped row of the latest finished try-ons with a
+ * gradient scrim + product name, the first tile 2x wide, and a trailing gradient "view all" tile.
+ * Token-backed, logical properties (mirrors in HE), reduced-motion aware.
+ * ==========================================================================*/
+.to-hero-head {
+    margin-block-end: var(--to-space-4);
+}
+
+.to-hero-head__eyebrow {
+    margin: 0;
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-eyebrow-size);
+    font-weight: var(--to-fw-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.to-hero-head__greeting {
+    margin: var(--to-space-1) 0 0;
+    color: var(--to-ink);
+    font-size: var(--toa-type-display-size);
+    font-weight: var(--to-fw-heavy);
+    line-height: var(--to-lh-title);
+}
+
+.to-hero {
+    margin-block-end: var(--to-space-6);
+}
+
+.to-hero__strip {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: var(--toa-hero-tile-w);
+    gap: var(--to-space-3);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    padding-block-end: var(--to-space-1);
+}
+
+.to-hero__strip::-webkit-scrollbar {
+    display: none;
+}
+
+.to-hero__tile {
+    position: relative;
+    display: block;
+    block-size: var(--toa-hero-h);
+    border-radius: var(--to-r-card-lg);
+    overflow: hidden;
+    scroll-snap-align: start;
+    box-shadow: var(--to-shadow-layered);
+    background: var(--toa-surface-alt);
+    text-decoration: none;
+}
+
+/* The lead tile spans two columns (2x wide). */
+.to-hero__tile--lead {
+    grid-column: span 2;
+}
+
+.to-hero__img {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    transition: transform var(--to-t-slow);
+}
+
+.to-hero__tile:hover .to-hero__img {
+    transform: scale(1.04);
+}
+
+.to-hero__scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--toa-grad-scrim);
+}
+
+.to-hero__meta {
+    position: absolute;
+    inset-inline: var(--to-space-3);
+    inset-block-end: var(--to-space-3);
+}
+
+.to-hero__name {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--to-paper);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+}
+
+/* The trailing gradient "view all gallery" tile. */
+.to-hero__tile--cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--to-space-2);
+    background: var(--toa-grad-accent);
+    color: var(--toa-accent-on);
+}
+
+.to-hero__cta-label {
+    font-weight: var(--to-fw-medium);
+    font-size: var(--toa-type-caption-size);
+}
+
+.to-hero__cta-icon {
+    inline-size: var(--to-space-5);
+    block-size: var(--to-space-5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .to-hero__strip { scroll-behavior: auto; }
+    .to-hero__tile:hover .to-hero__img { transform: none; }
+}

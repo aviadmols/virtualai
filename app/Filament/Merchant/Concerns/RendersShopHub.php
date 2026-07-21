@@ -4,16 +4,22 @@ namespace App\Filament\Merchant\Concerns;
 
 use App\Domain\Activity\SiteActivityTimeline;
 use App\Domain\Credits\CreditMath;
+use App\Domain\Gallery\GalleryItem;
+use App\Domain\Gallery\MerchantGalleryQuery;
 use App\Domain\Reporting\SiteHubMetrics;
 use App\Domain\Reporting\SiteHubMetricsBuilder;
 use App\Domain\Sites\SiteKeyRegenerator;
+use App\Filament\Merchant\Pages\BuyCredits;
 use App\Filament\Merchant\Pages\Gallery;
 use App\Filament\Merchant\Pages\PrivacySettings;
 use App\Filament\Merchant\Pages\ReviewProduct;
+use App\Filament\Merchant\Pages\ShopifyProducts;
 use App\Filament\Merchant\Pages\TryOnHistory;
 use App\Filament\Merchant\Pages\TryOnPrompt;
 use App\Filament\Merchant\Pages\WidgetAppearanceSettings;
 use App\Filament\Merchant\Resources\EndUserResource;
+use App\Models\CreditLedger;
+use App\Models\Generation;
 use App\Models\Product;
 use App\Models\Site;
 use Filament\Notifications\Notification;
@@ -60,6 +66,18 @@ trait RendersShopHub
 
     // How many recent activity rows the hub strip shows.
     private const ACTIVITY_LIMIT = 6;
+
+    // How many finished try-ons the Overview hero showcase strip carries.
+    private const SHOWCASE_LIMIT = 6;
+
+    // The onboarding checklist step keys (i18n sites.hub.checklist.*).
+    private const STEP_WIDGET = 'widget';
+
+    private const STEP_PRODUCTS = 'products';
+
+    private const STEP_GENERATION = 'generation';
+
+    private const STEP_CREDITS = 'credits';
 
     /** The two-step destructive confirm + error state (Livewire-driven; server owns the rotation). */
     public bool $confirmingRegenerate = false;
@@ -211,6 +229,82 @@ trait RendersShopHub
     public function activity(): Collection
     {
         return app(SiteActivityTimeline::class)->forSite($this->hubSite(), self::ACTIVITY_LIMIT);
+    }
+
+    /** The shop name, for the Overview welcome header. */
+    public function greetingName(): string
+    {
+        return (string) $this->hubSite()->name;
+    }
+
+    /**
+     * The Overview hero showcase: the shop's most recent FINISHED try-ons that still have a
+     * viewable thumbnail (purged / thumbless items are skipped). Each carries a short-lived signed
+     * URL from MerchantGalleryQuery — the view stays dumb.
+     *
+     * @return Collection<int,GalleryItem>
+     */
+    public function showcase(): Collection
+    {
+        return app(MerchantGalleryQuery::class)
+            ->forSite($this->hubSite(), null, self::SHOWCASE_LIMIT * 3)
+            ->filter(static fn ($item): bool => ! $item->purged && $item->resultThumbnailUrl !== null)
+            ->take(self::SHOWCASE_LIMIT)
+            ->values();
+    }
+
+    /**
+     * The onboarding checklist — the 4 steps that get a new shop live, each render-ready as
+     * {key, done, url}. "Widget installed" uses the free heartbeat (widget_last_seen_at), never a
+     * live Shopify call. The card auto-hides in the view once every step is done.
+     *
+     * @return array<int,array{key:string,done:bool,url:string}>
+     */
+    public function checklist(): array
+    {
+        $site = $this->hubSite();
+        $metrics = $this->metrics();
+
+        return [
+            [
+                'key' => self::STEP_WIDGET,
+                'done' => $site->widget_last_seen_at !== null,
+                'url' => $this->isShopifyHub() ? ($this->themeEditorUrl() ?? $this->buttonRulesUrl()) : $this->placementUrl(),
+            ],
+            [
+                'key' => self::STEP_PRODUCTS,
+                'done' => $metrics->productsConfirmed > 0,
+                'url' => $this->isShopifyHub() ? ShopifyProducts::getUrl() : $this->placementUrl(),
+            ],
+            [
+                'key' => self::STEP_GENERATION,
+                'done' => Generation::query()
+                    ->where('site_id', $site->getKey())
+                    ->where('status', Generation::STATUS_SUCCEEDED)
+                    ->exists(),
+                'url' => $this->historyUrl(),
+            ],
+            [
+                'key' => self::STEP_CREDITS,
+                'done' => CreditLedger::query()
+                    ->where('account_id', $site->account_id)
+                    ->where('type', CreditLedger::TYPE_PURCHASE)
+                    ->exists(),
+                'url' => BuyCredits::getUrl(),
+            ],
+        ];
+    }
+
+    /** True once every onboarding step is done (the checklist card then hides). */
+    public function checklistComplete(): bool
+    {
+        foreach ($this->checklist() as $step) {
+            if (! $step['done']) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** The account+site-scoped hub snapshot for this shop. */

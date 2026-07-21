@@ -12,7 +12,68 @@
 --}}
 @php
     $hubSite = $this->hubSite();
+    $showcase = $this->showcase();
 @endphp
+
+{{-- ===================== WELCOME HEADER ===================== --}}
+<div class="to-hero-head">
+    <p class="to-hero-head__eyebrow">{{ __('sites.hub.welcome.eyebrow') }}</p>
+    <h2 class="to-hero-head__greeting">{{ __('sites.hub.welcome.greeting', ['shop' => $this->greetingName()]) }}</h2>
+</div>
+
+{{-- ===================== HERO SHOWCASE ===================== --}}
+{{-- The shop's latest finished try-ons, big, with a gradient scrim + name. First tile leads
+     (2× wide); a trailing gradient tile opens the full gallery. Empty on a fresh shop. --}}
+@if ($showcase->isNotEmpty())
+    <div class="to-hero">
+        <div class="to-hero__strip">
+            @foreach ($showcase as $i => $look)
+                <a href="{{ $this->galleryUrl() }}"
+                   @class(['to-hero__tile', 'to-hero__tile--lead' => $i === 0])
+                   wire:key="hero-{{ $look->generationId }}">
+                    <img class="to-hero__img" src="{{ $look->resultThumbnailUrl }}" alt="{{ $look->productName }}" loading="lazy" />
+                    <span class="to-hero__scrim" aria-hidden="true"></span>
+                    <span class="to-hero__meta">
+                        <span class="to-hero__name">{{ $look->productName }}</span>
+                    </span>
+                </a>
+            @endforeach
+            <a href="{{ $this->galleryUrl() }}" class="to-hero__tile to-hero__tile--cta">
+                <span class="to-hero__cta-label">{{ __('sites.hub.hero.view_all') }}</span>
+                <x-filament::icon icon="heroicon-m-arrow-right" class="to-hero__cta-icon" />
+            </a>
+        </div>
+    </div>
+@endif
+
+{{-- ===================== ONBOARDING CHECKLIST ===================== --}}
+@unless ($this->checklistComplete())
+    <x-filament::section>
+        <x-slot:heading>{{ __('sites.hub.checklist.title') }}</x-slot:heading>
+        <x-slot:description>{{ __('sites.hub.checklist.sub') }}</x-slot:description>
+
+        <ol class="to-check">
+            @foreach ($this->checklist() as $step)
+                <li @class(['to-check__step', 'to-check__step--done' => $step['done']]) wire:key="step-{{ $step['key'] }}">
+                    <span class="to-check__dot" aria-hidden="true">
+                        @if ($step['done'])
+                            <x-filament::icon icon="heroicon-m-check" />
+                        @endif
+                    </span>
+                    <span class="to-check__body">
+                        <span class="to-check__label">{{ __('sites.hub.checklist.' . $step['key'] . '.label') }}</span>
+                        <span class="to-check__sub">{{ __('sites.hub.checklist.' . $step['key'] . '.sub') }}</span>
+                    </span>
+                    @unless ($step['done'])
+                        <a href="{{ $step['url'] }}"
+                           @if ($step['key'] === 'widget' && $this->isShopifyHub()) target="_top" @endif
+                           class="to-check__cta">{{ __('sites.hub.checklist.do') }}</a>
+                    @endunless
+                </li>
+            @endforeach
+        </ol>
+    </x-filament::section>
+@endunless
 
 {{-- ===================== KPI BAND ===================== --}}
 <div class="to-kpi-grid">

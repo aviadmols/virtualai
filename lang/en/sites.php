@@ -59,6 +59,34 @@ return [
     ],
     // WS1 — the per-shop Overview hub (KPI band, quick-link cards, recent activity).
     'hub' => [
+        'welcome' => [
+            'eyebrow' => 'Overview',
+            'greeting' => 'Welcome back to :shop',
+        ],
+        'hero' => [
+            'view_all' => 'View all looks',
+        ],
+        'checklist' => [
+            'title' => 'Finish setting up',
+            'sub' => 'A few quick steps to get try-ons live on your store.',
+            'do' => 'Do it',
+            'widget' => [
+                'label' => 'Add the Try-it-on button',
+                'sub' => 'Turn on the Vsio block so shoppers can try products on.',
+            ],
+            'products' => [
+                'label' => 'Import your products',
+                'sub' => 'Bring in the products shoppers will try on.',
+            ],
+            'generation' => [
+                'label' => 'Create your first try-on',
+                'sub' => 'See it in action — the first look proves the whole flow.',
+            ],
+            'credits' => [
+                'label' => 'Top up your credits',
+                'sub' => 'Keep generating once your opening balance runs low.',
+            ],
+        ],
         'kpi' => [
             'products' => 'Confirmed products',
             'generations' => 'Try-ons (30d)',

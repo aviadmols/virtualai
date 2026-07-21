@@ -32,6 +32,8 @@
 @import '../shared/components/settings-form.css';
 @import '../shared/components/place-visually.css';
 @import '../shared/components/shop-hub.css';
+@import '../shared/components/hub-hero.css';
+@import '../shared/components/hub-checklist.css';
 @import '../shared/components/shopify-connect.css';
 @import '../shared/components/product-studio.css';
 @import '../shared/components/token-picker.css';

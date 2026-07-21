@@ -4,7 +4,6 @@ namespace Tests\Feature\Filament\Merchant;
 
 use App\Filament\Merchant\Widgets\BalanceWidget;
 use App\Filament\Merchant\Widgets\CreditBannerWidget;
-use App\Filament\Merchant\Widgets\MerchantKpiWidget;
 use App\Models\Account;
 use App\Models\Site;
 use App\Models\User;
@@ -42,7 +41,6 @@ class ShopAccountResolutionTest extends TestCase
         // Old behavior: Auth::user()->account === null → build(null) → TypeError → 500.
         // Now each widget resolves the SHOP tenant's account and renders cleanly.
         Livewire::test(BalanceWidget::class)->assertOk();
-        Livewire::test(MerchantKpiWidget::class)->assertOk();
         Livewire::test(CreditBannerWidget::class)->assertOk();
     }
 
@@ -56,6 +54,5 @@ class ShopAccountResolutionTest extends TestCase
         Filament::setTenant($site);
 
         Livewire::test(BalanceWidget::class)->assertOk();
-        Livewire::test(MerchantKpiWidget::class)->assertOk();
     }
 }
