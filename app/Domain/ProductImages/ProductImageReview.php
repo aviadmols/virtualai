@@ -2,6 +2,7 @@
 
 namespace App\Domain\ProductImages;
 
+use App\Domain\Media\MediaStorage;
 use App\Models\ProductAsset;
 use App\Models\Site;
 use Illuminate\Support\Collection;
@@ -58,6 +59,43 @@ final class ProductImageReview
     public function rejectAwaiting(Site $site, ?int $batchId = null): int
     {
         return $this->judgeMany($site, ProductAsset::REVIEW_REJECTED, $batchId);
+    }
+
+    /**
+     * Delete ONE finished image for good — remove its media file, then the row. This is EDITORIAL
+     * cleanup, NOT a refund: the AI already ran and was charged, and deleting the asset changes
+     * nothing about that. Refused for an image that is LIVE in the store (undo the push first) and
+     * for anything not yet terminal (an in-flight asset still holds a live reservation).
+     */
+    public function delete(Site $site, int $assetId): bool
+    {
+        $asset = $this->asset($site, $assetId);
+
+        if ($asset === null || ! $asset->isTerminal() || $asset->isInStore()) {
+            return false;
+        }
+
+        app(MediaStorage::class)->delete($asset->image_path);
+        $asset->delete();
+
+        return true;
+    }
+
+    /**
+     * The in-flight assets (queued or rendering) for the live "in progress" strip — so the merchant
+     * sees a product IS being worked on, not just a batch counter. Newest first.
+     *
+     * @return Collection<int,ProductAsset>
+     */
+    public function processing(Site $site, int $limit = 60): Collection
+    {
+        return ProductAsset::query()
+            ->where('site_id', $site->getKey())
+            ->whereIn('status', [ProductAsset::STATUS_PENDING, ProductAsset::STATUS_PROCESSING])
+            ->with('product')
+            ->latest('id')
+            ->limit($limit)
+            ->get();
     }
 
     /**

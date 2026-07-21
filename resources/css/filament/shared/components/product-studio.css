@@ -223,3 +223,79 @@
     font-size: var(--toa-type-caption-size);
     padding-inline-start: var(--to-space-2);
 }
+
+/* --- Click-to-enlarge: the image is a button; the whole frame is tappable. --- */
+.to-studio-tile__zoom {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: zoom-in;
+    appearance: none;
+}
+
+/* --- The "in progress" tile: a spinner instead of an image. --- */
+.to-studio-tile__frame--rendering {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.to-studio-tile__spinner {
+    inline-size: var(--to-space-6);
+    block-size: var(--to-space-6);
+    border-radius: 50%;
+    border: var(--to-bw-input-focus) solid var(--toa-border);
+    border-block-start-color: var(--toa-accent);
+    animation: to-studio-spin 0.7s linear infinite;
+}
+
+@keyframes to-studio-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .to-studio-tile__spinner { animation-duration: 2.4s; }
+}
+
+/* --- The full-screen lightbox (Alpine-toggled; x-cloak avoids a first-paint flash). --- */
+[x-cloak] { display: none !important; }
+
+.to-studio-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--to-space-6);
+    background: color-mix(in srgb, var(--to-ink) 82%, transparent);
+    cursor: zoom-out;
+}
+
+.to-studio-lightbox__img {
+    max-inline-size: 100%;
+    max-block-size: 100%;
+    object-fit: contain;
+    border-radius: var(--to-r-card);
+    box-shadow: var(--to-shadow-hover);
+}
+
+.to-studio-lightbox__close {
+    position: absolute;
+    inset-block-start: var(--to-space-4);
+    inset-inline-end: var(--to-space-4);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--to-space-6);
+    block-size: var(--to-space-6);
+    padding: 0;
+    border: 0;
+    border-radius: var(--to-r-control);
+    background: var(--toa-surface-alt);
+    color: var(--to-ink);
+    cursor: pointer;
+}

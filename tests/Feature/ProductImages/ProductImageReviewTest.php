@@ -79,6 +79,29 @@ class ProductImageReviewTest extends TestCase
         $this->assertSame(97_500, (int) $asset->fresh()->charge_micro_usd, 'The charge stands — the AI already ran.');
     }
 
+    /**
+     * Delete is editorial cleanup, not a refund — and it is tenant-safe: account B can never
+     * delete account A's image (fail closed), while the owner removes it for good.
+     */
+    public function test_delete_removes_a_finished_image_and_never_a_foreign_one(): void
+    {
+        [$shopA, $assetA] = $this->makeSucceededAsset();
+        [$shopB] = $this->makeSucceededAsset();
+
+        $review = app(ProductImageReview::class);
+        $idA = (int) $assetA->getKey();
+
+        // Account B cannot delete account A's image — it stays.
+        Tenant::run($shopB['account'], fn () => $this->assertFalse($review->delete($shopA['site'], $idA)));
+        Tenant::run($shopA['account'], fn () => $this->assertNotNull(ProductAsset::query()->find($idA)));
+
+        // Its owner deletes it for good — the row is gone.
+        Tenant::run($shopA['account'], function () use ($review, $shopA, $idA): void {
+            $this->assertTrue($review->delete($shopA['site'], $idA));
+            $this->assertNull(ProductAsset::query()->find($idA));
+        });
+    }
+
     /** An asset that never produced an image cannot be judged (the guard throws). */
     public function test_a_failed_asset_cannot_be_reviewed(): void
     {

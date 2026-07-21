@@ -67,6 +67,8 @@ return [
         'reject_all_sub' => 'Rejecting does not refund the generation — the AI already ran.',
         'empty' => 'No generated images yet',
         'empty_sub' => 'Run a batch and the results will appear here for review.',
+        'rendering_heading' => 'In progress',
+        'rendering_sub' => 'These are being generated right now — they will move to Review below the moment each one is ready.',
     ],
 
     'review_status' => [
@@ -85,6 +87,16 @@ return [
         'repush' => 'Try again',
         'undo' => 'Restore original images',
         'undo_confirm' => 'Restore this product\'s original images? Everything Vsio added to this product is removed from your store, the original photos come back, and the original main image is restored. Nothing is charged.',
+        'delete' => 'Delete',
+        'delete_confirm' => 'Delete this image for good? It cannot be recovered. The generation was already charged, so this does not refund it.',
+        'rendering' => 'Rendering…',
+        'enlarge' => 'View larger',
+        'broken' => 'This image is no longer available',
+    ],
+
+    // The full-screen preview when an image is clicked.
+    'lightbox' => [
+        'close' => 'Close',
     ],
 
     // Pushing an approved image into the store's product media. It is FREE — the AI was already
@@ -133,6 +145,8 @@ return [
         'approved' => 'Image approved',
         'rejected' => 'Image rejected — the generation is still charged.',
         'reject_pushed' => 'This image is live in your store. Undo the push first, then reject it.',
+        'deleted' => 'Image deleted',
+        'delete_in_store' => 'This image is live in your store. Undo the push first, then delete it.',
         'bulk' => ':count image(s) updated',
         'regenerating' => 'Regenerating — this is a new, separately charged image.',
         // A second Regenerate click while the first render is still running: nothing new was

@@ -146,6 +146,11 @@ class ProductImageStudio extends Page
 
     private const NOTIFY_REJECTED = 'product_images.notify.rejected';
 
+    private const NOTIFY_DELETED = 'product_images.notify.deleted';
+
+    // Deleting an image that is live in the store would orphan the storefront copy — undo first.
+    private const NOTIFY_DELETE_IN_STORE = 'product_images.notify.delete_in_store';
+
     // An image that is LIVE in the store cannot be rejected — undo the push first.
     private const NOTIFY_REJECT_PUSHED = 'product_images.notify.reject_pushed';
 
@@ -274,6 +279,24 @@ class ProductImageStudio extends Page
             ->map(fn (ProductAsset $asset): ReviewTile => ReviewTile::from($asset, $media, $snapshotted));
     }
 
+    /**
+     * The in-flight images (queued or rendering) for the live "in progress" strip. Kept flat
+     * (id/name/status) so the view signs nothing and reads no model — the page polls, so the
+     * strip empties itself as each image finishes and moves into the review grid below.
+     *
+     * @return Collection<int,array{id:int,name:string,status:string}>
+     */
+    public function processingTiles(): Collection
+    {
+        return app(ProductImageReview::class)
+            ->processing($this->shopSite(), self::GRID_LIMIT)
+            ->map(fn (ProductAsset $asset): array => [
+                'id' => (int) $asset->getKey(),
+                'name' => (string) ($asset->product?->name ?? ''),
+                'status' => (string) $asset->status,
+            ]);
+    }
+
     /** The merchant's spendable credit (balance − in-flight reservations), in micro-USD. */
     public function spendableMicroUsd(): int
     {
@@ -314,6 +337,26 @@ class ProductImageStudio extends Page
 
         if ($review->reject($this->shopSite(), $assetId)) {
             Notification::make()->success()->title(__(self::NOTIFY_REJECTED))->send();
+        }
+    }
+
+    /**
+     * Delete ONE finished image for good. Not a refund — the AI already ran. An image that is
+     * live in the store is refused (the merchant undoes the push first, exactly like reject), so
+     * deleting can never orphan a storefront copy.
+     */
+    public function deleteAsset(int $assetId): void
+    {
+        $review = app(ProductImageReview::class);
+
+        if ($review->isBlockedByStore($this->shopSite(), $assetId)) {
+            Notification::make()->warning()->title(__(self::NOTIFY_DELETE_IN_STORE))->send();
+
+            return;
+        }
+
+        if ($review->delete($this->shopSite(), $assetId)) {
+            Notification::make()->success()->title(__(self::NOTIFY_DELETED))->send();
         }
     }
 
@@ -813,6 +856,7 @@ class ProductImageStudio extends Page
             'lastBatch' => $this->lastBatch(),
             'counts' => $this->counts(),
             'tiles' => $this->tiles(),
+            'processing' => $this->processingTiles(),
             'spendable' => $this->money($this->spendableMicroUsd()),
         ];
     }

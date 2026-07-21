@@ -73,8 +73,39 @@
         </x-filament::section>
     @endif
 
-    {{-- REVIEW grid. --}}
-    <x-filament::section>
+    {{-- IN PROGRESS — a per-product signal that a render is actually happening (not just a
+         counter). The page polls, so a tile leaves this strip and joins Review the moment its
+         image is ready. --}}
+    @if($processing->isNotEmpty())
+        <x-filament::section>
+            <x-slot:heading>{{ __('product_images.review.rendering_heading') }}</x-slot:heading>
+            <x-slot:description>{{ __('product_images.review.rendering_sub') }}</x-slot:description>
+
+            <div class="to-studio-grid">
+                @foreach($processing as $item)
+                    <figure class="to-studio-tile" wire:key="proc-{{ $item['id'] }}">
+                        <div class="to-studio-tile__frame to-studio-tile__frame--rendering">
+                            <div class="to-studio-tile__state">
+                                <span class="to-studio-tile__spinner" aria-hidden="true"></span>
+                                <span class="to-studio-tile__state-note">{{ __('product_images.tile.rendering') }}</span>
+                            </div>
+                        </div>
+                        <figcaption class="to-studio-tile__caption">
+                            <span class="to-studio-tile__name">{{ $item['name'] }}</span>
+                        </figcaption>
+                    </figure>
+                @endforeach
+            </div>
+        </x-filament::section>
+    @endif
+
+    {{-- REVIEW grid. The whole section shares ONE Alpine lightbox: a tile dispatches its signed
+         URL, the overlay below shows it full-screen. --}}
+    <x-filament::section
+        x-data="{ lightbox: null }"
+        x-on:open-lightbox.window="lightbox = $event.detail.src"
+        x-on:keydown.escape.window="lightbox = null"
+    >
         <x-slot:heading>{{ __('product_images.review.heading') }}</x-slot:heading>
         <x-slot:description>{{ __('product_images.review.sub') }}</x-slot:description>
 
@@ -96,10 +127,23 @@
             <div class="to-studio-grid">
                 @foreach($tiles as $tile)
                     <figure class="to-studio-tile" wire:key="asset-{{ $tile->id }}">
-                        <div class="to-studio-tile__frame">
+                        <div class="to-studio-tile__frame" x-data="{ broken: false }">
                             @if($tile->imageUrl)
-                                <img class="to-studio-tile__img" src="{{ $tile->imageUrl }}"
-                                     alt="{{ $tile->productName }}" loading="lazy" />
+                                {{-- Click to enlarge. If the stored file is gone (e.g. wiped before the
+                                     media-volume fix), the img errors and we swap in a clear message
+                                     instead of a broken-image glyph. --}}
+                                <button type="button" class="to-studio-tile__zoom"
+                                        x-show="! broken"
+                                        x-on:click="$dispatch('open-lightbox', { src: @js($tile->imageUrl) })"
+                                        :title="@js(__('product_images.tile.enlarge'))">
+                                    <img class="to-studio-tile__img" src="{{ $tile->imageUrl }}"
+                                         alt="{{ $tile->productName }}" loading="lazy"
+                                         x-on:error="broken = true" />
+                                </button>
+                                <div class="to-studio-tile__state" x-show="broken" x-cloak>
+                                    <x-filament::icon icon="heroicon-o-photo" />
+                                    <span class="to-studio-tile__state-note">{{ __('product_images.tile.broken') }}</span>
+                                </div>
                             @else
                                 <div class="to-studio-tile__state">
                                     <x-filament::icon icon="heroicon-o-photo" />
@@ -196,6 +240,16 @@
                                     {{ __('product_images.tile.undo') }}
                                 </x-filament::button>
                             @endif
+
+                            {{-- DELETE removes this generated image for good (media file + row). Not a
+                                 refund. Blocked while the image is live in the store (undo first). --}}
+                            <x-filament::button type="button" size="xs" color="danger" icon="heroicon-o-trash"
+                                                wire:click="deleteAsset({{ $tile->id }})"
+                                                wire:target="deleteAsset({{ $tile->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:confirm="{{ __('product_images.tile.delete_confirm') }}">
+                                {{ __('product_images.tile.delete') }}
+                            </x-filament::button>
                         </div>
                     </figure>
                 @endforeach
@@ -207,5 +261,17 @@
                 sub="product_images.review.empty_sub"
             />
         @endif
+
+        {{-- Full-screen preview. Click anywhere (or Esc) to close. --}}
+        <div class="to-studio-lightbox" x-show="lightbox" x-cloak
+             x-transition.opacity
+             x-on:click="lightbox = null"
+             role="dialog" aria-modal="true">
+            <button type="button" class="to-studio-lightbox__close" x-on:click="lightbox = null"
+                    :aria-label="@js(__('product_images.lightbox.close'))">
+                <x-filament::icon icon="heroicon-o-x-mark" />
+            </button>
+            <img class="to-studio-lightbox__img" :src="lightbox" alt="" />
+        </div>
     </x-filament::section>
 </x-filament-panels::page>
