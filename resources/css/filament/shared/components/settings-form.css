@@ -3,8 +3,10 @@
  * select, number input, and a token-backed toggle. Logical properties so the form
  * mirrors in HE (label/help/error align to start; the toggle thumb slides to the
  * inline-end when checked). Pure layout + token colour; no literals.
- * Underline-only Tabuzzco inputs: no box, no rounded corners; focus thickens the
- * bottom rule to 2px ink. Eyebrow labels. Toggle keeps its switch affordance.
+ * BOXED inputs (redesign): a hairline box on the paper surface, rounded to the control radius,
+ * with an accent focus ring — 1:1 with the native Filament form inputs so the hand-built
+ * settings pages (privacy / club / banner-placements) no longer clash with the resource forms.
+ * Eyebrow labels + the switch toggle are kept.
  * TOKENS: --toa-surface --toa-surface-alt --toa-border --toa-accent --toa-accent-on
  *   --toa-focus --to-ink --to-ink-muted --to-danger --to-rule --to-r-none --to-r-pill
  *   --toa-type-eyebrow-size --toa-type-eyebrow-weight --to-track-eyebrow --to-bw-input
@@ -46,28 +48,26 @@
     text-transform: uppercase;
 }
 
-/* Underline-only input (no box, no rounded corners) — the Tabuzzco form. Only a
-   bottom rule; focus THICKENS it to 2px ink. Sits on the paper canvas, not a
-   filled well, so the type is the field. */
+/* Boxed input on the paper surface, rounded to the control radius — matches the native Filament
+   form inputs. Focus draws the accent border + a soft focus ring. */
 .to-field__control {
     inline-size: 100%;
     padding-block: var(--to-space-2);
-    padding-inline: 0;
-    background: transparent;
+    padding-inline: var(--to-space-3);
+    background: var(--toa-surface);
     color: var(--to-ink);
-    border: 0;
-    border-block-end: var(--to-bw-input) solid var(--to-rule);
-    border-radius: var(--to-r-none);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-control);
     font-family: var(--to-font);
     font-size: var(--toa-type-body-size);
     font-weight: var(--to-fw-medium);
-    transition: border-color var(--to-t-fast), border-width var(--to-t-fast);
+    transition: border-color var(--to-t-fast), box-shadow var(--to-t-fast);
 }
 
 .to-field__control:focus {
     outline: none;
-    border-block-end-width: var(--to-bw-input-focus);
-    border-block-end-color: var(--to-ink);
+    border-color: var(--toa-accent);
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-focus);
 }
 
 /* Native select: strip the OS chrome so only one custom caret shows. The select +
