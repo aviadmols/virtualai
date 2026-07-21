@@ -21,10 +21,12 @@ defined('SHOPIFY_API_VERSION') || define('SHOPIFY_API_VERSION', '2026-04');
 defined('SHOPIFY_SCOPES') || define('SHOPIFY_SCOPES', 'read_products,write_products,read_themes');
 
 // The Theme App Extension identity (shopify/extensions/trayon-widget). The uid keys the
-// theme-file checks (a block's type carries it) and, with the embed block's handle, the
-// theme-editor deep link that activates the app embed. Values change ONLY when the
-// extension is re-created in the Partner Dashboard.
-defined('SHOPIFY_THEME_EXT_UID') || define('SHOPIFY_THEME_EXT_UID', '034675f6-b79c-bc61-57f9-25f5bf0a6798c3f54cf9');
+// theme-file checks (a block's type carries it: shopify://apps/vsio/blocks/{block}/{uid})
+// and, with the embed block's handle, the theme-editor deep link that activates the app
+// embed. This MUST equal the uuid Shopify registered for the extension — read it off any
+// live theme block's `type` string (never hand-fabricate it: a wrong uid makes the deep
+// link 404 "App embed does not exist" and the theme inspector never match).
+defined('SHOPIFY_THEME_EXT_UID') || define('SHOPIFY_THEME_EXT_UID', '019f79f2-87b2-7b18-8bdc-ab4561865165');
 defined('SHOPIFY_THEME_EMBED_HANDLE') || define('SHOPIFY_THEME_EMBED_HANDLE', 'trayon');
 
 // Webhook receipt housekeeping: how long a processed receipt keeps its payload, and

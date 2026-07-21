@@ -10,7 +10,10 @@
 
 name = "Vsio widget"
 type = "theme"
-uid = "034675f6-b79c-bc61-57f9-25f5bf0a6798c3f54cf9"
+# The uuid Shopify registered for this extension (visible in any live theme block's `type`:
+# shopify://apps/vsio/blocks/trayon-button/019f79f2-87b2-7b18-8bdc-ab4561865165). Must match
+# config/shopify.php SHOPIFY_THEME_EXT_UID — the deep link + theme inspector key off it.
+uid = "019f79f2-87b2-7b18-8bdc-ab4561865165"
 
 [[extensions]]
 name = "Vsio widget"
