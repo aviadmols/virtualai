@@ -25,9 +25,23 @@ let notificationMount = null; // where the floating status HUD lives
 let assetBase = ''; // the absolute directory that served widget.js (fonts resolve against it)
 const injected = new Set(); // stylesheet keys already inlined into this root
 
+// The Vsio wordmark, served from the widget's OWN origin root (public/vsio-logo.svg). Resolved
+// against the asset base so it points at go.vsio.app regardless of the merchant's origin.
+const LOGO_PATH = '/vsio-logo.svg';
+
 /** The absolute base URL the widget's own assets (chunks, fonts) live under. Set at boot. */
 export function setAssetBase(base) {
   assetBase = base || '';
+}
+
+/** The absolute URL of the Vsio wordmark logo (widget origin). '' when the base is unknown. */
+export function logoUrl() {
+  if (!assetBase) return '';
+  try {
+    return new URL(LOGO_PATH, assetBase).href;
+  } catch {
+    return '';
+  }
 }
 
 /**

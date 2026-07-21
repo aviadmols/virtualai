@@ -29,13 +29,21 @@ class PlatformPanelProvider extends PanelProvider
 {
     // === CONSTANTS ===
     private const PANEL_ID = 'platform';
+
     private const PANEL_PATH = 'platform';
+
     private const THEME = 'resources/css/filament/platform/theme.css';
+
     private const RESOURCE_NS = 'App\\Filament\\Platform\\Resources';
+
     private const PAGE_NS = 'App\\Filament\\Platform\\Pages';
+
     private const WIDGET_NS = 'App\\Filament\\Platform\\Widgets';
+
     private const RESOURCE_DIR = 'Filament/Platform/Resources';
+
     private const PAGE_DIR = 'Filament/Platform/Pages';
+
     private const WIDGET_DIR = 'Filament/Platform/Widgets';
 
     // OpenRouter look: Inter (Latin) is loaded via ->font(); Assistant covers
@@ -43,6 +51,12 @@ class PlatformPanelProvider extends PanelProvider
     // Bunny (a privacy-friendly Google Fonts mirror). The --to-font token stacks
     // them so HE never falls back. Weights 400–700 match the OpenRouter range.
     private const FONT_FAMILY = 'Inter';
+
+    // The Vsio wordmark (public/vsio-logo.svg) replaces the text brand name in the sidebar/header.
+    private const BRAND_LOGO = 'vsio-logo.svg';
+
+    private const BRAND_LOGO_HEIGHT = '1.9rem';
+
     private const HEBREW_FONT_HEAD = '<link rel="preconnect" href="https://fonts.bunny.net">'
         .'<link href="https://fonts.bunny.net/css?family=assistant:400,500,600,700&display=swap" rel="stylesheet" />';
 
@@ -68,6 +82,8 @@ class PlatformPanelProvider extends PanelProvider
             ->login()
             ->colors(self::colors())
             ->font(self::FONT_FAMILY)
+            ->brandLogo(asset(self::BRAND_LOGO))
+            ->brandLogoHeight(self::BRAND_LOGO_HEIGHT)
             ->renderHook(
                 PanelsRenderHook::HEAD_START,
                 static fn (): HtmlString => new HtmlString(self::HEBREW_FONT_HEAD),

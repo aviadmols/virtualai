@@ -9,7 +9,7 @@ import { OVERLAY_CLOSE_MS } from './constants.js';
 import { state } from './state.js';
 import { t } from './i18n.js';
 import { el } from './dom.js';
-import { getOverlayMount, clearOverlay } from './shell.js';
+import { getOverlayMount, clearOverlay, logoUrl } from './shell.js';
 import { ICON_SPARKLE, ICON_CLOSE } from './icons.js';
 
 let closingTimer = null;
@@ -21,12 +21,17 @@ let closingTimer = null;
  * an empty heading or a dangling gradient span.
  */
 export function brandHeader() {
-  const children = [
-    el('div', { class: 'ton-brand__mark' }, [
+  // The Vsio wordmark logo when the origin is known; otherwise the sparkle + text fallback (so a
+  // pre-boot skeleton, or an unknown base, never renders a broken image).
+  const logo = logoUrl();
+  const mark = logo
+    ? el('img', { class: 'ton-brand__logo', attrs: { src: logo, alt: t('brand.wordmark') } })
+    : el('div', { class: 'ton-brand__mark' }, [
       el('span', { class: 'ton-brand__icon', html: ICON_SPARKLE, attrs: { 'aria-hidden': 'true' } }),
       t('brand.wordmark'),
-    ]),
-  ];
+    ]);
+
+  const children = [mark];
 
   const title = (state.product && state.product.name ? String(state.product.name) : '').trim();
   if (title) {

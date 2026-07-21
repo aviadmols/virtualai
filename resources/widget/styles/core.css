@@ -584,6 +584,15 @@
   height: var(--ton-icon-lg);
 }
 
+/* The Vsio wordmark logo (served from the widget origin), sized off the brand type scale so it
+ * keeps its 3.68:1 ratio. Centered as a block image inside the (text-centered) header. */
+.ton-brand__logo {
+  display: block;
+  block-size: calc(var(--ton-fs-logo) * 1.4);
+  inline-size: auto;
+  margin-inline: auto;
+}
+
 .ton-brand__title {
   margin: var(--ton-space-3) 0 0;
   font-size: var(--ton-fs-title);
