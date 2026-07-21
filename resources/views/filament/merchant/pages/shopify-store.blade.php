@@ -26,6 +26,30 @@
     @endunless
 
     @if($connection?->isInstalled())
+        {{-- The store-identity card: a warm-gradient initial tile + the domain + status + since. --}}
+        <div class="to-shopify-card">
+            <span class="to-shopify-card__avatar" aria-hidden="true">{{ mb_substr($connection->shop_domain, 0, 1) }}</span>
+            <div class="to-shopify-card__body">
+                <p class="to-shopify-card__domain">{{ $connection->shop_domain }}</p>
+                <div class="to-shopify-card__meta">
+                    @if($connection->needs_reauth)
+                        <span class="to-badge to-badge--warn">
+                            <span class="to-badge__dot" aria-hidden="true"></span>
+                            {{ __('shopify.status.needs_reauth') }}
+                        </span>
+                    @else
+                        <span class="to-badge to-badge--success">
+                            <span class="to-badge__dot" aria-hidden="true"></span>
+                            {{ __('shopify.status.installed') }}
+                        </span>
+                    @endif
+                    @if($connection->installed_at)
+                        <span class="to-shopify-card__since">{{ __('shopify.connected.installed_at') }}: {{ $connection->installed_at->translatedFormat('j M Y') }}</span>
+                    @endif
+                </div>
+            </div>
+        </div>
+
         <x-filament::section>
             <x-slot:heading>{{ __('shopify.connected.heading') }}</x-slot:heading>
             <x-slot:description>{{ __('shopify.connected.sub') }}</x-slot:description>

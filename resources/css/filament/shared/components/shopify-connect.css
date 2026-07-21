@@ -80,3 +80,64 @@
 .to-shopify__cta {
     margin-block-start: var(--to-space-4);
 }
+
+/* --- Connected store-identity card: warm-gradient initial tile + domain + status + since --------
+ * Sits above the detailed facts. Merchant-only file. TOKENS: --toa-grad-warm --to-r-card-lg
+ * --to-shadow-layered --toa-thumb-lg --toa-type-kpi-size --to-fw-heavy --to-paper. */
+.to-shopify-card {
+    display: flex;
+    align-items: center;
+    gap: var(--to-space-4);
+    flex-wrap: wrap;
+    margin-block-end: var(--to-space-5);
+    padding: var(--to-space-5);
+    border-radius: var(--to-r-card-lg);
+    background: var(--toa-surface);
+    border: var(--to-bw-input) solid var(--toa-border);
+    box-shadow: var(--to-shadow-layered, var(--to-shadow-card));
+}
+
+.to-shopify-card__avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--toa-thumb-lg);
+    block-size: var(--toa-thumb-lg);
+    flex: none;
+    border-radius: var(--to-r-card);
+    background: var(--toa-grad-warm);
+    color: var(--to-paper);
+    font-size: var(--toa-type-kpi-size);
+    font-weight: var(--to-fw-heavy);
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.to-shopify-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+    flex: 1 1 14rem;
+    min-inline-size: 0;
+}
+
+.to-shopify-card__domain {
+    margin: 0;
+    color: var(--to-ink);
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    font-size: var(--toa-type-h-size);
+    font-weight: var(--to-fw-bold);
+    overflow-wrap: anywhere;
+}
+
+.to-shopify-card__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--to-space-3);
+    flex-wrap: wrap;
+}
+
+.to-shopify-card__since {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+}
