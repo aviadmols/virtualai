@@ -23,9 +23,9 @@ use App\Models\ProductImageBatch;
 use App\Models\StylePreset;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\ViewField;
 use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -83,6 +83,9 @@ class ProductImageStudio extends Page
     private const FIELD_STYLE = 'style_id';
 
     private const FIELD_STYLE_LABEL = 'product_images.generate.style';
+
+    // The visual before/after style picker (sample ↔ reference) rendered inside the Generate modal.
+    private const STYLE_PICKER_VIEW = 'filament.merchant.components.style-picker';
 
     private const FIELD_SOURCE = 'source_pick';
 
@@ -467,16 +470,15 @@ class ProductImageStudio extends Page
             ->modalDescription(__(self::GENERATE_SUB))
             ->modalSubmitActionLabel(__(self::GENERATE_CTA))
             ->form([
-                // The visual style picker (approved Image-Studio presets) — replaces the raw
-                // operation dropdown whenever styles exist. Each style carries its own base
-                // operation (packshot / on-model) + prompt.
-                Radio::make(self::FIELD_STYLE)
+                // The VISUAL style picker: each approved Image-Studio preset as a Before/After card
+                // (its uploaded reference ↔ the generated sample). Replaces the text dropdown when
+                // styles exist; clicking a card selects that style's id (its base op + prompt).
+                ViewField::make(self::FIELD_STYLE)
                     ->label(__(self::FIELD_STYLE_LABEL))
-                    ->options($this->styleOptions())
-                    ->descriptions($this->styleDescriptions())
+                    ->view(self::STYLE_PICKER_VIEW)
+                    ->viewData(fn (): array => ['styles' => $this->styleCards()])
                     ->default(fn (): ?int => array_key_first($this->styleOptions()))
                     ->visible(fn (): bool => $this->styleOptions() !== [])
-                    ->required(fn (): bool => $this->styleOptions() !== [])
                     ->live(),
 
                 // Fallback: the raw operation picker, shown only when no approved styles exist yet.
@@ -573,13 +575,27 @@ class ProductImageStudio extends Page
             ->pluck('name', 'id')->all();
     }
 
-    /** Per-style sub-label: which base look it produces (clean packshot / on a model). @return array<int,string> */
-    private function styleDescriptions(): array
+    /**
+     * The approved Image-Studio styles as Before/After cards: id, name, base-op label, and
+     * short-lived signed URLs for the generated SAMPLE (after) + the uploaded REFERENCE (before).
+     * A card with no sample yet shows the reference alone.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function styleCards(): array
     {
+        $media = app(MediaStorage::class);
+
         return StylePreset::query()
             ->approvedForOperations(StylePreset::SURFACE_OPERATIONS[StylePreset::SURFACE_IMAGE_STUDIO])
-            ->get(['id', 'operation_key'])
-            ->mapWithKeys(fn (StylePreset $p): array => [$p->id => __('product_images.operation.'.$p->operation_key)])
+            ->get(['id', 'name', 'operation_key', 'sample_image_path', 'reference_image_path'])
+            ->map(fn (StylePreset $p): array => [
+                'id' => (int) $p->id,
+                'name' => (string) $p->name,
+                'operation' => __('product_images.operation.'.$p->operation_key),
+                'after' => $media->signedUrl($p->sample_image_path),
+                'before' => $media->signedUrl($p->reference_image_path),
+            ])
             ->all();
     }
 

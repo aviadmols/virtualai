@@ -299,3 +299,150 @@
     color: var(--to-ink);
     cursor: pointer;
 }
+
+/* ============================================================================
+ * The Before/After STYLE PICKER (inside the Generate modal). Each approved preset is a card
+ * whose reference (before) cross-fades with the generated sample (after); the checked radio
+ * rings the card. Token-backed, logical properties, reduced-motion aware.
+ * ==========================================================================*/
+.to-stylepick {
+    display: grid;
+    gap: var(--to-space-3);
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+}
+
+.to-stylepick__card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-2);
+    margin: 0;
+    cursor: pointer;
+}
+
+/* The native radio stays in the DOM (focus + state) but is visually replaced by the card. */
+.to-stylepick__radio {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.to-stylepick__frame {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border-radius: var(--to-r-card);
+    background: var(--toa-surface-alt);
+    border: var(--to-bw-input-focus) solid var(--toa-border);
+    transition: border-color var(--to-t-fast), box-shadow var(--to-t-fast);
+}
+
+.to-stylepick__img {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* The sample (after) sits on top and cross-fades away to reveal the reference (before). */
+.to-stylepick__img--after {
+    animation: to-stylepick-fade 5s ease-in-out infinite;
+}
+
+@keyframes to-stylepick-fade {
+    0%, 42% { opacity: 1; }
+    50%, 92% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+/* Hover pins the BEFORE so the merchant can deliberately compare. */
+.to-stylepick__card:hover .to-stylepick__img--after {
+    animation: none;
+    opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .to-stylepick__img--after { animation: none; opacity: 1; }
+    .to-stylepick__card:hover .to-stylepick__img--after { opacity: 1; }
+}
+
+.to-stylepick__tag {
+    position: absolute;
+    inset-block-start: var(--to-space-1);
+    padding: 0 var(--to-space-1);
+    border-radius: var(--to-r-control);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    color: #fff;
+    background: color-mix(in srgb, var(--to-ink) 72%, transparent);
+}
+
+.to-stylepick__tag--before { inset-inline-start: var(--to-space-1); }
+.to-stylepick__tag--after { inset-inline-end: var(--to-space-1); opacity: 0; }
+.to-stylepick__card:hover .to-stylepick__tag--after { opacity: 0; }
+
+.to-stylepick__placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--to-ink-subtle);
+}
+
+.to-stylepick__placeholder svg {
+    inline-size: var(--to-space-6);
+    block-size: var(--to-space-6);
+}
+
+/* The selected check — hidden until the radio is checked. */
+.to-stylepick__check {
+    position: absolute;
+    inset-block-start: var(--to-space-2);
+    inset-inline-end: var(--to-space-2);
+    display: flex;
+    color: var(--toa-accent);
+    background: var(--toa-surface-alt);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity var(--to-t-fast);
+}
+
+.to-stylepick__check svg {
+    inline-size: var(--to-space-6);
+    block-size: var(--to-space-6);
+}
+
+/* Checked + focus states drive the ring off the native radio (kept for a11y). */
+.to-stylepick__radio:checked ~ .to-stylepick__frame {
+    border-color: var(--toa-accent);
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-accent);
+}
+
+.to-stylepick__radio:checked ~ .to-stylepick__frame .to-stylepick__check {
+    opacity: 1;
+}
+
+.to-stylepick__radio:focus-visible ~ .to-stylepick__frame {
+    box-shadow: 0 0 0 var(--to-space-1) color-mix(in srgb, var(--toa-accent) 40%, transparent);
+}
+
+.to-stylepick__meta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-1);
+}
+
+.to-stylepick__name {
+    color: var(--to-ink);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-stylepick__op {
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-caption-size);
+}

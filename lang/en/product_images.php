@@ -103,6 +103,12 @@ return [
         'close' => 'Close',
     ],
 
+    // The Before/After tags on each style card in the Generate modal.
+    'style_card' => [
+        'before' => 'Before',
+        'after' => 'After',
+    ],
+
     // Pushing an approved image into the store's product media. It is FREE — the AI was already
     // charged when it succeeded; adding, re-adding or removing the image costs nothing.
     'push' => [
