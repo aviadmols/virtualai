@@ -9,6 +9,7 @@ return [
     'sub' => 'Every try-on your shoppers generated on :site, newest first.',
     'anonymous' => 'Anonymous shopper',
     'purged' => 'Image removed by retention',
+    'no_preview' => 'No preview available',
     'load_more' => 'Load more',
     'empty' => 'No try-ons yet',
     'empty_sub' => 'Once shoppers generate try-ons on this shop, they appear here.',
