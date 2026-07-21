@@ -11,30 +11,28 @@
 .to-gallery-grid {
     display: grid;
     gap: var(--to-space-4);
-    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
 }
 
 .to-gallery-tile {
-    display: flex;
-    flex-direction: column;
-    gap: var(--to-space-3);
     margin: 0;
 }
 
-/* The result frame — portrait try-on aspect, 7px radius, the signature soft shadow. */
+/* The result frame — portrait try-on aspect, larger radius, layered shadow; the caption rides
+   inside it over a gradient scrim, and the image zooms gently on hover (imagery-forward). */
 .to-gallery-tile__frame {
     position: relative;
     aspect-ratio: 3 / 4;
     overflow: hidden;
-    border-radius: var(--to-r-card);
+    border-radius: var(--to-r-card-lg);
     background: var(--toa-surface-alt);
     border: var(--to-bw-input) solid var(--toa-border);
-    box-shadow: var(--to-shadow-card);
+    box-shadow: var(--to-shadow-layered, var(--to-shadow-card));
     transition: box-shadow var(--to-t-fast);
 }
 
 .to-gallery-tile:hover .to-gallery-tile__frame {
-    box-shadow: var(--to-shadow-hover);
+    box-shadow: var(--to-shadow-layered-hover, var(--to-shadow-hover));
 }
 
 .to-gallery-tile__img {
@@ -42,6 +40,27 @@
     block-size: 100%;
     object-fit: cover;
     display: block;
+    transition: transform var(--to-t-slow);
+}
+
+.to-gallery-tile:hover .to-gallery-tile__img {
+    transform: scale(1.04);
+}
+
+/* Caption over a bottom gradient scrim — always readable, lifts a touch on hover. */
+.to-gallery-tile__overlay {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--to-space-4) var(--to-space-3) var(--to-space-3);
+    background: var(--toa-grad-scrim, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .to-gallery-tile:hover .to-gallery-tile__img { transform: none; }
 }
 
 /* Purged / missing thumbnail placeholder — centred glyph + note, never a broken img. */
@@ -75,13 +94,20 @@
 }
 
 .to-gallery-tile__product {
-    color: var(--to-ink);
+    color: var(--to-paper);
     font-size: var(--toa-type-body-size);
     font-weight: var(--to-fw-medium);
     line-height: 1.3;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
 }
 
 .to-gallery-tile__variant {
-    color: var(--to-ink-muted);
+    color: color-mix(in srgb, var(--to-paper) 80%, transparent);
     font-size: var(--toa-type-caption-size);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }

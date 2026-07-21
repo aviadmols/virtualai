@@ -24,6 +24,13 @@
                 class="to-gallery-tile__img"
                 loading="lazy"
             >
+            {{-- The caption rides ON the image over a gradient scrim (imagery-forward). --}}
+            <figcaption class="to-gallery-tile__overlay">
+                <span class="to-gallery-tile__product">{{ $caption }}</span>
+                @if($variant)
+                    <span class="to-gallery-tile__variant">{{ $variant }}</span>
+                @endif
+            </figcaption>
         @else
             <span class="to-gallery-tile__placeholder">
                 <x-filament::icon icon="heroicon-o-photo" class="to-gallery-tile__placeholder-glyph" />
@@ -31,11 +38,4 @@
             </span>
         @endif
     </div>
-
-    <figcaption class="to-gallery-tile__caption">
-        <span class="to-gallery-tile__product">{{ $caption }}</span>
-        @if($variant)
-            <span class="to-gallery-tile__variant">{{ $variant }}</span>
-        @endif
-    </figcaption>
 </figure>
