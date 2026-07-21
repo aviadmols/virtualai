@@ -20,8 +20,8 @@ use Filament\Resources\Resource;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
@@ -113,12 +113,13 @@ class StylePresetResource extends Resource
 
         return $table
             ->columns([
-                ImageColumn::make('sample')
+                ViewColumn::make('before_after')
                     ->label(__('platform.style_presets.col.sample'))
-                    ->getStateUsing(static fn (StylePreset $r): ?string => $r->sample_image_path !== null
-                        ? $media->signedUrl($r->sample_image_path)
-                        : ($r->reference_image_path !== null ? $media->signedUrl($r->reference_image_path) : null))
-                    ->height(56),
+                    ->view('filament.platform.columns.style-before-after')
+                    ->state(static fn (StylePreset $r): array => [
+                        'before' => $r->reference_image_path !== null ? $media->signedUrl($r->reference_image_path) : null,
+                        'after' => $r->sample_image_path !== null ? $media->signedUrl($r->sample_image_path) : null,
+                    ]),
                 TextColumn::make('name')
                     ->label(__('platform.style_presets.col.name'))
                     ->weight('medium')

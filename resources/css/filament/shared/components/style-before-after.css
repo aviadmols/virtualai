@@ -1,0 +1,58 @@
+/* ============================================================================
+ * Compact Before/After thumbnail — the Style Presets admin table cell. The generated SAMPLE
+ * (after) cross-fades to reveal the uploaded REFERENCE (before); hover pins the before so the
+ * admin can compare. Token-backed, reduced-motion aware. (The Generate-modal picker has its own,
+ * larger variant in product-studio.css.)
+ * ==========================================================================*/
+.to-ba {
+    position: relative;
+    inline-size: 4rem;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--to-r-control);
+    overflow: hidden;
+    background: var(--toa-surface-alt);
+    border: var(--to-bw-input) solid var(--toa-border);
+}
+
+.to-ba__img {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.to-ba__img--after {
+    animation: to-ba-fade 5s ease-in-out infinite;
+}
+
+@keyframes to-ba-fade {
+    0%, 42% { opacity: 1; }
+    50%, 92% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+.to-ba:hover .to-ba__img--after {
+    animation: none;
+    opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .to-ba__img--after { animation: none; opacity: 1; }
+    .to-ba:hover .to-ba__img--after { opacity: 1; }
+}
+
+.to-ba__placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--to-ink-subtle);
+}
+
+.to-ba__placeholder svg {
+    inline-size: var(--to-space-5, 1.25rem);
+    block-size: var(--to-space-5, 1.25rem);
+}

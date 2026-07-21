@@ -28,6 +28,7 @@
 @import '../shared/components/storyboard.css';
 @import '../shared/components/resolver-preview.css';
 @import '../shared/components/embed-code.css';
+@import '../shared/components/style-before-after.css';
 
 @config 'tailwind.config.js';
 
