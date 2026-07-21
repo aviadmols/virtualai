@@ -1,0 +1,116 @@
+/* ============================================================================
+ * Banners — merchant list CARD GRID (skins Filament ->contentGrid records). Each record becomes a
+ * feature card: a full-bleed 16:9 artwork top (radius --to-r-card-lg, layered soft shadow, gentle
+ * hover zoom — the gallery/hub-hero imagery idiom), then a padded meta block: name + status badge,
+ * a "Last 30 days" eyebrow, and the clicks / CTR stat row. Merchant-only file. Tokens -> classes
+ * only; logical properties (mirrors in HE); reduced-motion aware. NB: the padding-strip block
+ * couples to Filament record-content markup — revisit on a Filament upgrade / if row actions land.
+ * ==========================================================================*/
+
+/* --- The Filament record becomes the card. The compound selector outranks Filament's own
+       rounded-xl / shadow / ring utilities. --- */
+.fi-ta-record.to-banner-card-cell {
+    overflow: hidden;
+    border-radius: var(--to-r-card-lg);
+    background: var(--toa-surface);
+    border: var(--to-bw-input) solid var(--toa-border);
+    box-shadow: var(--to-shadow-layered);
+    transition: box-shadow var(--to-t-fast);
+}
+
+.fi-ta-record.to-banner-card-cell:hover {
+    background: var(--toa-surface);
+    box-shadow: var(--to-shadow-layered-hover);
+}
+
+/* Strip Filament's record-content padding so the artwork bleeds edge-to-edge and the whole card
+   clicks through. COUPLES to Filament record markup — revisit on a Filament upgrade. */
+.fi-ta-record.to-banner-card-cell > div > div {
+    padding-block: 0;
+}
+
+.fi-ta-record.to-banner-card-cell > div > div > div > a {
+    padding-inline: 0;
+}
+
+.to-banner-card {
+    inline-size: 100%;
+}
+
+/* --- Full-bleed artwork frame (ImageColumn) --- */
+.to-banner-card__frame {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    inline-size: 100%;
+    overflow: hidden;
+    background: var(--toa-surface-alt);
+}
+
+.to-banner-card__frame .to-banner-card__img {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    max-inline-size: none;
+    object-fit: cover;
+    object-position: center;
+    transition: transform var(--to-t-slow);
+}
+
+.fi-ta-record.to-banner-card-cell:hover .to-banner-card__img {
+    transform: scale(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fi-ta-record.to-banner-card-cell:hover .to-banner-card__img {
+        transform: none;
+    }
+}
+
+/* --- Meta block --- */
+.to-banner-card__body {
+    gap: var(--to-space-2);
+    padding: var(--to-space-4);
+}
+
+.to-banner-card__head {
+    gap: var(--to-space-3);
+}
+
+.to-banner-card__head > div:first-child {
+    min-inline-size: 0;
+}
+
+.to-banner-card__name .fi-ta-text-item {
+    max-inline-size: 100%;
+    min-inline-size: 0;
+}
+
+.to-banner-card__name .fi-ta-text-item-label {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--to-ink);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-banner-card__eyebrow .fi-ta-text-item-label {
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-eyebrow-size);
+    font-weight: var(--to-fw-semibold);
+    letter-spacing: var(--to-track-eyebrow);
+    text-transform: uppercase;
+}
+
+/* --- Stats row (clicks · CTR) --- */
+.to-banner-card__stats {
+    gap: var(--to-space-4);
+    margin-block-start: var(--to-space-1);
+}
+
+.to-banner-card__stat .fi-ta-text-item-label {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+}

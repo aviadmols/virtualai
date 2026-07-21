@@ -2,6 +2,7 @@
 
 namespace App\Filament\Merchant\Resources;
 
+use App\Domain\Banners\BannerContent;
 use App\Domain\Banners\BannerRules;
 use App\Domain\Media\MediaStorage;
 use App\Filament\Merchant\Resources\BannerResource\Pages\CreateBanner;
@@ -10,6 +11,7 @@ use App\Filament\Merchant\Resources\BannerResource\Pages\ListBanners;
 use App\Filament\Merchant\Widgets\BannerCandidatesWidget;
 use App\Models\Banner;
 use App\Models\BannerEvent;
+use App\Models\Site;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DateTimePicker;
@@ -20,6 +22,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\ImageColumn;
+use Filament\Tables\Columns\Layout\Split;
+use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -53,9 +57,18 @@ class BannerResource extends Resource
     // The rolling window (days) the list's clicks/impressions/CTR columns aggregate over.
     private const STATS_WINDOW_DAYS = 30;
 
+    // The visual card grid (1 / 2 / 3 columns at base / md / xl).
+    private const CARD_GRID = ['md' => 2, 'xl' => 3];
+
+    private const ICON_CLICKS = 'heroicon-m-cursor-arrow-rays';
+
+    private const ICON_CTR = 'heroicon-m-chart-bar';
+
     // i18n keys — never a literal in the resource.
     private const LABEL_SINGULAR = 'banners.singular';
+
     private const LABEL_PLURAL = 'banners.plural';
+
     private const NAV_LABEL = 'banners.nav';
 
     /** Narrow the banner list to the ACTIVE shop (Filament tenant) on top of the account scope. */
@@ -64,7 +77,7 @@ class BannerResource extends Resource
         $query = parent::getEloquentQuery();
         $tenant = Filament::getTenant();
 
-        return $tenant instanceof \App\Models\Site
+        return $tenant instanceof Site
             ? $query->where('site_id', $tenant->getKey())
             : $query;
     }
@@ -101,7 +114,7 @@ class BannerResource extends Resource
                         ->label(__('banners.field.name'))
                         ->helperText(__('banners.field.name_help'))
                         ->required()
-                        ->maxLength(\App\Domain\Banners\BannerContent::NAME_MAX),
+                        ->maxLength(BannerContent::NAME_MAX),
                     Select::make('composition')
                         ->label(__('banners.field.composition'))
                         ->helperText(__('banners.field.composition_help'))
@@ -114,13 +127,13 @@ class BannerResource extends Resource
                         ->label(__('banners.field.target_url'))
                         ->helperText(__('banners.field.target_url_help'))
                         ->url()
-                        ->maxLength(\App\Domain\Banners\BannerContent::TARGET_URL_MAX)
+                        ->maxLength(BannerContent::TARGET_URL_MAX)
                         ->visibleOn('edit')
                         ->columnSpanFull(),
                     TextInput::make('alt_text')
                         ->label(__('banners.field.alt_text'))
                         ->helperText(__('banners.field.alt_text_help'))
-                        ->maxLength(\App\Domain\Banners\BannerContent::ALT_TEXT_MAX)
+                        ->maxLength(BannerContent::ALT_TEXT_MAX)
                         ->visibleOn('edit')
                         ->columnSpanFull(),
                 ]),
@@ -142,13 +155,13 @@ class BannerResource extends Resource
                 ->schema([
                     TextInput::make('overlay.headline')
                         ->label(__('banners.overlay.headline'))
-                        ->maxLength(\App\Domain\Banners\BannerContent::HEADLINE_MAX),
+                        ->maxLength(BannerContent::HEADLINE_MAX),
                     TextInput::make('overlay.cta_label')
                         ->label(__('banners.overlay.cta_label'))
-                        ->maxLength(\App\Domain\Banners\BannerContent::CTA_LABEL_MAX),
+                        ->maxLength(BannerContent::CTA_LABEL_MAX),
                     TextInput::make('overlay.subtext')
                         ->label(__('banners.overlay.subtext'))
-                        ->maxLength(\App\Domain\Banners\BannerContent::SUBTEXT_MAX)
+                        ->maxLength(BannerContent::SUBTEXT_MAX)
                         ->columnSpanFull(),
                 ]),
 
@@ -231,50 +244,61 @@ class BannerResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->contentGrid(self::CARD_GRID)
+            ->recordClasses('to-banner-card-cell')
             ->columns([
-                ImageColumn::make('artwork')
-                    ->label(__('banners.col.artwork'))
-                    ->getStateUsing(static fn (Banner $record): ?string => app(MediaStorage::class)->publicUrl($record->image_path))
-                    ->height(40),
-                TextColumn::make('name')
-                    ->label(__('banners.col.name'))
-                    ->weight('medium')
-                    ->searchable()
-                    ->sortable(),
-                TextColumn::make('status')
-                    ->label(__('banners.col.status'))
-                    ->badge()
-                    ->formatStateUsing(static fn (string $state): string => __('banners.status_option.'.$state))
-                    ->color(static fn (string $state): string => self::statusColor($state)),
-                TextColumn::make('composition')
-                    ->label(__('banners.col.composition'))
-                    ->badge()
-                    ->color('gray')
-                    ->formatStateUsing(static fn (string $state): string => __('banners.composition_option.'.$state)),
-                TextColumn::make('clicks_count')
-                    ->label(__('banners.col.clicks'))
-                    ->numeric()
-                    ->alignEnd()
-                    ->sortable(),
-                TextColumn::make('impressions_count')
-                    ->label(__('banners.col.impressions'))
-                    ->numeric()
-                    ->alignEnd()
-                    ->toggleable(),
-                TextColumn::make('ctr')
-                    ->label(__('banners.col.ctr'))
-                    ->state(static fn (Banner $record): string => ((int) ($record->impressions_count ?? 0)) > 0
-                        ? round(((int) $record->clicks_count) / ((int) $record->impressions_count) * 100, 1).'%'
-                        : '—')
-                    ->alignEnd(),
-                TextColumn::make('updated_at')
-                    ->label(__('banners.col.updated'))
-                    ->since()
-                    ->sortable()
-                    ->alignEnd(),
+                Stack::make([
+                    ImageColumn::make('artwork')
+                        ->label(__('banners.col.artwork'))
+                        ->getStateUsing(static fn (Banner $record): ?string => app(MediaStorage::class)->publicUrl($record->image_path))
+                        ->height('100%')
+                        ->width('100%')
+                        ->extraImgAttributes(['class' => 'to-banner-card__img'])
+                        ->extraAttributes(['class' => 'to-banner-card__frame']),
+
+                    Stack::make([
+                        Split::make([
+                            TextColumn::make('name')
+                                ->label(__('banners.col.name'))
+                                ->weight('medium')
+                                ->searchable()
+                                ->sortable()
+                                ->extraAttributes(['class' => 'to-banner-card__name']),
+                            TextColumn::make('status')
+                                ->badge()
+                                ->grow(false)
+                                ->formatStateUsing(static fn (string $state): string => __('banners.status_option.'.$state))
+                                ->color(static fn (string $state): string => self::statusColor($state)),
+                        ])->extraAttributes(['class' => 'to-banner-card__head']),
+
+                        TextColumn::make('stats_window')
+                            ->state(__('banners.card.window'))
+                            ->size('xs')
+                            ->color('gray')
+                            ->extraAttributes(['class' => 'to-banner-card__eyebrow']),
+
+                        Split::make([
+                            TextColumn::make('clicks_count')
+                                ->icon(self::ICON_CLICKS)
+                                ->color('gray')
+                                ->size('sm')
+                                ->grow(false)
+                                ->sortable()
+                                ->formatStateUsing(static fn ($state): string => __('banners.card.clicks', ['count' => (int) $state]))
+                                ->extraAttributes(['class' => 'to-banner-card__stat']),
+                            TextColumn::make('ctr')
+                                ->icon(self::ICON_CTR)
+                                ->color('gray')
+                                ->size('sm')
+                                ->grow(false)
+                                ->state(static fn (Banner $record): string => self::formatCtr($record))
+                                ->extraAttributes(['class' => 'to-banner-card__stat']),
+                        ])->extraAttributes(['class' => 'to-banner-card__stats']),
+                    ])->extraAttributes(['class' => 'to-banner-card__body']),
+                ])->extraAttributes(['class' => 'to-banner-card']),
             ])
             // Per-banner clicks + impressions over the last 30 days, computed as subqueries on the
-            // list query (no N+1). CTR is derived from the two in the column above.
+            // list query (no N+1). CTR is derived from the two in formatCtr().
             ->modifyQueryUsing(static fn (Builder $query): Builder => $query->withCount([
                 'events as clicks_count' => static fn (Builder $q) => $q
                     ->where('kind', BannerEvent::KIND_CLICK)->where('created_at', '>=', now()->subDays(self::STATS_WINDOW_DAYS)),
@@ -321,6 +345,17 @@ class BannerResource extends Resource
         }
 
         return $out;
+    }
+
+    /** Clicks-per-impression over the stats window, formatted for the card stat row. */
+    private static function formatCtr(Banner $record): string
+    {
+        $impressions = (int) ($record->impressions_count ?? 0);
+        $value = $impressions > 0
+            ? round(((int) $record->clicks_count) / $impressions * 100, 1).'%'
+            : '—';
+
+        return __('banners.card.ctr', ['value' => $value]);
     }
 
     /** Banner status → a Filament badge colour slot (the theme tokens supply the colours). */

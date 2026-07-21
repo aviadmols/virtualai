@@ -26,6 +26,13 @@ return [
         'updated' => 'עודכן',
     ],
 
+    // כרטיסי הרשת (עמוד הרשימה).
+    'card' => [
+        'window' => '30 הימים האחרונים',
+        'clicks' => ':count קליקים',
+        'ctr' => ':value CTR',
+    ],
+
     'status_option' => [
         'draft' => 'טיוטה',
         'active' => 'פעיל',

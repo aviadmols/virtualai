@@ -26,6 +26,13 @@ return [
         'updated' => 'Updated',
     ],
 
+    // The card-grid face (list page).
+    'card' => [
+        'window' => 'Last 30 days',
+        'clicks' => ':count clicks',
+        'ctr' => ':value CTR',
+    ],
+
     'status_option' => [
         'draft' => 'Draft',
         'active' => 'Active',
