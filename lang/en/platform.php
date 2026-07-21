@@ -414,6 +414,55 @@ return [
         ],
     ],
 
+    // Platform — the global Style Presets library.
+    'style_presets' => [
+        'title' => 'Style presets',
+        'singular' => 'Style preset',
+        'field' => [
+            'name' => 'Name',
+            'operation' => 'Type / where it appears',
+            'operation_help' => 'Sets the surface (Image Studio / Try-On / Banners) and the base model.',
+            'is_active' => 'Active',
+            'prompt' => 'Style prompt',
+            'prompt_help' => 'Drives the look. Product tokens like {{materials}} are filled at generation time.',
+            'reference' => 'Reference image',
+            'reference_help' => 'Used to generate the sample and shown as the slider thumbnail.',
+        ],
+        'col' => [
+            'sample' => 'Sample',
+            'name' => 'Name',
+            'surface' => 'Appears in',
+            'sample_status' => 'Sample',
+            'status' => 'Status',
+            'active' => 'Active',
+        ],
+        'operation' => [
+            'packshot_generation' => 'Clean packshot (Image Studio)',
+            'on_model_generation' => 'Product on a model (Image Studio)',
+            'try_on_generation' => 'Shopper try-on',
+            'banner_generation' => 'Banner',
+        ],
+        'surface' => [
+            'image_studio' => 'Image Studio',
+            'try_on' => 'Try-On',
+            'banner' => 'Banners',
+        ],
+        'sample' => [
+            'pending' => 'No sample',
+            'ready' => 'Ready',
+            'failed' => 'Failed',
+        ],
+        'status' => [
+            'draft' => 'Draft',
+            'approved' => 'Approved',
+        ],
+        'filter' => [
+            'operation' => 'Type',
+        ],
+        'empty' => 'No style presets yet',
+        'empty_sub' => 'Create a style — a reference image + a prompt — then generate a sample and approve it.',
+    ],
+
     // P3 — Sites (cross-account, full CRUD via audited seams).
     'sites' => [
         'title' => 'Sites',

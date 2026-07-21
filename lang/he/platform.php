@@ -413,6 +413,55 @@ return [
         ],
     ],
 
+    // ספריית סגנונות התמונה הגלובלית (מנהל-על).
+    'style_presets' => [
+        'title' => 'סגנונות תמונה',
+        'singular' => 'סגנון',
+        'field' => [
+            'name' => 'שם',
+            'operation' => 'סוג / היכן מופיע',
+            'operation_help' => 'קובע את המשטח (Image Studio / Try-On / באנרים) ואת המודל הבסיסי.',
+            'is_active' => 'פעיל',
+            'prompt' => 'פרומט הסגנון',
+            'prompt_help' => 'מגדיר את המראה. טוקנים של המוצר כמו {{materials}} מתמלאים בזמן היצירה.',
+            'reference' => 'תמונת רפרנס',
+            'reference_help' => 'משמשת ליצירת הדוגמה ומוצגת כתמונה בסליידר.',
+        ],
+        'col' => [
+            'sample' => 'דוגמה',
+            'name' => 'שם',
+            'surface' => 'מופיע ב',
+            'sample_status' => 'דוגמה',
+            'status' => 'סטטוס',
+            'active' => 'פעיל',
+        ],
+        'operation' => [
+            'packshot_generation' => 'תמונת מוצר נקייה (Image Studio)',
+            'on_model_generation' => 'מוצר על דוגמן/ית (Image Studio)',
+            'try_on_generation' => 'התאמה של השופר',
+            'banner_generation' => 'באנר',
+        ],
+        'surface' => [
+            'image_studio' => 'Image Studio',
+            'try_on' => 'Try-On',
+            'banner' => 'באנרים',
+        ],
+        'sample' => [
+            'pending' => 'אין דוגמה',
+            'ready' => 'מוכן',
+            'failed' => 'נכשל',
+        ],
+        'status' => [
+            'draft' => 'טיוטה',
+            'approved' => 'מאושר',
+        ],
+        'filter' => [
+            'operation' => 'סוג',
+        ],
+        'empty' => 'עדיין אין סגנונות',
+        'empty_sub' => 'צרו סגנון — תמונת רפרנס + פרומט — ואז ייצרו דוגמה ואשרו אותה.',
+    ],
+
     // P3 — אתרים (חוצה-חשבונות, CRUD מלא דרך תפרים מבוקרים).
     'sites' => [
         'title' => 'אתרים',
