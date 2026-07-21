@@ -84,7 +84,8 @@ class TryOnPrompt extends Page implements HasForms
         $this->defaultPrompt = $this->globalDefaultPrompt();
 
         if ($site === null) {
-            $this->form->fill([self::FIELD_PROMPT => '']);
+            // No shop yet: still show the editable platform default as the starting text.
+            $this->form->fill([self::FIELD_PROMPT => $this->defaultPrompt]);
 
             return;
         }
@@ -96,7 +97,11 @@ class TryOnPrompt extends Page implements HasForms
             ->siteScoped((int) $site->account_id, (int) $site->getKey(), self::OPERATION)
             ->value('user_prompt');
 
-        $this->form->fill([self::FIELD_PROMPT => (string) ($current ?? '')]);
+        // Pre-fill the merchant's OWN prompt when they have one; otherwise seed the box with the
+        // real platform-default TEXT (editable), not just a greyed-out placeholder — so they can
+        // tweak the working prompt instead of starting from a blank field. Clearing it and saving
+        // still falls back to the platform default.
+        $this->form->fill([self::FIELD_PROMPT => (string) ($current ?: $this->defaultPrompt)]);
     }
 
     public function form(Form $form): Form
