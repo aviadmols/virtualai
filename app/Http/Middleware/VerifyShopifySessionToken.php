@@ -80,10 +80,21 @@ final class VerifyShopifySessionToken
                 ->where('shop_domain', $payload->shopDomain)
                 ->first();
 
-            // Re-read through the global scope; an uninstalled shop fails the same way an
-            // unknown one does — the embedded surface never reveals more than that.
-            if ($connection === null || ! $connection->isInstalled()) {
+            // No connection at all = a shop we never installed — reject the same as unknown.
+            if ($connection === null) {
                 return $this->reject(self::CODE_UNKNOWN_SHOP, WidgetResponse::STATUS_UNAUTHORIZED);
+            }
+
+            // SELF-HEAL a stale 'uninstalled' status. The Bearer we already verified above is an
+            // App Bridge session token — Shopify only mints one for an app that IS installed in
+            // this shop, so it is Shopify's own proof of installation. A connection we still mark
+            // 'uninstalled' is therefore stale (an uninstall webhook fired, then the app was
+            // reopened/reinstalled without our OAuth flipping it back), which is exactly the
+            // "We couldn't load your account" dead-end. Reactivate it here; EmbeddedSessionController
+            // then re-mints the offline token via token exchange. We NEVER reject a shop Shopify
+            // itself says is installed.
+            if (! $connection->isInstalled()) {
+                $connection->transitionTo(ShopifyConnection::STATUS_INSTALLED, ['reason' => 'embedded_session_reactivation']);
             }
 
             $site = $connection->site;

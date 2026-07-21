@@ -131,6 +131,31 @@ class ShopifyEmbeddedApiTest extends TestCase
         $this->assertStringNotContainsString($siteB->site_key, $response->getContent());
     }
 
+    public function test_a_stale_uninstalled_connection_self_heals_on_a_valid_session_token(): void
+    {
+        [$site, $owner] = $this->installShop(self::SHOP);
+
+        // Simulate the "We couldn't load your account" dead-end: an uninstall webhook flipped the
+        // connection to 'uninstalled', but Shopify still has the app installed (managed install /
+        // reopen), so App Bridge keeps minting a valid session token for this shop.
+        $connection = ShopifyConnection::query()->withoutGlobalScopes()
+            ->where('shop_domain', self::SHOP)->firstOrFail();
+        $connection->forceFill(['status' => ShopifyConnection::STATUS_UNINSTALLED])->save();
+
+        // A valid token is Shopify's own proof of installation — the app must load, not reject.
+        $response = $this->withToken($this->mintToken(self::SHOP))->postJson(self::SESSION);
+
+        $response->assertOk();
+        $response->assertJsonPath('dashboard_url', '/merchant/'.$site->slug);
+        $this->assertAuthenticatedAs($owner);
+
+        // The stale status was healed in place — the next open sees a normal installed shop.
+        $this->assertSame(
+            ShopifyConnection::STATUS_INSTALLED,
+            $connection->fresh()->status,
+        );
+    }
+
     // === HELPERS ===
 
     /** @return array{0: Site, 1: User} */
