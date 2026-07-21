@@ -8,8 +8,9 @@ use App\Domain\Ai\BannerResult;
 use App\Domain\Ai\ImagePayload;
 use App\Domain\Ai\OpenRouterException;
 use App\Domain\Ai\OperationConfig;
-use App\Domain\Credits\CreditGate;
+use App\Domain\Ai\StylePresetApplier;
 use App\Domain\Credits\CreditDenied;
+use App\Domain\Credits\CreditGate;
 use App\Domain\Credits\CreditLedgerService;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Credits\Reservation;
@@ -62,6 +63,7 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
 
     // Actionable failure messages (shared i18n with the try-on money path; en/he 1:1).
     private const MSG_COST_NOT_CONFIGURED = 'platform.generation.cost_not_configured';
+
     private const MSG_COST_UNAVAILABLE = 'platform.generation.cost_unavailable';
 
     public function __construct(
@@ -141,6 +143,9 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
         $account = Account::query()->findOrFail($this->accountId);
 
         $config = $this->resolver()->for(self::OPERATION_KEY, $site, $site->product_category ?: null);
+
+        // Apply the merchant's chosen STYLE (swaps only the prompt; fail-open on a stale id).
+        $config = app(StylePresetApplier::class)->applyTo($config, $asset->meta[BannerAsset::META_STYLE_ID] ?? null);
 
         // Fail EARLY on a flat-rate model with no configured price, before reserving/calling.
         if ($config->flatRatePriceMissing()) {

@@ -77,6 +77,7 @@ final class StartBannerGeneration
                 'meta' => [
                     BannerAsset::META_RETENTION_DAYS => $banner->site?->retention_days
                         ?? Site::DEFAULT_RETENTION_DAYS,
+                    BannerAsset::META_STYLE_ID => $request->styleId,
                 ],
             ]);
             $asset->save();

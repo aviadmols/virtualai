@@ -20,6 +20,8 @@ final readonly class BannerGenerationRequest
         public string $clientRequestId,
         public ?string $referenceBytes = null,
         public ?string $referenceMime = null,
+        // The chosen global style preset (null = the banner operation's default look).
+        public ?int $styleId = null,
     ) {}
 
     /** True when the merchant attached a reference image to guide the generation. */

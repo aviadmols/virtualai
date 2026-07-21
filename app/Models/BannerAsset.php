@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Domain\Activity\ActivityRecorder;
 use App\Models\Concerns\BelongsToAccount;
+use Database\Factories\BannerAssetFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,15 +26,19 @@ use RuntimeException;
  */
 class BannerAsset extends Model
 {
-    /** @use HasFactory<\Database\Factories\BannerAssetFactory> */
+    /** @use HasFactory<BannerAssetFactory> */
     use BelongsToAccount, HasFactory;
 
     // === CONSTANTS ===
     // The status machine states (mirrors Generation).
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_PROCESSING = 'processing';
+
     public const STATUS_SUCCEEDED = 'succeeded';
+
     public const STATUS_FAILED = 'failed';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     public const STATUSES = [
@@ -59,9 +64,14 @@ class BannerAsset extends Model
 
     // Meta keys — the structured snapshot an asset carries.
     public const META_PROMPT_SNAPSHOT = 'prompt_snapshot';
+
     public const META_FAILURE_MESSAGE = 'failure_message';
+
     public const META_OPENROUTER_GENERATION_ID = 'openrouter_generation_id';
+
     public const META_RETENTION_DAYS = 'retention_days';
+
+    public const META_STYLE_ID = 'style_preset_id';
 
     // status / idempotency_key / image paths / cost are set by the pipeline, never from
     // arbitrary request input. account_id is stamped by BelongsToAccount.

@@ -126,6 +126,10 @@ class BannerCandidatesWidget extends Widget
                 banner: $this->record,
                 brief: (string) $asset->brief,
                 clientRequestId: (string) Str::uuid(),
+                // Carry the original style forward so a retry keeps the same look.
+                styleId: ($asset->meta[BannerAsset::META_STYLE_ID] ?? null) !== null
+                    ? (int) $asset->meta[BannerAsset::META_STYLE_ID]
+                    : null,
             ));
             Notification::make()->success()->title(__('banners.generate.queued'))->send();
         } catch (\Throwable $e) {

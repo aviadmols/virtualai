@@ -62,6 +62,8 @@ return [
     'generate' => [
         'action' => 'Generate image',
         'heading' => 'Describe the banner',
+        'style' => 'Style (optional)',
+        'style_help' => 'Pick a curated look. Your brief still guides the content.',
         'brief' => 'Brief',
         'brief_help' => 'Describe the banner you want — theme, mood, colors, product. Each generate makes a new candidate.',
         'reference' => 'Reference image (optional)',

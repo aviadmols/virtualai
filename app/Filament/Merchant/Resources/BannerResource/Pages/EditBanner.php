@@ -11,9 +11,11 @@ use App\Domain\Banners\StartBannerGeneration;
 use App\Filament\Merchant\Pages\BannerPlacements;
 use App\Filament\Merchant\Resources\BannerResource;
 use App\Models\Banner;
+use App\Models\StylePreset;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
@@ -39,6 +41,7 @@ class EditBanner extends EditRecord
 
     // The private disk the reference upload lands on before we read + delete it.
     private const REF_DISK = 'local';
+
     private const REF_DIR = 'banner-refs';
 
     public function getTitle(): string
@@ -153,6 +156,14 @@ class EditBanner extends EditRecord
             ->modalHeading(__('banners.generate.heading'))
             ->modalSubmitActionLabel(__('banners.generate.submit'))
             ->form([
+                // Optional global STYLE — swaps the banner prompt for the chosen look. Shown only
+                // when approved banner styles exist; the brief still guides the content.
+                Select::make('style_id')
+                    ->label(__('banners.generate.style'))
+                    ->helperText(__('banners.generate.style_help'))
+                    ->options($this->styleOptions())
+                    ->native(false)
+                    ->visible(fn (): bool => $this->styleOptions() !== []),
                 Textarea::make('brief')
                     ->label(__('banners.generate.brief'))
                     ->helperText(__('banners.generate.brief_help'))
@@ -180,6 +191,7 @@ class EditBanner extends EditRecord
                 clientRequestId: (string) Str::uuid(),
                 referenceBytes: $referenceBytes,
                 referenceMime: $referenceMime,
+                styleId: ($data['style_id'] ?? null) !== null ? (int) $data['style_id'] : null,
             ));
 
             Notification::make()->success()->title(__('banners.generate.queued'))->send();
@@ -193,6 +205,14 @@ class EditBanner extends EditRecord
             ]);
             Notification::make()->danger()->title(__('banners.generate.failed'))->send();
         }
+    }
+
+    /** Approved banner styles (id => name) for the generate form. @return array<int,string> */
+    private function styleOptions(): array
+    {
+        return StylePreset::query()
+            ->approvedForOperations(StylePreset::SURFACE_OPERATIONS[StylePreset::SURFACE_BANNER])
+            ->pluck('name', 'id')->all();
     }
 
     /**
