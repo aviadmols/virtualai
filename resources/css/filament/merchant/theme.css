@@ -49,6 +49,15 @@
     --toa-accent-line: #6366f1;   /* indigo-500 — active-nav indicator bar */
     --toa-focus: rgb(79 70 229 / 32%);
 
+    /* "Upgraded light" — the merchant panel opts geometry + gradients into the shared component
+       hooks; the platform theme sets none of these, so it keeps its calm hairline look. */
+    --toa-radius-card: 14px;                         /* richer card corners (platform stays 10px) */
+    --toa-shadow-card: var(--to-shadow-layered);     /* layered soft shadow on cards/sections */
+    --toa-shadow-card-hover: var(--to-shadow-layered-hover);
+    --toa-nav-rail: var(--toa-grad-accent);          /* the active-nav indicator becomes a gradient */
+    --toa-btn-primary-bg: var(--toa-grad-accent);    /* primary CTAs pick up the indigo->violet ramp */
+    --toa-btn-primary-bg-hover: var(--toa-grad-accent-hover);
+
     /* Re-map Filament's own primary scale onto Indigo so native buttons, links,
        toggles, badges, and active states inherit the brand for free. Space-
        separated RGB triples (Filament's <alpha-value> format). */

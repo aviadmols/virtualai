@@ -1,5 +1,22 @@
 # Design tokens — the single source of VALUES
 
+> ⚠️ **LIVE TRUTH (2026-07): read `resources/css/to/tokens.css`, not the historical tables below.**
+> The shipped system is the **"OpenRouter light"** base (Inter+Assistant, indigo `#4f46e5` accent,
+> neutral `#fafafa` canvas, 8/10px radii, hairline-led shadows) — NOT the original Heebo/monochrome
+> spec documented further down (kept for history). The **merchant panel** now layers an
+> **"upgraded light"** skin on top, via *additive* tokens + merchant-`theme.css` `:root` overrides
+> (the platform panel opts into none of them and is byte-identical):
+>
+> - **Radius:** `--to-r-card-lg: 16px` (hero/feature); merchant `--toa-radius-card: 14px`.
+> - **Shadows:** `--to-shadow-layered`, `--to-shadow-layered-hover` (3-stop soft), `--to-shadow-accent-glow`; merchant aliases `--toa-shadow-card` onto the layered stack.
+> - **Gradients (admin):** `--toa-grad-accent` (indigo→violet, CTAs/active), `--toa-grad-warm` (the Vsio logo pink→orange, hero garnish/badges), `--toa-grad-scrim` (image-overlay text protection).
+> - **Secondary accents:** `--toa-accent-2..5` (pink/orange/sky/emerald) + `-soft` pairs for icon-tile variety.
+> - **Hero geometry:** `--toa-hero-h`, `--toa-hero-tile-w`, `--toa-thumb-lg`.
+> - **Component hooks (fallback pattern `var(--toa-hook, existing)`):** `--toa-btn-primary-bg`, `--toa-nav-rail` — the merchant sets them; shared components fall back to the flat look for the platform.
+>
+> **Law unchanged:** every value still lives in `tokens.css`; panels diverge only through the
+> documented adaptable set in their own `theme.css`. `--tow-*` (widget) is untouched by the redesign.
+
 > `product-ux-architect` owns these **values**. `admin-design-system` turns each
 > into a CSS custom property and binds it; it never invents a value. **No literal
 > (`#000`, `7px`, `0.5s`) may appear in any screen spec or any built file unless it

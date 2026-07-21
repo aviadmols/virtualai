@@ -119,6 +119,7 @@
     --to-r-none: 0;
     --to-r-control: 8px;   /* buttons / fields / chips / badges */
     --to-r-card: 10px;     /* card / modal / image frame (OpenRouter ~8–12px) */
+    --to-r-card-lg: 16px;  /* hero / feature / imagery surfaces (the "upgraded light" step) */
     --to-r-pill: 999px;
 
     /* ---- 1.5 Shadows (MINIMAL — OpenRouter leans on hairlines) --------
@@ -133,6 +134,20 @@
     /* Dense admin cards: no drop at all — pure hairline (a whisper of ambient). */
     --to-shadow-card-dense: 0 1px 2px rgb(17 24 39 / 3%);
     --to-shadow-card-hover: 0 4px 10px rgb(17 24 39 / 7%);
+    /* ---- 1.5b Layered soft shadows (the "upgraded light" merchant look) --------
+       A richer, three-stop ambient stack for feature cards + the Overview hero. The merchant
+       theme aliases --toa-shadow-card onto these; the platform never opts in, so its calm
+       hairline surface is untouched (additive-only law). */
+    --to-shadow-layered:
+        0 1px 2px rgb(17 24 39 / 4%),
+        0 4px 12px rgb(17 24 39 / 5%),
+        0 16px 40px rgb(17 24 39 / 6%);
+    --to-shadow-layered-hover:
+        0 2px 4px rgb(17 24 39 / 6%),
+        0 8px 20px rgb(17 24 39 / 8%),
+        0 24px 56px rgb(17 24 39 / 10%);
+    /* The glow under a gradient CTA / a selected pricing card (indigo-tinted). */
+    --to-shadow-accent-glow: 0 8px 24px rgb(79 70 229 / 22%);
 
     /* ---- 1.6 Motion (snappy — OpenRouter SaaS feel) ------------------
        RETUNED: the slow 0.5s Tabuzzco "calm" signature is replaced by crisp,
@@ -180,6 +195,31 @@
     --toa-border: #e5e7eb;               /* neutral-200 — the OpenRouter hairline */
     --toa-border-strong: #d1d5db;        /* neutral-300 — firmer rule */
     --toa-focus: rgb(79 70 229 / 30%);   /* indigo focus ring; panels may override */
+
+    /* 2.1b "Upgraded light" gradients + secondary accents (the merchant redesign). Declared here
+       (single-declaration-site law) but only the MERCHANT theme opts them into card/CTA/nav hooks;
+       the platform never references them, so its calm flat look is unchanged. --toa-grad-warm is
+       the Vsio logo ramp (pink -> orange) for hero garnish / "popular" badges / avatar tiles. */
+    --toa-grad-accent: linear-gradient(135deg, #4f46e5, #7c3aed);   /* indigo-600 -> violet-600 */
+    --toa-grad-accent-hover: linear-gradient(135deg, #4338ca, #6d28d9);
+    --toa-grad-warm: linear-gradient(135deg, #f472b6, #fda4af 55%, #fdba74); /* the wordmark ramp */
+    /* Image-overlay scrim: the 72% bottom stop keeps 12–14px white caption text >= 4.5:1. */
+    --toa-grad-scrim: linear-gradient(to top, rgb(17 24 39 / 72%), rgb(17 24 39 / 8%) 55%, transparent);
+
+    /* Secondary solid accents for icon-tile variety (paired with a soft tint background). */
+    --toa-accent-2: #ec4899;             /* pink-500 */
+    --toa-accent-2-soft: #fdf2f8;        /* pink-50 */
+    --toa-accent-3: #f97316;             /* orange-500 */
+    --toa-accent-3-soft: #fff7ed;        /* orange-50 */
+    --toa-accent-4: #0ea5e9;             /* sky-500 */
+    --toa-accent-4-soft: #f0f9ff;        /* sky-50 */
+    --toa-accent-5: #10b981;             /* emerald-500 */
+    --toa-accent-5-soft: #ecfdf5;        /* emerald-50 */
+
+    /* Overview-hero geometry. */
+    --toa-hero-h: 15rem;                 /* the showcase strip height */
+    --toa-hero-tile-w: 12.5rem;          /* one showcase tile */
+    --toa-thumb-lg: 6rem;                /* larger lead-card / list thumbnails */
 
     /* 2.2 Admin typography — OpenRouter hierarchy. RETUNED: normal-weight bold,
        NOT ultra-black. The KPI numeral + page title are the heaviest the chrome
