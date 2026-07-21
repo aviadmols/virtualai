@@ -82,6 +82,7 @@
             </div>
         </div>
 
+        @verbatim
         <script>
             function tryOnPromptEditor() {
                 return {
@@ -124,6 +125,7 @@
                 };
             }
         </script>
+        @endverbatim
     @else
         <x-filament::section>
             <p>{{ __('try_on_prompt.no_site') }}</p>

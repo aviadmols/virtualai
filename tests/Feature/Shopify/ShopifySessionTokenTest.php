@@ -208,16 +208,22 @@ class ShopifySessionTokenTest extends TestCase
             ->assertJsonPath('error.code', 'unknown_shop');
     }
 
-    public function test_an_uninstalled_shop_answers_exactly_like_an_unknown_one(): void
+    public function test_a_stale_uninstalled_shop_self_heals_on_a_valid_session_token(): void
     {
         [$site] = $this->installShop(self::SHOP);
         DB::table('shopify_connections')
             ->where('shop_domain', self::SHOP)
             ->update(['status' => ShopifyConnection::STATUS_UNINSTALLED]);
 
-        $this->withToken($this->mintToken())->getJson(self::PROBE_PATH)
-            ->assertUnauthorized()
-            ->assertJsonPath('error.code', 'unknown_shop');
+        // A valid App Bridge session token is Shopify's OWN proof the app is still installed for
+        // this shop, so a connection we still mark 'uninstalled' is stale — it is REACTIVATED in
+        // place and the request proceeds (this is the "We couldn't load your account" self-heal).
+        $this->withToken($this->mintToken())->getJson(self::PROBE_PATH)->assertOk();
+
+        $this->assertSame(
+            ShopifyConnection::STATUS_INSTALLED,
+            (string) DB::table('shopify_connections')->where('shop_domain', self::SHOP)->value('status'),
+        );
     }
 
     public function test_an_account_with_no_owner_is_a_typed_403(): void

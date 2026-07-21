@@ -247,6 +247,7 @@ class ProductScanIsolationSpotCheckTest extends TestCase
             'App\\Models\\Prompt',
             'App\\Models\\PlatformSetting',
             'App\\Models\\PlaygroundRun',
+            'App\\Models\\StylePreset',
             'App\\Models\\StoryboardProject',
             'App\\Models\\StoryboardAsset',
             'App\\Models\\StoryboardFrame',
