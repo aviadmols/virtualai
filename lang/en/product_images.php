@@ -35,6 +35,7 @@ return [
         'sub' => 'Choose what to generate, which photo to use, and for which products. You will see the estimated cost before it runs.',
         'cta' => 'Generate',
         'operation' => 'What to generate',
+        'style' => 'Choose a style',
         'source' => 'Which photo to transform',
         'source_help' => 'A product with no image in that slot is skipped — never generated from a different photo.',
         'products' => 'Products',

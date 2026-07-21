@@ -12,6 +12,7 @@ use App\Models\AiOperation;
 use App\Models\Product;
 use App\Models\ProductAsset;
 use App\Models\ProductImageBatch;
+use App\Models\StylePreset;
 use App\Support\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
@@ -74,6 +75,32 @@ class ProductImageBatchTest extends TestCase
         $batch = Tenant::run($shop['account'], fn () => ProductImageBatch::query()->findOrFail($second->batch->getKey()));
         $this->assertSame(ProductImageBatch::STATUS_COMPLETED, $batch->status);
         $this->assertSame(1, $batch->skipped);
+    }
+
+    /** A chosen style rides onto the asset (with its base operation) for the worker to apply. */
+    public function test_a_chosen_style_is_stored_on_the_asset_with_its_base_operation(): void
+    {
+        $shop = $this->makeShop();
+
+        $preset = StylePreset::create([
+            'name' => 'Vintage on a model',
+            'operation_key' => AiOperation::KEY_ON_MODEL_GENERATION,
+            'user_prompt' => 'A vintage editorial look.',
+            'status' => StylePreset::STATUS_APPROVED,
+            'is_active' => true,
+        ]);
+
+        Tenant::run($shop['account'], fn () => app(StartProductImageBatch::class)->handle(
+            site: $shop['site'],
+            productIds: [(int) $shop['product']->getKey()],
+            operationKey: (string) $preset->operation_key, // the studio derives this from the style
+            sourcePick: ProductImageBatch::SOURCE_MAIN,
+            styleId: $preset->id,
+        ));
+
+        $asset = Tenant::run($shop['account'], fn (): ProductAsset => ProductAsset::query()->firstOrFail());
+        $this->assertSame($preset->id, (int) $asset->style_preset_id);
+        $this->assertSame(AiOperation::KEY_ON_MODEL_GENERATION, $asset->operation_key);
     }
 
     /** "Regenerate" VARIES the key on purpose: a new asset, separately charged. */

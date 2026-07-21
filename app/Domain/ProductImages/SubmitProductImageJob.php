@@ -6,6 +6,7 @@ use App\Domain\Ai\AiOperationResolver;
 use App\Domain\Ai\ImagePayload;
 use App\Domain\Ai\OpenRouterException;
 use App\Domain\Ai\ProductImageCaller;
+use App\Domain\Ai\StylePresetApplier;
 use App\Domain\Credits\CreditDenied;
 use App\Domain\Credits\CreditGate;
 use App\Domain\Credits\CreditLedgerService;
@@ -145,6 +146,9 @@ final class SubmitProductImageJob extends TenantAwareJob implements ShouldBeUniq
         $product = Product::query()->findOrFail($asset->product_id);
 
         $config = $this->resolver()->for($asset->operation_key, $site, $product->product_type ?: null);
+
+        // Apply the merchant's chosen STYLE (swaps only the user prompt; fail-open on a stale id).
+        $config = app(StylePresetApplier::class)->applyTo($config, $asset->style_preset_id);
 
         // A flat-rate model with NO configured price could never charge honestly -> refuse BEFORE
         // reserving or rendering (no wasted spend upstream, no dishonest charge here).

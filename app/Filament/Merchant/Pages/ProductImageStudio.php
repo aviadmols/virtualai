@@ -18,8 +18,10 @@ use App\Models\AiOperation;
 use App\Models\Product;
 use App\Models\ProductAsset;
 use App\Models\ProductImageBatch;
+use App\Models\StylePreset;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Get;
 use Filament\Notifications\Notification;
@@ -74,6 +76,10 @@ class ProductImageStudio extends Page
 
     // Form field names.
     private const FIELD_OPERATION = 'operation_key';
+
+    private const FIELD_STYLE = 'style_id';
+
+    private const FIELD_STYLE_LABEL = 'product_images.generate.style';
 
     private const FIELD_SOURCE = 'source_pick';
 
@@ -400,11 +406,25 @@ class ProductImageStudio extends Page
             ->modalDescription(__(self::GENERATE_SUB))
             ->modalSubmitActionLabel(__(self::GENERATE_CTA))
             ->form([
+                // The visual style picker (approved Image-Studio presets) — replaces the raw
+                // operation dropdown whenever styles exist. Each style carries its own base
+                // operation (packshot / on-model) + prompt.
+                Radio::make(self::FIELD_STYLE)
+                    ->label(__(self::FIELD_STYLE_LABEL))
+                    ->options($this->styleOptions())
+                    ->descriptions($this->styleDescriptions())
+                    ->default(fn (): ?int => array_key_first($this->styleOptions()))
+                    ->visible(fn (): bool => $this->styleOptions() !== [])
+                    ->required(fn (): bool => $this->styleOptions() !== [])
+                    ->live(),
+
+                // Fallback: the raw operation picker, shown only when no approved styles exist yet.
                 Select::make(self::FIELD_OPERATION)
                     ->label(__(self::FIELD_OPERATION_LABEL))
                     ->options($this->operationOptions())
                     ->default(AiOperation::KEY_PACKSHOT_GENERATION)
-                    ->required()
+                    ->visible(fn (): bool => $this->styleOptions() === [])
+                    ->required(fn (): bool => $this->styleOptions() === [])
                     ->live(),
 
                 Select::make(self::FIELD_SOURCE)
@@ -429,15 +449,54 @@ class ProductImageStudio extends Page
                     ->content(fn (Get $get): string => $this->estimateLine($get)),
             ])
             ->action(function (array $data): void {
+                [$operationKey, $styleId] = $this->resolveStyle($data);
+
                 $result = app(StartProductImageBatch::class)->handle(
                     site: $this->shopSite(),
                     productIds: array_map('intval', (array) ($data[self::FIELD_PRODUCTS] ?? [])),
-                    operationKey: (string) $data[self::FIELD_OPERATION],
+                    operationKey: $operationKey,
                     sourcePick: (string) $data[self::FIELD_SOURCE],
+                    styleId: $styleId,
                 );
 
                 $this->notifyResult($result);
             });
+    }
+
+    /**
+     * The chosen [operationKey, styleId]. A selected style supplies BOTH its base operation and
+     * its id; otherwise the raw operation fallback is used with no style. @return array{0:string,1:?int}
+     */
+    private function resolveStyle(array $data): array
+    {
+        $styleId = ($data[self::FIELD_STYLE] ?? null) !== null ? (int) $data[self::FIELD_STYLE] : null;
+
+        if ($styleId !== null) {
+            $preset = StylePreset::find($styleId);
+            if ($preset !== null) {
+                return [(string) $preset->operation_key, $styleId];
+            }
+        }
+
+        return [(string) ($data[self::FIELD_OPERATION] ?? AiOperation::KEY_PACKSHOT_GENERATION), null];
+    }
+
+    /** The approved Image-Studio styles (id => name) for the picker. @return array<int,string> */
+    private function styleOptions(): array
+    {
+        return StylePreset::query()
+            ->approvedForOperations(StylePreset::SURFACE_OPERATIONS[StylePreset::SURFACE_IMAGE_STUDIO])
+            ->pluck('name', 'id')->all();
+    }
+
+    /** Per-style sub-label: which base look it produces (clean packshot / on a model). @return array<int,string> */
+    private function styleDescriptions(): array
+    {
+        return StylePreset::query()
+            ->approvedForOperations(StylePreset::SURFACE_OPERATIONS[StylePreset::SURFACE_IMAGE_STUDIO])
+            ->get(['id', 'operation_key'])
+            ->mapWithKeys(fn (StylePreset $p): array => [$p->id => __('product_images.operation.'.$p->operation_key)])
+            ->all();
     }
 
     /** Approve every image still awaiting review. */
@@ -662,7 +721,7 @@ class ProductImageStudio extends Page
         $plan = app(StartProductImageBatch::class)->plan(
             site: $this->shopSite(),
             productIds: $productIds,
-            operationKey: (string) $get(self::FIELD_OPERATION),
+            operationKey: $this->operationFromGet($get),
             sourcePick: (string) $get(self::FIELD_SOURCE),
         );
 
@@ -684,6 +743,21 @@ class ProductImageStudio extends Page
     private function money(int $microUsd): string
     {
         return '$'.number_format(CreditMath::microToUsd($microUsd), 2);
+    }
+
+    /** The operation the estimate should price: a selected style's base op, else the raw picker. */
+    private function operationFromGet(Get $get): string
+    {
+        $styleId = $get(self::FIELD_STYLE);
+
+        if ($styleId !== null && $styleId !== '') {
+            $op = StylePreset::query()->whereKey((int) $styleId)->value('operation_key');
+            if ($op !== null) {
+                return (string) $op;
+            }
+        }
+
+        return (string) ($get(self::FIELD_OPERATION) ?? AiOperation::KEY_PACKSHOT_GENERATION);
     }
 
     /** The two DB-managed product-image operations, labelled from the i18n catalog. @return array<string,string> */

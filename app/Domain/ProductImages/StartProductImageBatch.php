@@ -121,6 +121,7 @@ final class StartProductImageBatch
         string $sourcePick,
         ?string $clientRequestId = null,
         ?int $sourceAssetId = null,
+        ?int $styleId = null,
     ): BatchResult {
         $plan = $this->plan($site, $productIds, $operationKey, $sourcePick);
         $account = $site->account;
@@ -164,6 +165,7 @@ final class StartProductImageBatch
             $sourcePick,
             $clientRequestId ?? ProductAsset::REQUEST_BATCH,
             $sourceAssetId,
+            $styleId,
         );
     }
 
@@ -176,6 +178,7 @@ final class StartProductImageBatch
         string $sourcePick,
         string $clientRequestId,
         ?int $sourceAssetId = null,
+        ?int $styleId = null,
     ): BatchResult {
         $total = $plan->count() + count($plan->skippedProductIds);
 
@@ -217,7 +220,7 @@ final class StartProductImageBatch
         $skippedExisting = 0;
 
         foreach ($this->products($site, $plan->eligibleProductIds) as $product) {
-            $asset = $this->createAsset($site, $batch, $product, $operationKey, $sourcePick, $clientRequestId, $sourceAssetId);
+            $asset = $this->createAsset($site, $batch, $product, $operationKey, $sourcePick, $clientRequestId, $sourceAssetId, $styleId);
 
             if ($asset === null) {
                 $skippedExisting++;
@@ -256,6 +259,7 @@ final class StartProductImageBatch
         string $sourcePick,
         string $clientRequestId,
         ?int $sourceAssetId = null,
+        ?int $styleId = null,
     ): ?ProductAsset {
         $sourceUrl = SourceImagePicker::urlFor($product, $sourcePick);
 
@@ -279,7 +283,7 @@ final class StartProductImageBatch
         );
 
         try {
-            return DB::transaction(function () use ($site, $batch, $product, $operationKey, $sourceUrl, $sourceHash, $key, $clientRequestId, $sourceAssetId): ?ProductAsset {
+            return DB::transaction(function () use ($site, $batch, $product, $operationKey, $sourceUrl, $sourceHash, $key, $clientRequestId, $sourceAssetId, $styleId): ?ProductAsset {
                 if (ProductAsset::query()->where('idempotency_key', $key)->exists()) {
                     return null;
                 }
@@ -290,6 +294,7 @@ final class StartProductImageBatch
                     'batch_id' => $batch->getKey(),
                     'source_asset_id' => $sourceAssetId,
                     'operation_key' => $operationKey,
+                    'style_preset_id' => $styleId,
                     'status' => ProductAsset::STATUS_PENDING,
                     'review_status' => ProductAsset::REVIEW_AWAITING,
                     'client_request_id' => $clientRequestId,
