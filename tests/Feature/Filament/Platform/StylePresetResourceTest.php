@@ -4,12 +4,14 @@ namespace Tests\Feature\Filament\Platform;
 
 use App\Filament\Platform\Resources\StylePresetResource\Pages\CreateStylePreset;
 use App\Filament\Platform\Resources\StylePresetResource\Pages\ListStylePresets;
+use App\Jobs\GenerateStylePresetSampleJob;
 use App\Models\AiOperation;
 use App\Models\StylePreset;
 use App\Models\User;
 use App\Support\GlobalModels;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -75,6 +77,46 @@ class StylePresetResourceTest extends TestCase
             ->pluck('id')->all();
 
         $this->assertSame([$approved->id], $ids);
+    }
+
+    public function test_generate_sample_action_queues_the_job_and_marks_it_pending(): void
+    {
+        Bus::fake();
+        $preset = StylePreset::create([
+            'name' => 's', 'operation_key' => AiOperation::KEY_TRY_ON_GENERATION,
+            'user_prompt' => 'x', 'sample_status' => StylePreset::SAMPLE_READY,
+        ]);
+
+        Livewire::test(ListStylePresets::class)->callTableAction('sample', $preset);
+
+        Bus::assertDispatched(GenerateStylePresetSampleJob::class, fn ($j): bool => $j->presetId === $preset->id);
+        $this->assertSame(StylePreset::SAMPLE_PENDING, $preset->refresh()->sample_status);
+    }
+
+    public function test_approve_action_makes_the_preset_live(): void
+    {
+        $preset = StylePreset::create([
+            'name' => 's', 'operation_key' => AiOperation::KEY_TRY_ON_GENERATION, 'user_prompt' => 'x',
+        ]);
+
+        Livewire::test(ListStylePresets::class)->callTableAction('approve', $preset);
+
+        $this->assertSame(StylePreset::STATUS_APPROVED, $preset->refresh()->status);
+    }
+
+    public function test_the_sample_job_fails_soft_when_the_operation_cannot_resolve(): void
+    {
+        // No AiControlPlaneSeeder here => the operation has no resolvable prompt/model, so the
+        // runner path throws. The job must catch it and mark the sample failed (never crash).
+        $preset = StylePreset::create([
+            'name' => 's', 'operation_key' => AiOperation::KEY_TRY_ON_GENERATION,
+            'user_prompt' => 'A look made of {{materials}}.',
+        ]);
+
+        GenerateStylePresetSampleJob::dispatchSync($preset->id);
+
+        $this->assertSame(StylePreset::SAMPLE_FAILED, $preset->refresh()->sample_status);
+        $this->assertNull($preset->sample_image_path);
     }
 
     public function test_style_preset_is_a_registered_global_non_tenant_model(): void

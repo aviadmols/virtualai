@@ -6,6 +6,7 @@ use App\Domain\Media\MediaStorage;
 use App\Filament\Platform\Resources\StylePresetResource\Pages\CreateStylePreset;
 use App\Filament\Platform\Resources\StylePresetResource\Pages\EditStylePreset;
 use App\Filament\Platform\Resources\StylePresetResource\Pages\ListStylePresets;
+use App\Jobs\GenerateStylePresetSampleJob;
 use App\Models\StylePreset;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Section;
@@ -14,7 +15,10 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions\Action;
+use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -143,15 +147,64 @@ class StylePresetResource extends Resource
                     ->label(__('platform.style_presets.col.active'))
                     ->boolean(),
             ])
+            ->actions([
+                self::sampleAction(),
+                self::approveAction(),
+                self::unapproveAction(),
+                EditAction::make(),
+            ])
             ->filters([
                 SelectFilter::make('operation_key')
                     ->label(__('platform.style_presets.filter.operation'))
                     ->options(self::operationOptions()),
             ])
+            // The sample renders async on the worker; poll so the thumbnail + status update live.
+            ->poll('10s')
             ->emptyStateHeading(__('platform.style_presets.empty'))
             ->emptyStateDescription(__('platform.style_presets.empty_sub'))
             ->emptyStateIcon('heroicon-o-swatch')
             ->defaultSort('sort');
+    }
+
+    /** "Generate sample" — queue the preview render (reuses the playground runner, never charges). */
+    private static function sampleAction(): Action
+    {
+        return Action::make('sample')
+            ->label(__('platform.style_presets.action.sample'))
+            ->icon('heroicon-o-sparkles')
+            ->color('gray')
+            ->action(static function (StylePreset $record): void {
+                $record->update(['sample_status' => StylePreset::SAMPLE_PENDING]);
+                GenerateStylePresetSampleJob::dispatch((int) $record->getKey());
+
+                Notification::make()->success()->title(__('platform.style_presets.action.sample_queued'))->send();
+            });
+    }
+
+    /** "Approve" — the preset becomes selectable in the merchant/shopper slider. */
+    private static function approveAction(): Action
+    {
+        return Action::make('approve')
+            ->label(__('platform.style_presets.action.approve'))
+            ->icon('heroicon-o-check-circle')
+            ->color('success')
+            ->visible(static fn (StylePreset $record): bool => ! $record->isApproved())
+            ->action(static function (StylePreset $record): void {
+                $record->update(['status' => StylePreset::STATUS_APPROVED]);
+
+                Notification::make()->success()->title(__('platform.style_presets.action.approved'))->send();
+            });
+    }
+
+    /** "Unapprove" — pull the preset back out of the sliders. */
+    private static function unapproveAction(): Action
+    {
+        return Action::make('unapprove')
+            ->label(__('platform.style_presets.action.unapprove'))
+            ->icon('heroicon-o-x-circle')
+            ->color('warning')
+            ->visible(static fn (StylePreset $record): bool => $record->isApproved())
+            ->action(static fn (StylePreset $record) => $record->update(['status' => StylePreset::STATUS_DRAFT]));
     }
 
     public static function getPages(): array

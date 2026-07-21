@@ -86,6 +86,8 @@ final class MediaStorage
     // Playground (Super-Admin model test) result media prefix — NOT tenant-scoped.
     private const PATH_PLAYGROUND = 'playground';
 
+    private const PATH_STYLE_PRESETS = 'style-presets';
+
     // Storyboard (admin pre-production builder) media prefix — NOT tenant-scoped.
     private const PATH_STORYBOARD = 'storyboard';
 
@@ -201,6 +203,18 @@ final class MediaStorage
     {
         $extension = self::EXTENSIONS[strtolower($mime)] ?? self::DEFAULT_EXTENSION;
         $path = implode('/', [self::PATH_PLAYGROUND, $runId, self::KIND_RESULT.'-'.Str::random(24).'.'.$extension]);
+
+        return $this->write($path, $bytes, $mime, self::VISIBILITY_PRIVATE);
+    }
+
+    /**
+     * Store a global StylePreset SAMPLE image PRIVATE under a non-tenant path
+     * (style-presets/{preset}/...). Signed on demand for the admin view — never a tenant object.
+     */
+    public function storeStylePresetSample(int $presetId, string $bytes, string $mime): StoredMedia
+    {
+        $extension = self::EXTENSIONS[strtolower($mime)] ?? self::DEFAULT_EXTENSION;
+        $path = implode('/', [self::PATH_STYLE_PRESETS, $presetId, self::KIND_RESULT.'-'.Str::random(24).'.'.$extension]);
 
         return $this->write($path, $bytes, $mime, self::VISIBILITY_PRIVATE);
     }

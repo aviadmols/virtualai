@@ -459,6 +459,13 @@ return [
         'filter' => [
             'operation' => 'Type',
         ],
+        'action' => [
+            'sample' => 'Generate sample',
+            'sample_queued' => 'Sample generation started — it updates itself.',
+            'approve' => 'Approve',
+            'approved' => 'Approved — now live in the style slider.',
+            'unapprove' => 'Unapprove',
+        ],
         'empty' => 'No style presets yet',
         'empty_sub' => 'Create a style — a reference image + a prompt — then generate a sample and approve it.',
     ],
