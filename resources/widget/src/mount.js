@@ -81,7 +81,7 @@ function inject() {
     return;
   }
 
-  const anchor = findAddToCart(selectors);
+  const anchor = findAddToCart(selectors, state.platform);
 
   // Custom placement carries the merchant-picked anchor + position; the add-to-cart anchor is
   // its runtime fallback (place() uses it if the custom selector no longer resolves).

@@ -8,12 +8,23 @@
   It renders an EMPTY slot; the widget mounts the button INTO the slot (data-trayon-slot), so the
   merchant controls the exact position. The slot wins over the site's configured placement.
 
-    data-site-key     the PUBLIC site key (Vsio panel -> Sites -> Embed). Never the secret.
+    data-site-key     the PUBLIC site key. Never the secret.
     data-trayon-slot  the mount point the widget renders the trigger into.
     data-platform     'shopify' — the widget drives the Ajax cart, not a blind DOM click.
+
+  The site key resolves AUTOMATICALLY from the app-owned shop metafield the backend writes on
+  install ($app:settings/site_key — SyncShopMetafieldsJob); the block setting is only a manual
+  override for support cases.
 {% endcomment %}
 
-{% if block.settings.site_key != blank and product %}
+{% liquid
+  assign site_key = block.settings.site_key
+  if site_key == blank
+    assign site_key = app.metafields.settings.site_key.value
+  endif
+%}
+
+{% if site_key != blank and product %}
   {% liquid
     assign selected_variant = product.selected_or_first_available_variant
   %}
@@ -28,7 +39,7 @@
 
   <script
     src="{{ block.settings.script_src }}"
-    data-site-key="{{ block.settings.site_key }}"
+    data-site-key="{{ site_key }}"
     data-platform="shopify"
     data-product-id="{{ product.id }}"
     data-product-handle="{{ product.handle }}"
@@ -50,8 +61,8 @@
     {
       "type": "text",
       "id": "site_key",
-      "label": "Site key",
-      "info": "Copy it from your Vsio panel (Sites -> Embed). It is a public key."
+      "label": "Site key (override, optional)",
+      "info": "Detected automatically from the Vsio app — leave empty. Paste a key only if Vsio support asks you to."
     },
     {
       "type": "text",

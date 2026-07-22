@@ -3,6 +3,7 @@
 namespace App\Domain\Shopify\Auth;
 
 use App\Domain\Activity\ActivityRecorder;
+use App\Domain\Shopify\Metafields\SyncShopMetafieldsJob;
 use App\Domain\Shopify\Webhooks\RegisterShopifyWebhooksJob;
 use App\Http\Shopify\ShopifyShopRouter;
 use App\Models\ActivityEvent;
@@ -134,12 +135,17 @@ final class ShopifyInstaller
             }
 
             $site->platform = Site::PLATFORM_SHOPIFY;
+            $this->allowShopOrigin($site, $shopDomain);
             $site->save();
 
             return $connection;
         }));
 
         RegisterShopifyWebhooksJob::dispatch($accountId, (int) $connection->site_id);
+
+        // Write the PUBLIC site_key to the shop's app-owned metafield so the theme extension
+        // configures itself — the merchant never pastes the key into the theme editor.
+        SyncShopMetafieldsJob::dispatch($accountId, (int) $connection->site_id);
 
         Log::info(self::LOG_INSTALLED, [
             'correlation_id' => $correlationId,
@@ -280,6 +286,28 @@ final class ShopifyInstaller
     }
 
     // === Internals ===
+
+    /**
+     * Make sure the STORE's own origin (https://{shop}.myshopify.com) passes the widget's
+     * Origin allow-list. The middleware always allows the SITE's domain origin, but a site
+     * connected to Shopify from the panel (connect_existing_site) may carry a different
+     * domain — without this, the widget 403s silently on the storefront. Idempotent.
+     */
+    private function allowShopOrigin(Site $site, string $shopDomain): void
+    {
+        $shopOrigin = Site::originFromDomain($shopDomain);
+
+        if ($shopOrigin === null || $shopOrigin === Site::originFromDomain($site->domain)) {
+            return;
+        }
+
+        $origins = (array) ($site->allowed_origins ?? []);
+
+        if (! in_array($shopOrigin, $origins, true)) {
+            $origins[] = $shopOrigin;
+            $site->allowed_origins = $origins;
+        }
+    }
 
     /**
      * The cross-account wall: a shop_domain already owned by ANOTHER account can never

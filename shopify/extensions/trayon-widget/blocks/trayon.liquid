@@ -4,25 +4,36 @@
   Injects the widget loader with EXPLICIT product context read from Liquid, so the widget
   never has to guess the product from the URL:
 
-    data-site-key      the PUBLIC site key (Vsio merchant panel -> Embed). Never the secret.
+    data-site-key      the PUBLIC site key. Never the secret.
     data-platform      'shopify' — tells the widget to use the Ajax cart, not a DOM click.
     data-product-id    the numeric product id (the Admin GID's id segment).
     data-product-handle the handle (stable fallback key).
     data-variant-id    the currently selected variant — kept live by trayon-shopify-context.js.
+
+  The site key resolves AUTOMATICALLY from the app-owned shop metafield the backend writes
+  on install ($app:settings/site_key — SyncShopMetafieldsJob); the block setting is only a
+  manual override for support cases. No key from either source -> the block renders nothing.
 
   Nothing renders visually here: the loader mounts the Vsio button itself, on idle, so the
   host theme's LCP/CLS are untouched. Outside a product page the context attributes are simply
   absent and the widget stays dormant.
 {% endcomment %}
 
-{% if block.settings.site_key != blank %}
+{% liquid
+  assign site_key = block.settings.site_key
+  if site_key == blank
+    assign site_key = app.metafields.settings.site_key.value
+  endif
+%}
+
+{% if site_key != blank %}
   {% liquid
     assign selected_variant = product.selected_or_first_available_variant
   %}
 
   <script
     src="{{ block.settings.script_src }}"
-    data-site-key="{{ block.settings.site_key }}"
+    data-site-key="{{ site_key }}"
     data-platform="shopify"
     {% if product %}
       data-product-id="{{ product.id }}"
@@ -45,8 +56,8 @@
     {
       "type": "text",
       "id": "site_key",
-      "label": "Site key",
-      "info": "Copy it from your Vsio panel (Sites -> Embed). It is a public key."
+      "label": "Site key (override, optional)",
+      "info": "Detected automatically from the Vsio app — leave empty. Paste a key only if Vsio support asks you to."
     },
     {
       "type": "text",

@@ -113,6 +113,18 @@ export const SELECTOR_ROLES = {
   variations: 'variations',
 };
 
+// Shopify's standard add-to-cart anchors, tried IN ORDER when the site has no configured
+// add_to_cart selector (a Shopify-synced site is born with none — no PDP scan ever ran).
+// Keeps the default inline placement working with ZERO merchant setup; a configured
+// selector always wins.
+export const SHOPIFY_ATC_FALLBACKS = [
+  'form[action*="/cart/add"] button[type="submit"]',
+  'form[action*="/cart/add"] [name="add"]',
+  'button[name="add"]',
+  '.product-form__submit',
+  '.shopify-payment-button',
+];
+
 // Appearance keys (App\Domain\Sites\WidgetAppearance). Read, never authored, here.
 export const APPEARANCE = {
   placement: 'button_placement',

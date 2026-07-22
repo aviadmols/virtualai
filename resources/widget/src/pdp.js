@@ -11,8 +11,11 @@
 //   2. the merchant-confirmed variations selector (pdp-scanner) read off the page;
 //   3. the first available confirmed variant, so a try-on can always proceed.
 
-import { SELECTOR_ROLES, SITE_KEY_ATTR, VARIANT_ID_ATTR } from './constants.js';
+import { SELECTOR_ROLES, SHOPIFY_ATC_FALLBACKS, SITE_KEY_ATTR, VARIANT_ID_ATTR } from './constants.js';
 import { selectorString } from './dom.js';
+
+// The platform value that unlocks the standard-selector fallback below.
+const PLATFORM_SHOPIFY = 'shopify';
 
 /**
  * Is this a try-on PDP? True when the bootstrap returned a confirmed product. The page URL was
@@ -23,15 +26,35 @@ export function isProductPage(bootstrap) {
   return !!bootstrap?.product;
 }
 
-/** The confirmed add-to-cart anchor element on the host page (or null if not yet rendered). */
-export function findAddToCart(selectorConfig) {
+/**
+ * The add-to-cart anchor element on the host page (or null if not yet rendered). The
+ * merchant-confirmed selector wins; on Shopify a site with NO configured selector (synced,
+ * never scanned) falls back to the platform's standard anchors so the default inline
+ * placement still mounts with zero setup.
+ */
+export function findAddToCart(selectorConfig, platform) {
   const css = selectorString(selectorConfig, SELECTOR_ROLES.addToCart);
-  if (!css) return null;
-  try {
-    return document.querySelector(css);
-  } catch {
-    return null; // a malformed selector from config never throws into the host page
+  if (css) {
+    try {
+      const el = document.querySelector(css);
+      if (el) return el;
+    } catch {
+      // a malformed selector from config never throws into the host page
+    }
   }
+
+  if (platform !== PLATFORM_SHOPIFY) return null;
+
+  for (const fallback of SHOPIFY_ATC_FALLBACKS) {
+    try {
+      const el = document.querySelector(fallback);
+      if (el) return el;
+    } catch {
+      // keep trying the remaining anchors
+    }
+  }
+
+  return null;
 }
 
 /**

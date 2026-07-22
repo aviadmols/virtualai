@@ -3,6 +3,7 @@
 namespace App\Domain\Sites;
 
 use App\Domain\Activity\ActivityRecorder;
+use App\Domain\Shopify\Metafields\SyncShopMetafieldsJob;
 use App\Models\ActivityEvent;
 use App\Models\Site;
 
@@ -44,6 +45,12 @@ final class SiteKeyRegenerator
             siteId: $site->getKey(),
             actor: ActivityEvent::ACTOR_MERCHANT,
         );
+
+        // A Shopify store reads the key off its app-owned shop metafield — push the NEW key
+        // there too, or the theme extension keeps booting with the invalidated one.
+        if ($site->isShopify()) {
+            SyncShopMetafieldsJob::dispatch((int) $site->account_id, (int) $site->getKey());
+        }
 
         return $newKey;
     }

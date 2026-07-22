@@ -3,6 +3,7 @@
 namespace App\Http\Shopify\Controllers;
 
 use App\Domain\Shopify\Api\ShopifyThemeInspector;
+use App\Domain\Shopify\Metafields\SyncShopMetafieldsJob;
 use App\Http\Shopify\ShopifyEmbeddedContext;
 use App\Http\Widget\WidgetResponse;
 use App\Models\Generation;
@@ -42,6 +43,13 @@ final class EmbeddedAppApiController
         $account = $context->connection->account;
         $site = $context->site;
         $shop = $context->shopDomain();
+
+        // Self-heal: stores installed before the metafield sync existed (or whose sync
+        // failed) converge the moment the merchant opens the app. Cheap DB compare here;
+        // the unique, convergent job does the (single) API write.
+        if ($context->connection->metafields_synced_key !== (string) $site->site_key) {
+            SyncShopMetafieldsJob::dispatch((int) $site->account_id, (int) $site->getKey());
+        }
 
         $panelBase = rtrim((string) config(self::CFG_APP_URL), '/')
             .rtrim((string) config(self::CFG_PANEL_PATH), '/');
