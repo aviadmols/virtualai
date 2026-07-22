@@ -73,6 +73,12 @@ return [
         'style_help' => 'Pick a curated look. Your brief still guides the content.',
         'brief' => 'Brief',
         'brief_help' => 'Describe the banner you want — theme, mood, colors, product. Each generate makes a new candidate.',
+        // The @-mention product picker on the brief.
+        'mention_help' => 'Type @ to tag a product — the banner is built from its image and details.',
+        'mention_products' => 'Products',
+        'mention_based_on' => 'Based on:',
+        'mention_empty' => 'Import products first to tag them here.',
+        'mention_remove' => 'Remove product',
         'reference' => 'Reference image (optional)',
         'reference_help' => 'Attach a product or brand image to guide the result.',
         'submit' => 'Generate',

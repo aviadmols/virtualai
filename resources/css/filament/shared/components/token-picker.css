@@ -120,3 +120,45 @@
     white-space: nowrap;
     text-overflow: ellipsis;
 }
+
+/* --- Banner brief @-product picker: help + chips + the live "Based on:" tag row (parsed from
+ * the brief). Reuses the token chip/menu look; adds only the removable tags. --- */
+.to-banner-mention {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-3);
+}
+
+.to-mention-based {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--to-space-2);
+}
+
+.to-mention-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-1);
+    padding: var(--to-space-1) var(--to-space-2);
+    border-radius: var(--to-r-control);
+    background: var(--toa-accent-soft);
+    color: var(--toa-accent);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-mention-tag__remove {
+    display: inline-flex;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--toa-accent);
+    line-height: 1;
+    cursor: pointer;
+    transition: color var(--to-t-fast);
+}
+
+.to-mention-tag__remove:hover {
+    color: var(--to-danger);
+}

@@ -11,12 +11,14 @@ use App\Domain\Banners\StartBannerGeneration;
 use App\Filament\Merchant\Pages\BannerPlacements;
 use App\Filament\Merchant\Resources\BannerResource;
 use App\Models\Banner;
+use App\Models\Product;
 use App\Models\StylePreset;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\View;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
@@ -43,6 +45,9 @@ class EditBanner extends EditRecord
     private const REF_DISK = 'local';
 
     private const REF_DIR = 'banner-refs';
+
+    // How many products the @-mention picker lists (same bound as the try-on prompt editor).
+    private const PRODUCT_LIMIT = 50;
 
     public function getTitle(): string
     {
@@ -168,7 +173,13 @@ class EditBanner extends EditRecord
                     ->label(__('banners.generate.brief'))
                     ->helperText(__('banners.generate.brief_help'))
                     ->required()
-                    ->rows(4),
+                    ->rows(4)
+                    // The @-mention picker (below) targets this field to insert @product_{id} tags.
+                    ->extraInputAttributes(['data-banner-brief' => 'true']),
+                // Tag a product with @ so the banner is generated FROM it (its image + facts). The
+                // picker inserts @product_{id} tokens the generation job resolves — GenerateBannerJob.
+                View::make('filament.merchant.forms.banner-mention-picker')
+                    ->viewData(['products' => $this->productOptions()]),
                 FileUpload::make('reference')
                     ->label(__('banners.generate.reference'))
                     ->helperText(__('banners.generate.reference_help'))
@@ -213,6 +224,24 @@ class EditBanner extends EditRecord
         return StylePreset::query()
             ->approvedForOperations(StylePreset::SURFACE_OPERATIONS[StylePreset::SURFACE_BANNER])
             ->pluck('name', 'id')->all();
+    }
+
+    /**
+     * Active products for THIS banner's shop (id => name) — the @-mention picker's list.
+     * Scoped to the banner's own site (which IS the Filament tenant, per BannerResource) on
+     * top of the account global scope, so it never lists another shop's products.
+     *
+     * @return array<int,string>
+     */
+    private function productOptions(): array
+    {
+        return Product::query()
+            ->where('site_id', $this->getRecord()->site_id)
+            ->active()
+            ->orderBy('name')
+            ->limit(self::PRODUCT_LIMIT)
+            ->pluck('name', 'id')
+            ->all();
     }
 
     /**

@@ -6,6 +6,8 @@ use App\Domain\Ai\AiOperationResolver;
 use App\Domain\Ai\BannerGenerationCaller;
 use App\Domain\Ai\BannerResult;
 use App\Domain\Ai\ImagePayload;
+use App\Domain\Ai\MentionResolver;
+use App\Domain\Ai\MentionTags;
 use App\Domain\Ai\OpenRouterException;
 use App\Domain\Ai\OperationConfig;
 use App\Domain\Ai\StylePresetApplier;
@@ -22,10 +24,12 @@ use App\Models\Account;
 use App\Models\AiOperation;
 use App\Models\BannerAsset;
 use App\Models\CreditLedger;
+use App\Models\Product;
 use App\Models\Site;
 use App\Support\Tenant;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -60,6 +64,13 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
 
     // The single prompt placeholder the merchant/admin banner prompt may reference.
     private const VAR_BRIEF = 'brief';
+
+    // A brief may @-tag products (@product_42): the tagged product's image grounds the banner
+    // and its facts are woven into the brief text. The appended product context is bounded so a
+    // rich product never drowns the merchant's own brief. The lead-in is prompt text (English).
+    private const PRODUCT_CONTEXT_LEAD = 'Base the banner on this product — ';
+
+    private const PRODUCT_CONTEXT_MAX = 600;
 
     // Actionable failure messages (shared i18n with the try-on money path; en/he 1:1).
     private const MSG_COST_NOT_CONFIGURED = 'platform.generation.cost_not_configured';
@@ -168,7 +179,7 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
         // --- GENERATE --- (time the provider render only, for the timing report)
         $startedAt = hrtime(true);
         try {
-            $result = $this->callProvider($config, $asset);
+            $result = $this->callProvider($config, $asset, $site);
         } catch (OpenRouterException $e) {
             $this->finalizeFailure($asset, $reservation, GenerationFailureCode::AI_CALL_FAILED, $e->getMessage(), [
                 'error_code' => $e->errorCode,
@@ -293,14 +304,19 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
     }
 
     /**
-     * Resolve the reference image (optional) + assemble the brief var, snapshot the prompt,
-     * and call the provider. Prompt substitution happens INSIDE the caller (strtr).
+     * Resolve the reference image + assemble the brief var, snapshot the prompt, and call the
+     * provider. A @product_{id} tag in the brief attaches that product's image as the reference
+     * (unless the merchant uploaded one, which wins) AND weaves the product's real facts into the
+     * brief text — so the banner is grounded in the tagged product. Substitution is strtr.
      */
-    private function callProvider(OperationConfig $config, BannerAsset $asset): BannerResult
+    private function callProvider(OperationConfig $config, BannerAsset $asset, Site $site): BannerResult
     {
-        $reference = $this->loadReference($asset);
+        // An uploaded brand image is the merchant's explicit choice and wins; otherwise the first
+        // @-tagged product's image grounds the banner. MentionResolver is site-scoped + fail-closed.
+        $mentionImages = app(MentionResolver::class)->referenceImages((string) $asset->brief, $site);
+        $reference = $this->loadReference($asset) ?? ($mentionImages[0] ?? null);
 
-        $vars = [self::VAR_BRIEF => (string) $asset->brief];
+        $vars = [self::VAR_BRIEF => $this->groundBrief((string) $asset->brief, $site)];
 
         // Snapshot exactly what we asked the model to render (audit of the resolver output).
         $asset->forceFill([
@@ -311,6 +327,72 @@ final class GenerateBannerJob extends TenantAwareJob implements ShouldBeUnique
         ])->save();
 
         return $this->caller()->generate($config, $reference, $vars);
+    }
+
+    /**
+     * Ground the brief in any @-tagged products: replace each @product_{id} with the product's
+     * real name (a natural sentence for the model) and append a bounded product-facts clause.
+     * A foreign / unknown / imageless id contributes nothing (the resolver already attached no
+     * image), so the raw token simply stays as text. strtr only — never Blade.
+     */
+    private function groundBrief(string $brief, Site $site): string
+    {
+        $ids = self::taggedProductIds($brief);
+
+        if ($ids === []) {
+            return $brief;
+        }
+
+        // Site-scoped + account global scope: only this shop's products, never another tenant's.
+        $products = Product::query()
+            ->where('site_id', $site->getKey())
+            ->whereIn('id', $ids)
+            ->limit(MentionTags::MAX_REFERENCES)
+            ->get();
+
+        if ($products->isEmpty()) {
+            return $brief;
+        }
+
+        // 1) swap each @product_{id} for the product's real name.
+        $replacements = [];
+        foreach ($products as $product) {
+            $replacements['@'.MentionTags::PREFIX_PRODUCT.$product->getKey()] = (string) $product->name;
+        }
+        $grounded = strtr($brief, $replacements);
+
+        // 2) append a bounded product-context clause (name + the composed facts).
+        $facts = [];
+        foreach ($products as $product) {
+            $details = ProductFacts::for($product, null)->productDetails();
+            $clause = trim((string) $product->name.($details !== '' ? '. '.$details : ''));
+
+            if ($clause !== '') {
+                $facts[] = $clause;
+            }
+        }
+
+        if ($facts !== []) {
+            $grounded = trim($grounded).' '.Str::limit(self::PRODUCT_CONTEXT_LEAD.implode(' ', $facts), self::PRODUCT_CONTEXT_MAX);
+        }
+
+        return $grounded;
+    }
+
+    /**
+     * The numeric product ids @-tagged in the brief (@product_42). Only a numeric suffix is an
+     * id, so @product_details / @product_type (metafield tokens) are never read as ids — the
+     * same rule MentionResolver::entityIds applies.
+     *
+     * @return array<int,int>
+     */
+    private static function taggedProductIds(string $brief): array
+    {
+        if (preg_match_all('/@'.MentionTags::PREFIX_PRODUCT.'(\d+)/', $brief, $matches) === 0) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map('intval', $matches[1])));
     }
 
     /** The optional reference upload as an ImagePayload (signed URL), or null when none. */
