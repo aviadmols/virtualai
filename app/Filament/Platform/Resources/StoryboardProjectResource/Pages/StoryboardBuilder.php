@@ -235,9 +235,19 @@ class StoryboardBuilder extends Page
         GenerateStoryboardClipJob::dispatch($frame->id);
     }
 
+    /**
+     * Animate every frame that still needs a clip. Frames that already HAVE a clip are
+     * skipped — a clip is a flat-rate spend, so a re-press must resume, never re-buy.
+     */
     public function generateAllClips(): void
     {
-        $frames = $this->record->frames()->whereNotNull('image_path')->where('is_locked', false)->get();
+        $frames = $this->record->frames()
+            ->whereNotNull('image_path')
+            ->where('is_locked', false)
+            ->where(function ($query): void {
+                $query->whereNull('video_path')->orWhere('video_status', StoryboardFrame::VIDEO_FAILED);
+            })
+            ->get();
 
         foreach ($frames as $frame) {
             $frame->update(['video_status' => StoryboardFrame::VIDEO_GENERATING, 'video_poll_attempts' => 0]);

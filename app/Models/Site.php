@@ -212,6 +212,27 @@ class Site extends Model
         return isset($parts['port']) ? $origin.':'.$parts['port'] : $origin;
     }
 
+    /**
+     * Idempotently allow-list an EXTRA origin for the widget (the connected storefront's own
+     * domain, when it differs from this site's). The site's own domain origin always passes
+     * without being listed — see ResolveWidgetSite. Does not save; the caller persists.
+     */
+    public function allowOrigin(?string $domain): void
+    {
+        $origin = self::originFromDomain($domain);
+
+        if ($origin === null || $origin === self::originFromDomain($this->domain)) {
+            return;
+        }
+
+        $origins = (array) ($this->allowed_origins ?? []);
+
+        if (! in_array($origin, $origins, true)) {
+            $origins[] = $origin;
+            $this->allowed_origins = $origins;
+        }
+    }
+
     /** A fresh public site_key (URL-safe). */
     public static function generateSiteKey(): string
     {

@@ -7,6 +7,7 @@ use App\Domain\Shopify\Api\ShopifyGraphQLClient;
 use App\Jobs\TenantAwareJob;
 use App\Models\ShopifyConnection;
 use App\Models\Site;
+use App\Support\Tenant;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Log;
 
@@ -73,9 +74,17 @@ final class SyncShopMetafieldsJob extends TenantAwareJob implements ShouldBeUniq
         $this->onQueue((string) config(self::CFG_QUEUE));
     }
 
+    /**
+     * Unique per (account, site) AND per key VALUE: a rotation dispatched while an older sync
+     * is still in flight must NOT be swallowed, or the shop would keep the invalidated key.
+     * uniqueId() runs at DISPATCH time, which may be outside any tenant bind — bind the job's
+     * own explicit account so the fail-closed scope resolves the site.
+     */
     public function uniqueId(): string
     {
-        return self::IDEMPOTENCY_PREFIX.':'.$this->accountId.':'.$this->siteId;
+        $key = (string) Tenant::run($this->accountId, fn (): ?string => Site::query()->whereKey($this->siteId)->value('site_key'));
+
+        return self::IDEMPOTENCY_PREFIX.':'.$this->accountId.':'.$this->siteId.':'.$key;
     }
 
     protected function process(): void

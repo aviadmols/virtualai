@@ -49,17 +49,18 @@ class StoryboardFoundationTest extends TestCase
 
     public function test_shot_bounds_derive_from_duration_and_the_pacing_hint(): void
     {
-        // 15s at pacing 3 → shots may run up to 6s; between 3 and 15 shots.
+        // 15s at pacing 3 → shots may run up to 6s; between 3 and 5 shots (3s per-shot floor
+        // = the shortest clip a video model renders, so the film never overruns its length).
         $p = StoryboardProject::factory()->make(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
         $this->assertSame(6, $p->maxShotSeconds());
         $this->assertSame(3, $p->minShotCount());
-        $this->assertSame(15, $p->maxShotCount());
+        $this->assertSame(5, $p->maxShotCount());
 
-        // A long film hits the hard shots cap; a tiny film can never exceed its seconds.
+        // A long film hits the hard shots cap; a tiny film still yields at least one shot.
         $long = StoryboardProject::factory()->make(['duration_seconds' => 600, 'frame_interval_seconds' => 3]);
         $this->assertSame(StoryboardProject::MAX_SHOTS_CAP, $long->maxShotCount());
         $tiny = StoryboardProject::factory()->make(['duration_seconds' => 2, 'frame_interval_seconds' => 3]);
-        $this->assertSame(2, $tiny->maxShotCount());
+        $this->assertSame(1, $tiny->maxShotCount());
         $this->assertSame(1, $tiny->minShotCount());
     }
 

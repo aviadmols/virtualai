@@ -16,17 +16,47 @@ class StoryboardTimingPlanTest extends TestCase
     public function test_a_variable_count_proposal_within_bounds_is_locked_as_proposed(): void
     {
         $plan = StoryboardTimingPlan::normalize([
-            ['shot_number' => 1, 'duration_seconds' => 2, 'camera_movement' => 'static wide'],
+            ['shot_number' => 1, 'duration_seconds' => 3, 'camera_movement' => 'static wide'],
             ['shot_number' => 2, 'duration_seconds' => 3, 'camera_movement' => 'slow push-in'],
             ['shot_number' => 3, 'duration_seconds' => 4, 'camera_movement' => 'handheld follow'],
-            ['shot_number' => 4, 'duration_seconds' => 6, 'camera_movement' => 'static close-up'],
+            ['shot_number' => 4, 'duration_seconds' => 5, 'camera_movement' => 'static close-up'],
         ], durationSeconds: 15, minShots: 3, maxShots: 15, fallbackShotSeconds: 3);
 
         $this->assertCount(4, $plan);
-        $this->assertSame([2, 3, 4, 6], array_map(fn ($s) => $s['end_second'] - $s['start_second'], $plan));
+        $this->assertSame([3, 3, 4, 5], array_map(fn ($s) => $s['end_second'] - $s['start_second'], $plan));
         $this->assertSame(0, $plan[0]['start_second']);
         $this->assertSame(15, $plan[3]['end_second']);
         $this->assertSame('slow push-in', $plan[1]['camera_movement']);
+    }
+
+    public function test_a_shot_below_the_clip_floor_rejects_the_proposal(): void
+    {
+        // 2s < MIN_SHOT_SECONDS (3, the shortest renderable clip) → uniform fallback.
+        $plan = StoryboardTimingPlan::normalize([
+            ['shot_number' => 1, 'duration_seconds' => 2, 'camera_movement' => 'a'],
+            ['shot_number' => 2, 'duration_seconds' => 13, 'camera_movement' => 'b'],
+        ], durationSeconds: 15, minShots: 1, maxShots: 15, fallbackShotSeconds: 3);
+
+        $this->assertCount(5, $plan);
+        $this->assertSame(15, end($plan)['end_second']);
+    }
+
+    public function test_a_rescaled_shot_never_exceeds_the_per_shot_ceiling(): void
+    {
+        // The proposal's totals are off; naive proportional rescale would stretch the last
+        // shot far past the 12s ceiling — the excess is redistributed instead.
+        $plan = StoryboardTimingPlan::normalize([
+            ['shot_number' => 1, 'duration_seconds' => 3, 'camera_movement' => 'a'],
+            ['shot_number' => 2, 'duration_seconds' => 3, 'camera_movement' => 'b'],
+            ['shot_number' => 3, 'duration_seconds' => 3, 'camera_movement' => 'c'],
+            ['shot_number' => 4, 'duration_seconds' => 26, 'camera_movement' => 'd'],
+        ], durationSeconds: 60, minShots: 1, maxShots: 20, fallbackShotSeconds: 6, maxShotSeconds: 12);
+
+        $this->assertSame(60, end($plan)['end_second']);
+        foreach ($plan as $slot) {
+            $this->assertLessThanOrEqual(12, $slot['end_second'] - $slot['start_second']);
+        }
+        $this->assertContiguous($plan);
     }
 
     public function test_durations_are_proportionally_rescaled_to_the_exact_total(): void

@@ -75,9 +75,21 @@ final class BytePlusVideoClient implements VideoGenerationProvider
 
         // Inline every input frame as a base64 data URI: ModelArk fetches url inputs ITSELF,
         // and a signed/expiring media url it cannot reach fails the task silently server-side.
-        // Inlining kills that failure class (mirrors the AtlasCloud client); an unusable input
-        // is dropped rather than sent broken.
-        foreach ($this->asDataUris($imageUrls) as $i => $url) {
+        // Inlining kills that failure class (mirrors the AtlasCloud client).
+        $inlined = $this->asDataUris($imageUrls);
+
+        // An input that could not be inlined is DROPPED by the trait. Submitting anyway would
+        // silently downgrade a paid image-to-video into text-to-video and store a clip that has
+        // nothing to do with the frame — fail loudly instead.
+        if ($imageUrls !== [] && $inlined === []) {
+            throw OpenRouterException::make(
+                OpenRouterException::CODE_INVALID_IMAGE,
+                sprintf('BytePlus video submit could not read any input frame for model %s.', $model),
+                modelUsed: $model,
+            );
+        }
+
+        foreach ($inlined as $i => $url) {
             $content[] = [
                 'type' => 'image_url',
                 'image_url' => ['url' => $url],

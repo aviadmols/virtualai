@@ -135,7 +135,9 @@ final class ShopifyInstaller
             }
 
             $site->platform = Site::PLATFORM_SHOPIFY;
-            $this->allowShopOrigin($site, $shopDomain);
+            // The storefront's own origin must pass the widget's Origin wall even when this
+            // site carries a different domain (connect_existing_site).
+            $site->allowOrigin($shopDomain);
             $site->save();
 
             return $connection;
@@ -286,28 +288,6 @@ final class ShopifyInstaller
     }
 
     // === Internals ===
-
-    /**
-     * Make sure the STORE's own origin (https://{shop}.myshopify.com) passes the widget's
-     * Origin allow-list. The middleware always allows the SITE's domain origin, but a site
-     * connected to Shopify from the panel (connect_existing_site) may carry a different
-     * domain — without this, the widget 403s silently on the storefront. Idempotent.
-     */
-    private function allowShopOrigin(Site $site, string $shopDomain): void
-    {
-        $shopOrigin = Site::originFromDomain($shopDomain);
-
-        if ($shopOrigin === null || $shopOrigin === Site::originFromDomain($site->domain)) {
-            return;
-        }
-
-        $origins = (array) ($site->allowed_origins ?? []);
-
-        if (! in_array($shopOrigin, $origins, true)) {
-            $origins[] = $shopOrigin;
-            $site->allowed_origins = $origins;
-        }
-    }
 
     /**
      * The cross-account wall: a shop_domain already owned by ANOTHER account can never

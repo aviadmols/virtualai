@@ -54,7 +54,10 @@ final class EmbeddedAppApiController
 
         // Self-heal the widget Origin wall too: stores connected BEFORE the installer began
         // allow-listing the shop's own origin get it added on app open (idempotent).
-        $this->allowShopOrigin($site, $shop);
+        $site->allowOrigin($shop);
+        if ($site->isDirty()) {
+            $site->save();
+        }
 
         $panelBase = rtrim((string) config(self::CFG_APP_URL), '/')
             .rtrim((string) config(self::CFG_PANEL_PATH), '/');
@@ -98,24 +101,4 @@ final class EmbeddedAppApiController
         ]);
     }
 
-    /**
-     * Idempotently allow-list the storefront's own origin (https://{shop}) for the widget's
-     * Origin wall — mirrors ShopifyInstaller::allowShopOrigin for pre-existing installs.
-     */
-    private function allowShopOrigin(Site $site, string $shopDomain): void
-    {
-        $shopOrigin = Site::originFromDomain($shopDomain);
-
-        if ($shopOrigin === null || $shopOrigin === Site::originFromDomain($site->domain)) {
-            return;
-        }
-
-        $origins = (array) ($site->allowed_origins ?? []);
-
-        if (! in_array($shopOrigin, $origins, true)) {
-            $origins[] = $shopOrigin;
-            $site->allowed_origins = $origins;
-            $site->save();
-        }
-    }
 }

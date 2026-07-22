@@ -32,6 +32,9 @@ final class StoryboardFrameGenerator
     // === CONSTANTS ===
     private const MAX_REFERENCES = 4;
 
+    // The ceiling on the WHOLE input payload (own image + continuity anchor + references).
+    private const MAX_ATTACHMENTS = 5;
+
     // Operation param naming the premium model for anchor-less (look-setting) generations.
     private const PARAM_FIRST_FRAME_MODEL = 'first_frame_model';
 
@@ -86,11 +89,13 @@ final class StoryboardFrameGenerator
             $leads[] = self::PREVIOUS_SHOT_LEAD;
         }
 
-        if ($inputs !== [] && $refs !== []) {
+        if ($refs !== []) {
             $leads[] = self::REFS_FOLLOW_NOTE;
         }
 
-        $inputs = array_merge($inputs, $refs);
+        // MAX_ATTACHMENTS caps the WHOLE payload (leading images + references), not just the
+        // references — the leads always describe the images that actually survive the cap.
+        $inputs = array_slice(array_merge($inputs, $refs), 0, self::MAX_ATTACHMENTS);
 
         $prompt = $this->buildPrompt($config, $frame, $editInstruction, $leads);
         [$model, $provider, $priceHint] = $this->modelFor($config, chained: $ownImage !== null || $anchor !== null);
@@ -234,10 +239,13 @@ final class StoryboardFrameGenerator
      */
     private function anchorImage(StoryboardFrame $frame): ?ImagePayload
     {
+        // reorder() FIRST: the frames() relation is declared with orderBy('frame_number'),
+        // and appending a desc key would only ADD a second sort ("asc, desc") — the asc key
+        // would still win and hand us frame 1 for the whole film instead of the previous shot.
         $previous = $frame->project->frames()
             ->where('frame_number', '<', (int) $frame->frame_number)
             ->whereNotNull('image_path')
-            ->orderByDesc('frame_number')
+            ->reorder('frame_number', 'desc')
             ->first();
 
         if ($previous === null || ! $this->media->exists($previous->image_path)) {

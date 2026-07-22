@@ -26,6 +26,10 @@ use Throwable;
  */
 final class StoryboardPipeline
 {
+    // === CONSTANTS ===
+    // The step-run reason when the scene breakdown returned no usable frames.
+    private const ERROR_NO_FRAMES = 'The scene breakdown returned no frames.';
+
     public function __construct(
         private readonly AiOperationResolver $resolver,
         private readonly StoryboardTextCaller $caller,
@@ -89,18 +93,20 @@ final class StoryboardPipeline
             'duration_ms' => $this->elapsedMs($startedAt),
         ]);
 
-        $this->persist($project, $stepKey, $result->json);
+        if (! $this->persist($project, $stepKey, $result->json)) {
+            $run->update(['status' => StoryboardStepRun::STATUS_FAILED, 'error' => self::ERROR_NO_FRAMES]);
+
+            return false;
+        }
 
         return true;
     }
 
-    /** @param array<string,mixed> $json */
-    private function persist(StoryboardProject $project, string $stepKey, array $json): void
+    /** @param array<string,mixed> $json @return bool false when the step's output was unusable */
+    private function persist(StoryboardProject $project, string $stepKey, array $json): bool
     {
         if ($stepKey === AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN) {
-            $this->materialiseFrames($project, is_array($json['frames'] ?? null) ? $json['frames'] : []);
-
-            return;
+            return $this->materialiseFrames($project, is_array($json['frames'] ?? null) ? $json['frames'] : []);
         }
 
         // Story Director: split the single output into the pipeline bags every downstream
@@ -119,14 +125,26 @@ final class StoryboardPipeline
             $project->minShotCount(),
             $project->maxShotCount(),
             (int) $project->frame_interval_seconds,
+            $project->maxShotSeconds(),
         );
 
         $project->update(['pipeline' => $pipeline]);
+
+        return true;
     }
 
-    /** @param array<int,array<string,mixed>> $frames */
-    private function materialiseFrames(StoryboardProject $project, array $frames): void
+    /**
+     * @param  array<int,array<string,mixed>>  $frames
+     * @return bool false when the breakdown returned nothing usable (the caller fails the run)
+     */
+    private function materialiseFrames(StoryboardProject $project, array $frames): bool
     {
+        // A breakdown with no frames would DELETE the storyboard and leave an empty film
+        // reported as ready — treat it as a failed step instead.
+        if ($frames === []) {
+            return false;
+        }
+
         $project->frames()->delete(); // replace on a fresh run
 
         $pipeline = $project->pipeline ?? [];
@@ -177,6 +195,8 @@ final class StoryboardPipeline
                 'meta' => ['scene_prompt' => $f['scene_prompt'] ?? $f['image_prompt'] ?? null],
             ]);
         }
+
+        return true;
     }
 
     /**

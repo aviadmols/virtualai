@@ -121,11 +121,17 @@ class SyncShopMetafieldsJobTest extends TestCase
         $this->assertNull($this->connection($account)->metafields_synced_key);
     }
 
-    public function test_the_job_is_unique_per_account_and_site(): void
+    public function test_the_job_is_unique_per_account_site_and_key_value(): void
     {
-        $job = new SyncShopMetafieldsJob(7, 9);
+        // The key VALUE is part of the lock: a rotation dispatched while an older sync is
+        // still in flight must not be swallowed by ShouldBeUnique.
+        [$account, $site] = $this->connectedShop();
+        $job = new SyncShopMetafieldsJob((int) $account->id, (int) $site->id);
 
-        $this->assertSame('shopify-metafields:7:9', $job->uniqueId());
+        $this->assertSame(
+            'shopify-metafields:'.$account->id.':'.$site->id.':'.$site->site_key,
+            $job->uniqueId(),
+        );
         $this->assertSame(config('trayon.queues.webhooks'), $job->queue);
     }
 

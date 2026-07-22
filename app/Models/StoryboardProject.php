@@ -57,7 +57,10 @@ class StoryboardProject extends Model
     // Shot-based derivation bounds. The Story Director decides the CUT LIST (one shot = one
     // continuous camera setup/movement = one frame); these walls keep its freedom inside cost
     // and pacing limits. frame_interval_seconds is the merchant's PACING HINT, not a slicer.
-    public const MIN_SHOT_SECONDS = 1;
+    // A shot shorter than the shortest clip any video model renders is a lie: the clip would
+    // be padded up and the assembled film would overrun its duration. So the plan's floor IS
+    // the clip floor (StoryboardClipGenerator::DEFAULT_MIN_CLIP_SECONDS).
+    public const MIN_SHOT_SECONDS = 3;
 
     public const MAX_SHOTS_CAP = 20;
 
@@ -106,12 +109,12 @@ class StoryboardProject extends Model
         return (int) min(self::MAX_SHOT_SECONDS_CEIL, max(self::MAX_SHOT_SECONDS_FLOOR, 2 * $hint));
     }
 
-    /** The most shots the director may cut: hard cost cap, and never more than 1s-shots fit. */
+    /** The most shots the director may cut: hard cost cap, never more than the floor fits, never 0. */
     public function maxShotCount(): int
     {
         $duration = max(1, (int) $this->duration_seconds);
 
-        return (int) min(self::MAX_SHOTS_CAP, intdiv($duration, self::MIN_SHOT_SECONDS));
+        return (int) max(1, min(self::MAX_SHOTS_CAP, intdiv($duration, self::MIN_SHOT_SECONDS)));
     }
 
     /** The fewest shots that still cover the duration at maxShotSeconds (never above the cap). */

@@ -40,15 +40,27 @@ final class StoryboardTimingPlan
      * @param  mixed  $proposed  the Story Director's shot_timing
      * @return array<int,array{frame_number:int,start_second:int,end_second:int,camera_movement:?string}>
      */
-    public static function normalize(mixed $proposed, int $durationSeconds, int $minShots, int $maxShots, int $fallbackShotSeconds): array
+    public static function normalize(mixed $proposed, int $durationSeconds, int $minShots, int $maxShots, int $fallbackShotSeconds, ?int $maxShotSeconds = null): array
     {
         $shots = self::proposedShots($proposed);
 
-        if ($shots === null || count($shots) < $minShots || count($shots) > $maxShots || count($shots) > $durationSeconds) {
+        if ($shots === null || count($shots) < $minShots || count($shots) > $maxShots || ! self::fits($shots, $durationSeconds)) {
             return self::uniform($durationSeconds, $fallbackShotSeconds, $minShots, $maxShots);
         }
 
-        return self::contiguous(self::rescale($shots, $durationSeconds));
+        $shots = self::rescale($shots, $durationSeconds);
+
+        // A proposal whose total was off gets stretched proportionally, which can push a shot
+        // past the ceiling the director was told to obey — and an over-long shot is silently
+        // truncated by the clip model later, so the film would run short. Redistribute instead;
+        // when the ceiling cannot hold the duration at this count, fall back to uniform slices.
+        if ($maxShotSeconds !== null && self::exceedsCeiling($shots, $maxShotSeconds)) {
+            $shots = count($shots) * $maxShotSeconds >= $durationSeconds
+                ? self::capShots($shots, $maxShotSeconds)
+                : self::proposedShots(self::uniform($durationSeconds, $maxShotSeconds, $minShots, $maxShots)) ?? $shots;
+        }
+
+        return self::contiguous($shots);
     }
 
     /**
@@ -62,7 +74,7 @@ final class StoryboardTimingPlan
     {
         $shots = self::proposedShots($stored);
 
-        if ($shots === null || $shots === [] || count($shots) > $durationSeconds) {
+        if ($shots === null || $shots === [] || ! self::fits($shots, $durationSeconds)) {
             return self::uniform($durationSeconds, $fallbackShotSeconds, null, null);
         }
 
@@ -162,6 +174,68 @@ final class StoryboardTimingPlan
     }
 
     /**
+     * Can this many shots legally cover the duration? Every shot needs MIN_SHOT_SECONDS, so
+     * a count that cannot be satisfied is rejected BEFORE rescale() — otherwise its
+     * lift-the-short-shots loop would have no donor left and could not converge.
+     *
+     * @param  array<int,array{seconds:int,camera:?string}>  $shots
+     */
+    private static function fits(array $shots, int $durationSeconds): bool
+    {
+        return count($shots) * self::MIN_SHOT_SECONDS <= $durationSeconds;
+    }
+
+    /**
+     * True when any shot runs longer than the per-shot ceiling.
+     *
+     * @param  array<int,array{seconds:int,camera:?string}>  $shots
+     */
+    private static function exceedsCeiling(array $shots, int $maxShotSeconds): bool
+    {
+        return max(array_column($shots, 'seconds')) > $maxShotSeconds;
+    }
+
+    /**
+     * Trim every over-long shot to the ceiling and hand the reclaimed seconds to the shots
+     * that still have headroom (shortest first), so the total stays EXACTLY the duration.
+     * Feasible only when count * ceiling >= duration — the caller checks that.
+     *
+     * @param  array<int,array{seconds:int,camera:?string}>  $shots
+     * @return array<int,array{seconds:int,camera:?string}>
+     */
+    private static function capShots(array $shots, int $maxShotSeconds): array
+    {
+        $spare = 0;
+
+        foreach ($shots as $i => $shot) {
+            if ($shot['seconds'] > $maxShotSeconds) {
+                $spare += $shot['seconds'] - $maxShotSeconds;
+                $shots[$i]['seconds'] = $maxShotSeconds;
+            }
+        }
+
+        while ($spare > 0) {
+            $lengths = array_column($shots, 'seconds');
+            asort($lengths);
+            $moved = false;
+
+            foreach (array_keys($lengths) as $i) {
+                if ($spare > 0 && $shots[$i]['seconds'] < $maxShotSeconds) {
+                    $shots[$i]['seconds']++;
+                    $spare--;
+                    $moved = true;
+                }
+            }
+
+            if (! $moved) {
+                break; // no headroom left anywhere (guarded by the caller's feasibility check)
+            }
+        }
+
+        return $shots;
+    }
+
+    /**
      * Uniform fallback: even slices of ~$shotSeconds, count clamped into the given bounds
      * (null bounds = unclamped, the lenient stored-plan path).
      *
@@ -175,7 +249,8 @@ final class StoryboardTimingPlan
         $count = (int) max(1, (int) ceil($duration / $shotLength));
         $count = $minShots !== null ? max($count, $minShots) : $count;
         $count = $maxShots !== null ? min($count, $maxShots) : $count;
-        $count = min($count, $duration); // never more shots than seconds
+        // Never more shots than the duration can legally hold at the per-shot floor.
+        $count = (int) max(1, min($count, intdiv($duration, self::MIN_SHOT_SECONDS)));
 
         // Even integer split: the first (duration % count) shots run one second longer.
         $base = intdiv($duration, $count);
