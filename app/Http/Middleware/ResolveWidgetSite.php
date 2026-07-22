@@ -47,6 +47,14 @@ final class ResolveWidgetSite
     private const CORS_ALLOW_HEADERS = 'Content-Type, X-Tray-Site-Key, X-Tray-Signature, X-Tray-Timestamp';
     private const CORS_MAX_AGE = '600';
 
+    // Shopify serves theme-editor/share previews from ROTATING *.shopifypreview.com subdomains
+    // that can never be pre-registered — a SHOPIFY site accepts them so the widget works in the
+    // merchant's preview. (Origin is an anti-hotlinking wall, not an auth boundary — the real
+    // gates are the site_key + rate limits + the lead/credit gates.)
+    private const SHOPIFY_PREVIEW_SUFFIX = '.shopifypreview.com';
+
+    private const HTTPS_SCHEME = 'https://';
+
     public function __construct(
         private readonly SiteRouter $router,
     ) {}
@@ -136,7 +144,24 @@ final class ResolveWidgetSite
             return true;
         }
 
-        return in_array($origin, $site->allowed_origins ?? [], true);
+        if (in_array($origin, $site->allowed_origins ?? [], true)) {
+            return true;
+        }
+
+        // A Shopify site also accepts the rotating theme-preview origins.
+        return $site->isShopify() && $this->isShopifyPreviewOrigin($origin);
+    }
+
+    /** True for https://{anything}.shopifypreview.com — exact suffix on the HOST, https only. */
+    private function isShopifyPreviewOrigin(string $origin): bool
+    {
+        if (! str_starts_with($origin, self::HTTPS_SCHEME)) {
+            return false;
+        }
+
+        $host = (string) parse_url($origin, PHP_URL_HOST);
+
+        return $host !== '' && str_ends_with($host, self::SHOPIFY_PREVIEW_SUFFIX);
     }
 
     /**

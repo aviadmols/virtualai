@@ -28,6 +28,16 @@
     background-color: var(--toa-bg);
 }
 
+/* ---- Modal/slide-over backdrop: frosted glass ------------------------------
+   Every Filament overlay backdrop (.fi-modal-close-overlay covers modals AND
+   slide-overs) gets the shared scrim + a blur, so the page recedes softly
+   behind any open popup instead of a flat wash. */
+.fi-modal-close-overlay {
+    background-color: var(--to-scrim);
+    -webkit-backdrop-filter: blur(var(--to-blur-overlay));
+    backdrop-filter: blur(var(--to-blur-overlay));
+}
+
 /* ---- Page header: a big, tight editorial title -----------------------------
    Filament renders the page heading in .fi-header-heading; we make it the display
    title (Black, tight tracking, near-flush leading). The subheading reads as a

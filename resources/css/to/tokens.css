@@ -52,6 +52,9 @@
        Neutral slate wash, kept airy. */
     --to-scrim: rgb(17 24 39 / 45%);
 
+    /* Frosted-glass blur for full-screen overlay backdrops (admin modals/slide-overs). */
+    --to-blur-overlay: 8px;
+
     /* ---- 1.2 Typography — Inter (Latin) + Assistant (Hebrew) ----------
        RETUNED (user override): the OpenRouter dashboard uses Inter. Inter does
        NOT cover Hebrew, so the bilingual EN/HE app pairs it with Assistant — a

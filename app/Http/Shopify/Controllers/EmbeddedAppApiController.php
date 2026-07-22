@@ -8,6 +8,7 @@ use App\Http\Shopify\ShopifyEmbeddedContext;
 use App\Http\Widget\WidgetResponse;
 use App\Models\Generation;
 use App\Models\Product;
+use App\Models\Site;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -51,6 +52,10 @@ final class EmbeddedAppApiController
             SyncShopMetafieldsJob::dispatch((int) $site->account_id, (int) $site->getKey());
         }
 
+        // Self-heal the widget Origin wall too: stores connected BEFORE the installer began
+        // allow-listing the shop's own origin get it added on app open (idempotent).
+        $this->allowShopOrigin($site, $shop);
+
         $panelBase = rtrim((string) config(self::CFG_APP_URL), '/')
             .rtrim((string) config(self::CFG_PANEL_PATH), '/');
 
@@ -91,5 +96,26 @@ final class EmbeddedAppApiController
                 ),
             ],
         ]);
+    }
+
+    /**
+     * Idempotently allow-list the storefront's own origin (https://{shop}) for the widget's
+     * Origin wall — mirrors ShopifyInstaller::allowShopOrigin for pre-existing installs.
+     */
+    private function allowShopOrigin(Site $site, string $shopDomain): void
+    {
+        $shopOrigin = Site::originFromDomain($shopDomain);
+
+        if ($shopOrigin === null || $shopOrigin === Site::originFromDomain($site->domain)) {
+            return;
+        }
+
+        $origins = (array) ($site->allowed_origins ?? []);
+
+        if (! in_array($shopOrigin, $origins, true)) {
+            $origins[] = $shopOrigin;
+            $site->allowed_origins = $origins;
+            $site->save();
+        }
     }
 }

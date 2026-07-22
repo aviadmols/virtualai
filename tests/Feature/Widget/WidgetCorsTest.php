@@ -52,4 +52,52 @@ final class WidgetCorsTest extends TestCase
         $response->assertOk()->assertJson(['ok' => true]);
         $this->assertSame($domainOrigin, $response->headers->get('Access-Control-Allow-Origin'));
     }
+
+    public function test_a_shopify_site_accepts_the_rotating_theme_preview_origin(): void
+    {
+        // Shopify previews run on rotating *.shopifypreview.com subdomains that can never be
+        // pre-registered — a SHOPIFY site must accept them or the widget 403s in the preview.
+        $ctx = $this->makeSiteContext(['platform' => \App\Models\Site::PLATFORM_SHOPIFY]);
+        $previewOrigin = 'https://2fgym3e8zayyv4e2-79231254831.shopifypreview.com';
+
+        $response = $this->withHeaders([
+            'X-Tray-Site-Key' => $ctx['site']->site_key,
+            'Origin' => $previewOrigin,
+            'Accept' => 'application/json',
+        ])->getJson('/widget/v1/bootstrap');
+
+        $response->assertOk()->assertJson(['ok' => true]);
+        $this->assertSame($previewOrigin, $response->headers->get('Access-Control-Allow-Origin'));
+    }
+
+    public function test_a_non_shopify_site_still_rejects_the_preview_origin(): void
+    {
+        $ctx = $this->makeSiteContext(); // scan-platform site
+        $previewOrigin = 'https://2fgym3e8zayyv4e2-79231254831.shopifypreview.com';
+
+        $this->withHeaders([
+            'X-Tray-Site-Key' => $ctx['site']->site_key,
+            'Origin' => $previewOrigin,
+            'Accept' => 'application/json',
+        ])->getJson('/widget/v1/bootstrap')->assertForbidden();
+    }
+
+    public function test_a_lookalike_preview_host_is_rejected(): void
+    {
+        // The suffix must match the HOST, not a substring — evil-shopifypreview.com.attacker.io
+        // and http:// previews never pass.
+        $ctx = $this->makeSiteContext(['platform' => \App\Models\Site::PLATFORM_SHOPIFY]);
+
+        foreach ([
+            'https://shopifypreview.com.attacker.io',
+            'https://x.shopifypreview.com.attacker.io',
+            'http://x.shopifypreview.com',
+        ] as $origin) {
+            $this->withHeaders([
+                'X-Tray-Site-Key' => $ctx['site']->site_key,
+                'Origin' => $origin,
+                'Accept' => 'application/json',
+            ])->getJson('/widget/v1/bootstrap')->assertForbidden();
+        }
+    }
 }
