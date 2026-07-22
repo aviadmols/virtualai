@@ -11,6 +11,7 @@ use App\Domain\Credits\CreditDenied;
 use App\Domain\Credits\CreditGate;
 use App\Domain\Credits\IdempotencyKey;
 use App\Domain\Generation\CreditEstimator;
+use App\Domain\Media\MediaStorage;
 use App\Models\Account;
 use App\Models\ActivityEvent;
 use App\Models\AiOperation;
@@ -85,7 +86,10 @@ final class StartProductImageBatch
         $skipped = [];
 
         foreach ($this->products($site, $productIds) as $product) {
-            if (SourceImagePicker::urlFor($product, $sourcePick) === null) {
+            // A fix (SOURCE_RESULT) has no product-photo slot to check — its source is the result
+            // of the asset being fixed (FixProductImage already guaranteed one succeeded source).
+            if ($sourcePick !== ProductImageBatch::SOURCE_RESULT
+                && SourceImagePicker::urlFor($product, $sourcePick) === null) {
                 $skipped[] = (int) $product->getKey();
 
                 continue;
@@ -277,14 +281,16 @@ final class StartProductImageBatch
         ?int $sourceAssetId = null,
         ?int $styleId = null,
     ): ?ProductAsset {
-        $sourceUrl = SourceImagePicker::urlFor($product, $sourcePick);
+        // The source identity: a product PHOTO (by pick) OR the RESULT of the asset being fixed.
+        [$sourceUrl, $sourceHash] = $sourcePick === ProductImageBatch::SOURCE_RESULT
+            ? $this->fixSource($site, $sourceAssetId)
+            : $this->photoSource($product, $sourcePick);
 
-        if ($sourceUrl === null) {
-            return null; // defensive: plan() already filtered these out
+        if ($sourceHash === null) {
+            return null; // no usable source — skip (defensive; plan() already filtered photos)
         }
 
         $config = $this->config($site, $product->product_type ?: null);
-        $sourceHash = SourceImagePicker::hash($sourceUrl);
 
         $key = IdempotencyKey::forProductAsset(
             accountId: (int) $site->account_id,
@@ -333,6 +339,52 @@ final class StartProductImageBatch
         } catch (UniqueConstraintViolationException) {
             return null; // a truly concurrent twin won the insert — same answer: it already exists
         }
+    }
+
+    /**
+     * A product-photo source: the fetchable url + its sha1 (today's identity).
+     *
+     * @return array{0:?string,1:?string}
+     */
+    private function photoSource(Product $product, string $sourcePick): array
+    {
+        $url = SourceImagePicker::urlFor($product, $sourcePick);
+
+        return $url === null ? [null, null] : [$url, SourceImagePicker::hash($url)];
+    }
+
+    /**
+     * A FIX source: the private RESULT of the asset being fixed. The stored source_image_url is a
+     * best-effort signed url (advisory only — the worker RE-RESOLVES fresh bytes), but the HASH is
+     * the STABLE identity of the result, sha1('asset:'.id.':'.image_path). The expiring signed
+     * token never enters the hash, so a re-dispatch — and a double-click — collapse to one key.
+     *
+     * @return array{0:?string,1:?string}
+     */
+    private function fixSource(Site $site, ?int $sourceAssetId): array
+    {
+        if ($sourceAssetId === null) {
+            return [null, null];
+        }
+
+        // Site + account scoped (fail closed) — symmetric with the entry gate and the worker, so
+        // the sub-scope is enforced at every hop, not only delegated to the caller.
+        $source = ProductAsset::query()
+            ->where('site_id', $site->getKey())
+            ->whereKey($sourceAssetId)
+            ->first();
+
+        if ($source === null || $source->image_path === null || $source->image_path === '') {
+            return [null, null];
+        }
+
+        $stableHash = sha1('asset:'.$source->getKey().':'.$source->image_path);
+
+        // source_image_url is NOT nullable: store the signed url as a debug snapshot, falling back
+        // to a stable non-http marker (the worker never reads it on the SOURCE_RESULT branch).
+        $url = app(MediaStorage::class)->signedUrl($source->image_path) ?? ('asset-result:'.$source->getKey());
+
+        return [$url, $stableHash];
     }
 
     /**
@@ -385,7 +437,9 @@ final class StartProductImageBatch
 
     private function assertSourcePick(string $sourcePick): void
     {
-        if (! in_array($sourcePick, ProductImageBatch::SOURCE_PICKS, true)) {
+        // Validate against every VALID stored pick — the merchant-offered photos PLUS the internal
+        // SOURCE_RESULT sentinel a fix sets (never offered in the Generate form).
+        if (! in_array($sourcePick, ProductImageBatch::SOURCE_PICKS_ALL, true)) {
             throw new RuntimeException(sprintf(self::UNKNOWN_SOURCE_MESSAGE, $sourcePick));
         }
     }

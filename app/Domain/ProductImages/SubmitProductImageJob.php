@@ -15,6 +15,7 @@ use App\Domain\Credits\ReservationManager;
 use App\Domain\Generation\CreditEstimator;
 use App\Domain\Generation\GenerationFailureCode;
 use App\Domain\Generation\ProductFacts;
+use App\Domain\Media\MediaStorage;
 use App\Jobs\TenantAwareJob;
 use App\Models\Account;
 use App\Models\CreditLedger;
@@ -177,9 +178,15 @@ final class SubmitProductImageJob extends TenantAwareJob implements ShouldBeUniq
             return;
         }
 
-        try {
-            $source = ImagePayload::fromUrl((string) $asset->source_image_url);
-        } catch (Throwable) {
+        // The INPUT image: a product photo (a stored, stable url) OR — for a "fix" — the CURRENT
+        // result's bytes, resolved FRESH here at run-time (never a signed url stored at mint time,
+        // which could have expired). Resolved BEFORE the reserve, so any miss is a clean pre-reserve
+        // cancel: no hold, no charge.
+        $source = $batch !== null && $batch->source_pick === ProductImageBatch::SOURCE_RESULT
+            ? $this->resolveResultSource($asset)
+            : $this->resolvePhotoSource($asset);
+
+        if ($source === null) {
             $this->finalizer()->cancel($asset, GenerationFailureCode::SOURCE_IMAGE_MISSING, self::MSG_SOURCE_MISSING);
 
             return;
@@ -237,6 +244,49 @@ final class SubmitProductImageJob extends TenantAwareJob implements ShouldBeUniq
 
         // SYNC upstream: the image is already here — same job, same laws (store, then charge).
         $this->finalizer()->succeed($asset, $account, $config, $submission->result, $reservation);
+    }
+
+    /** The product-photo source (today's path): the stored, stable source_image_url. */
+    private function resolvePhotoSource(ProductAsset $asset): ?ImagePayload
+    {
+        try {
+            return ImagePayload::fromUrl((string) $asset->source_image_url);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * The FIX source, resolved FRESH at run-time: the private RESULT bytes of source_asset_id read
+     * straight off the media disk and handed to the edit model as a data URI. Reading BYTES (not a
+     * re-signed url) is disk- and provider-agnostic — no signed-url TTL, and no worker self-HTTP on
+     * a local/volume disk. Returns null (→ a clean pre-reserve cancel) if the source is gone,
+     * unreadable, or over the payload ceiling.
+     */
+    private function resolveResultSource(ProductAsset $asset): ?ImagePayload
+    {
+        $source = $asset->source_asset_id !== null
+            ? ProductAsset::query()
+                ->where('site_id', $asset->site_id)
+                ->whereKey($asset->source_asset_id)
+                ->first()
+            : null;
+
+        if ($source === null || $source->image_path === null || $source->image_path === '') {
+            return null;
+        }
+
+        $bytes = app(MediaStorage::class)->get($source->image_path);
+
+        if ($bytes === null) {
+            return null;
+        }
+
+        try {
+            return ImagePayload::fromBytes($bytes, (string) $source->image_mime);
+        } catch (Throwable) {
+            return null; // e.g. over the size ceiling — cancel cleanly, before the reserve
+        }
     }
 
     /**

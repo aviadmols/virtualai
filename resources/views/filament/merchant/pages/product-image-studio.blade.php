@@ -157,6 +157,77 @@
                                 <span class="to-badge__dot" aria-hidden="true"></span>
                                 {{ __('product_images.review_status.' . $tile->reviewStatus) }}
                             </span>
+
+                            {{-- Edit tools (top-inline-end, on the image): enlarge, guided-regenerate
+                                 (Update prompt) and image-to-image Fix. Frosted so they read on any
+                                 product photo; shown only when there is a result to act on. --}}
+                            @if($tile->imageUrl)
+                                <div class="to-studio-tile__tools" x-show="! broken">
+                                    <button type="button" class="to-studio-tile__tool"
+                                            x-on:click="$dispatch('open-lightbox', { src: @js($tile->imageUrl) })"
+                                            title="{{ __('product_images.tile.enlarge') }}"
+                                            aria-label="{{ __('product_images.tile.enlarge') }}">
+                                        <x-filament::icon icon="heroicon-o-arrows-pointing-out" class="to-studio-tile__tool-glyph" />
+                                    </button>
+                                    <button type="button" class="to-studio-tile__tool"
+                                            wire:click="mountAction('updatePrompt', { asset: {{ $tile->id }} })"
+                                            wire:loading.attr="disabled"
+                                            title="{{ __('product_images.tile.update_prompt') }}"
+                                            aria-label="{{ __('product_images.tile.update_prompt') }}">
+                                        <x-filament::icon icon="heroicon-o-pencil-square" class="to-studio-tile__tool-glyph" />
+                                    </button>
+                                    <button type="button" class="to-studio-tile__tool"
+                                            wire:click="mountAction('fixImage', { asset: {{ $tile->id }} })"
+                                            wire:loading.attr="disabled"
+                                            title="{{ __('product_images.tile.fix_image') }}"
+                                            aria-label="{{ __('product_images.tile.fix_image') }}">
+                                        <x-filament::icon icon="heroicon-o-wrench-screwdriver" class="to-studio-tile__tool-glyph" />
+                                    </button>
+                                </div>
+                            @endif
+
+                            {{-- The review decision, over a scrim at the bottom of the image — revealed on
+                                 hover / keyboard focus (always shown on touch). Approve / Reject, plus the
+                                 accent Push / Repush when the store rail applies. Same wire:click actions. --}}
+                            <div class="to-studio-tile__bar" role="group"
+                                 aria-label="{{ __('product_images.tile.actions_review') }}">
+                                <button type="button"
+                                        class="to-studio-tile__act to-studio-tile__act--approve to-studio-tile__act--grow"
+                                        wire:click="approve({{ $tile->id }})" @disabled($tile->isApproved())>
+                                    <x-filament::icon icon="heroicon-o-check" class="to-studio-tile__act-glyph" />
+                                    {{ __('product_images.tile.approve') }}
+                                </button>
+
+                                <button type="button"
+                                        class="to-studio-tile__act to-studio-tile__act--reject to-studio-tile__act--grow"
+                                        wire:click="reject({{ $tile->id }})" @disabled($tile->isRejected())>
+                                    <x-filament::icon icon="heroicon-o-x-mark" class="to-studio-tile__act-glyph" />
+                                    {{ __('product_images.tile.reject') }}
+                                </button>
+
+                                @if($tile->canPush())
+                                    <button type="button"
+                                            class="to-studio-tile__act to-studio-tile__act--publish to-studio-tile__act--icon"
+                                            wire:click="mountAction('pushMedia', { asset: {{ $tile->id }} })"
+                                            wire:loading.attr="disabled"
+                                            title="{{ __('product_images.tile.push') }}"
+                                            aria-label="{{ __('product_images.tile.push') }}">
+                                        <x-filament::icon icon="heroicon-o-arrow-up-tray" class="to-studio-tile__act-glyph" />
+                                    </button>
+                                @endif
+
+                                @if($tile->canRePush())
+                                    <button type="button"
+                                            class="to-studio-tile__act to-studio-tile__act--retry to-studio-tile__act--icon"
+                                            wire:click="rePush({{ $tile->id }})"
+                                            wire:target="rePush({{ $tile->id }})"
+                                            wire:loading.attr="disabled"
+                                            title="{{ __('product_images.tile.repush') }}"
+                                            aria-label="{{ __('product_images.tile.repush') }}">
+                                        <x-filament::icon icon="heroicon-o-arrow-path-rounded-square" class="to-studio-tile__act-glyph" />
+                                    </button>
+                                @endif
+                            </div>
                         </div>
 
                         <figcaption class="to-studio-tile__caption">
@@ -180,72 +251,47 @@
                             <p class="to-studio-tile__push-error">{{ $tile->pushError }}</p>
                         @endif
 
-                        <div class="to-studio-tile__actions">
-                            <x-filament::button type="button" size="xs" color="success" icon="heroicon-o-check"
-                                                wire:click="approve({{ $tile->id }})" :disabled="$tile->isApproved()">
-                                {{ __('product_images.tile.approve') }}
-                            </x-filament::button>
+                        {{-- Low-emphasis utilities, kept OFF the image for safety. Icon-only; the label
+                             lives in title + aria-label. Regenerate SPENDS CREDIT (the money wall is the
+                             deterministic intent id in RegenerateProductImage, not this button); Undo
+                             restores the PRODUCT's original gallery; Delete removes the generated image
+                             for good (not a refund; blocked while live — undo first). --}}
+                        <div class="to-studio-tile__actions to-studio-tile__actions--utility" role="group"
+                             aria-label="{{ __('product_images.tile.actions_more') }}">
+                            <button type="button"
+                                    class="to-studio-tile__act to-studio-tile__act--icon to-studio-tile__act--ghost"
+                                    wire:click="regenerate({{ $tile->id }})"
+                                    wire:target="regenerate({{ $tile->id }})"
+                                    wire:loading.attr="disabled"
+                                    wire:confirm="{{ __('product_images.tile.regenerate_confirm') }}"
+                                    title="{{ __('product_images.tile.regenerate') }}"
+                                    aria-label="{{ __('product_images.tile.regenerate') }}">
+                                <x-filament::icon icon="heroicon-o-arrow-path" class="to-studio-tile__act-glyph" />
+                            </button>
 
-                            <x-filament::button type="button" size="xs" color="danger" icon="heroicon-o-x-mark"
-                                                wire:click="reject({{ $tile->id }})" :disabled="$tile->isRejected()">
-                                {{ __('product_images.tile.reject') }}
-                            </x-filament::button>
-
-                            {{--
-                                Regenerate SPENDS CREDIT. The confirm + the disable-while-pending are
-                                courtesy, NOT the guard: the money wall is the deterministic intent id
-                                in RegenerateProductImage (two clicks -> one asset, one charge).
-                            --}}
-                            <x-filament::button type="button" size="xs" color="gray" icon="heroicon-o-arrow-path"
-                                                wire:click="regenerate({{ $tile->id }})"
-                                                wire:target="regenerate({{ $tile->id }})"
-                                                wire:loading.attr="disabled"
-                                                wire:confirm="{{ __('product_images.tile.regenerate_confirm') }}">
-                                {{ __('product_images.tile.regenerate') }}
-                            </x-filament::button>
-
-                            {{--
-                                PUSH is FREE (no AI, no credit). The placement chooser opens with the
-                                product's REAL gallery; the wall against a double-clicked push is the
-                                row-locked claim + the persisted shopify_media_id, never this button.
-                            --}}
-                            @if($tile->canPush())
-                                <x-filament::button type="button" size="xs" color="primary" icon="heroicon-o-arrow-up-tray"
-                                                    wire:click="mountAction('pushMedia', { asset: {{ $tile->id }} })"
-                                                    wire:loading.attr="disabled">
-                                    {{ __('product_images.tile.push') }}
-                                </x-filament::button>
-                            @endif
-
-                            @if($tile->canRePush())
-                                <x-filament::button type="button" size="xs" color="warning" icon="heroicon-o-arrow-path-rounded-square"
-                                                    wire:click="rePush({{ $tile->id }})"
-                                                    wire:target="rePush({{ $tile->id }})"
-                                                    wire:loading.attr="disabled">
-                                    {{ __('product_images.tile.repush') }}
-                                </x-filament::button>
-                            @endif
-
-                            {{-- UNDO restores this PRODUCT's original gallery (order + main image). --}}
                             @if($tile->canUndo())
-                                <x-filament::button type="button" size="xs" color="gray" icon="heroicon-o-arrow-uturn-left"
-                                                    wire:click="undoProductMedia({{ $tile->productId }})"
-                                                    wire:target="undoProductMedia({{ $tile->productId }})"
-                                                    wire:loading.attr="disabled"
-                                                    wire:confirm="{{ __('product_images.tile.undo_confirm') }}">
-                                    {{ __('product_images.tile.undo') }}
-                                </x-filament::button>
+                                <button type="button"
+                                        class="to-studio-tile__act to-studio-tile__act--icon to-studio-tile__act--ghost"
+                                        wire:click="undoProductMedia({{ $tile->productId }})"
+                                        wire:target="undoProductMedia({{ $tile->productId }})"
+                                        wire:loading.attr="disabled"
+                                        wire:confirm="{{ __('product_images.tile.undo_confirm') }}"
+                                        title="{{ __('product_images.tile.undo') }}"
+                                        aria-label="{{ __('product_images.tile.undo') }}">
+                                    <x-filament::icon icon="heroicon-o-arrow-uturn-left" class="to-studio-tile__act-glyph" />
+                                </button>
                             @endif
 
-                            {{-- DELETE removes this generated image for good (media file + row). Not a
-                                 refund. Blocked while the image is live in the store (undo first). --}}
-                            <x-filament::button type="button" size="xs" color="danger" icon="heroicon-o-trash"
-                                                wire:click="deleteAsset({{ $tile->id }})"
-                                                wire:target="deleteAsset({{ $tile->id }})"
-                                                wire:loading.attr="disabled"
-                                                wire:confirm="{{ __('product_images.tile.delete_confirm') }}">
-                                {{ __('product_images.tile.delete') }}
-                            </x-filament::button>
+                            <button type="button"
+                                    class="to-studio-tile__act to-studio-tile__act--icon to-studio-tile__act--danger-ghost"
+                                    wire:click="deleteAsset({{ $tile->id }})"
+                                    wire:target="deleteAsset({{ $tile->id }})"
+                                    wire:loading.attr="disabled"
+                                    wire:confirm="{{ __('product_images.tile.delete_confirm') }}"
+                                    title="{{ __('product_images.tile.delete') }}"
+                                    aria-label="{{ __('product_images.tile.delete') }}">
+                                <x-filament::icon icon="heroicon-o-trash" class="to-studio-tile__act-glyph" />
+                            </button>
                         </div>
                     </figure>
                 @endforeach

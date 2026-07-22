@@ -44,8 +44,14 @@ final readonly class RegenerateProductImage
     /**
      * Regenerate ONE finished asset. Returns the SAME typed outcome a batch returns, so the
      * studio renders it with the same notifications (a denial is never an exception).
+     *
+     * $noteOverride null → reproduce the SAME look (today's behaviour). A string → "Update prompt":
+     * regenerate from the ORIGINAL product photo with the merchant's edited art-direction note
+     * REPLACING the source's. A changed note is folded into the idempotency key (extra['notes']),
+     * so it is a genuinely new image — never skipped as a duplicate; an unchanged note collapses on
+     * the same intent id like any double-click.
      */
-    public function handle(Site $site, int $sourceAssetId): BatchResult
+    public function handle(Site $site, int $sourceAssetId, ?string $noteOverride = null): BatchResult
     {
         $source = $this->asset($site, $sourceAssetId);
 
@@ -66,9 +72,10 @@ final readonly class RegenerateProductImage
             sourcePick: (string) ($source->batch?->source_pick ?? ProductImageBatch::SOURCE_MAIN),
             clientRequestId: $this->intentId($source),
             sourceAssetId: (int) $source->getKey(),
-            // Reproduce the SAME look: carry the source's style + the batch's note/ratio/quality.
+            // Reproduce the SAME look: carry the source's style + the batch's ratio/quality. The note
+            // is the merchant's edit when "Update prompt" supplied one, else the source's note.
             styleId: $source->style_preset_id !== null ? (int) $source->style_preset_id : null,
-            notes: $source->batch?->notes,
+            notes: $noteOverride ?? $source->batch?->notes,
             aspectRatio: $source->batch?->aspect_ratio,
             imageQuality: $source->batch?->image_quality,
         );

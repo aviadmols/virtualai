@@ -96,6 +96,29 @@ return [
         'rendering' => 'Rendering…',
         'enlarge' => 'View larger',
         'broken' => 'This image is no longer available',
+        // The on-image edit tools.
+        'update_prompt' => 'Edit prompt',
+        'fix_image' => 'Fix image',
+        // Group labels for the tile's action rows (screen-reader context).
+        'actions_review' => 'Review actions',
+        'actions_publish' => 'Store actions',
+        'actions_more' => 'More actions',
+    ],
+
+    // Edit the art-direction note and regenerate from the ORIGINAL product photo (a new charge).
+    'update_prompt' => [
+        'heading' => 'Edit the prompt and regenerate',
+        'sub' => 'Adjust the art-direction note and generate again from the original product photo. This runs the AI again, so it is charged again.',
+        'cta' => 'Regenerate',
+    ],
+
+    // Image-to-image correction of the CURRENT result (a new charge).
+    'fix' => [
+        'heading' => 'Fix this image',
+        'sub' => 'Describe the correction and the AI will edit this exact image, keeping the rest. This runs the AI again, so it is charged again.',
+        'cta' => 'Fix image',
+        'instruction' => 'What should change?',
+        'instruction_help' => 'e.g. remove the reflection, straighten the label, make the background pure white.',
     ],
 
     // The full-screen preview when an image is clicked.

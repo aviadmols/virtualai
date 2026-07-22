@@ -7,6 +7,7 @@ use App\Domain\Ai\ImageQualities;
 use App\Domain\Credits\CreditMath;
 use App\Domain\Media\MediaStorage;
 use App\Domain\ProductImages\BatchResult;
+use App\Domain\ProductImages\FixProductImage;
 use App\Domain\ProductImages\ProductImageReview;
 use App\Domain\ProductImages\RegenerateProductImage;
 use App\Domain\ProductImages\ReviewTile;
@@ -230,6 +231,31 @@ class ProductImageStudio extends Page
 
     private const NOTIFY_UNDOING = 'product_images.notify.undoing';
 
+    // --- Per-image edit modals (Image Studio v2): guided regenerate + image-to-image fix. Both
+    // mint a NEW, separately-charged asset; the money guard lives in the domain services, never
+    // here. Mounted per tile with the asset id as an argument, like pushMedia. ---
+    private const UPDATE_PROMPT_ACTION = 'updatePrompt';
+
+    private const FIX_IMAGE_ACTION = 'fixImage';
+
+    private const FIELD_INSTRUCTION = 'instruction';
+
+    private const UPDATE_PROMPT_HEADING = 'product_images.update_prompt.heading';
+
+    private const UPDATE_PROMPT_SUB = 'product_images.update_prompt.sub';
+
+    private const UPDATE_PROMPT_CTA = 'product_images.update_prompt.cta';
+
+    private const FIX_HEADING = 'product_images.fix.heading';
+
+    private const FIX_SUB = 'product_images.fix.sub';
+
+    private const FIX_CTA = 'product_images.fix.cta';
+
+    private const FIX_INSTRUCTION_LABEL = 'product_images.fix.instruction';
+
+    private const FIX_INSTRUCTION_HELP = 'product_images.fix.instruction_help';
+
     private const PUSH_DENIED_KEYS = [
         PushResult::REASON_NOT_APPROVED => 'product_images.notify.push_not_approved',
         PushResult::REASON_ALREADY_PUSHED => 'product_images.notify.push_already',
@@ -432,6 +458,80 @@ class ProductImageStudio extends Page
                     self::NOTIFY_PUSHING,
                 );
             });
+    }
+
+    /**
+     * UPDATE PROMPT — a guided regenerate: the merchant edits the art-direction note (prefilled
+     * from the source's batch note) and the image is regenerated from the ORIGINAL product photo
+     * with the new note. A NEW, separately-charged asset; the money guard (the intent id + the
+     * note folded into the key) lives in RegenerateProductImage, never in this modal.
+     */
+    public function updatePromptAction(): Action
+    {
+        return Action::make(self::UPDATE_PROMPT_ACTION)
+            ->label(__(self::UPDATE_PROMPT_CTA))
+            ->icon('heroicon-o-pencil-square')
+            ->modalHeading(__(self::UPDATE_PROMPT_HEADING))
+            ->modalDescription(__(self::UPDATE_PROMPT_SUB))
+            ->modalSubmitActionLabel(__(self::UPDATE_PROMPT_CTA))
+            ->form(fn (array $arguments): array => [
+                Textarea::make(self::FIELD_NOTES)
+                    ->label(__(self::FIELD_NOTES_LABEL))
+                    ->helperText(__(self::FIELD_NOTES_HELP))
+                    ->rows(3)
+                    ->maxLength(500)
+                    ->default($this->noteFor($this->argAsset($arguments))),
+            ])
+            ->action(function (array $arguments, array $data): void {
+                $this->notifyResult(
+                    app(RegenerateProductImage::class)->handle(
+                        $this->shopSite(),
+                        $this->argAsset($arguments),
+                        (string) ($data[self::FIELD_NOTES] ?? ''),
+                    ),
+                );
+            });
+    }
+
+    /**
+     * FIX IMAGE — an image-to-image correction of the CURRENT result: the merchant types what to
+     * change and the AI edits THIS exact image (not a fresh take). A NEW, separately-charged asset;
+     * the money guard (intent id + stable source hash) lives in FixProductImage.
+     */
+    public function fixImageAction(): Action
+    {
+        return Action::make(self::FIX_IMAGE_ACTION)
+            ->label(__(self::FIX_CTA))
+            ->icon('heroicon-o-wrench-screwdriver')
+            ->modalHeading(__(self::FIX_HEADING))
+            ->modalDescription(__(self::FIX_SUB))
+            ->modalSubmitActionLabel(__(self::FIX_CTA))
+            ->form(fn (array $arguments): array => [
+                Textarea::make(self::FIELD_INSTRUCTION)
+                    ->label(__(self::FIX_INSTRUCTION_LABEL))
+                    ->helperText(__(self::FIX_INSTRUCTION_HELP))
+                    ->rows(3)
+                    ->maxLength(500)
+                    ->required(),
+            ])
+            ->action(function (array $arguments, array $data): void {
+                $this->notifyResult(
+                    app(FixProductImage::class)->handle(
+                        $this->shopSite(),
+                        $this->argAsset($arguments),
+                        (string) ($data[self::FIELD_INSTRUCTION] ?? ''),
+                    ),
+                );
+            });
+    }
+
+    /** The source asset's current batch note, for the Update-prompt prefill (site-scoped, fail closed). */
+    private function noteFor(int $assetId): string
+    {
+        return (string) (ProductAsset::query()
+            ->where('site_id', $this->shopSite()->getKey())
+            ->whereKey($assetId)
+            ->first()?->batch?->notes ?? '');
     }
 
     /**

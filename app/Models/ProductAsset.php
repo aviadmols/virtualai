@@ -148,6 +148,10 @@ class ProductAsset extends Model
 
     public const REQUEST_REGENERATE_PREFIX = 'regen-';
 
+    // "Fix image" is an image-to-image correction of a finished result (source = the result's
+    // bytes, not a product photo). Its intent id is fix-{source}-{settled}, disjoint from regen-.
+    public const REQUEST_FIX_PREFIX = 'fix-';
+
     // Activity kinds (the taxonomy lives on ActivityEvent — one source of truth).
     public const KIND_STATUS_CHANGED = ActivityEvent::KIND_PRODUCT_ASSET_STATUS_CHANGED;
 

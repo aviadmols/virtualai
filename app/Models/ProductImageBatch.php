@@ -64,11 +64,26 @@ class ProductImageBatch extends Model
 
     public const SOURCE_ALT_3 = 'alt_3';
 
+    // The RESULT of the asset being fixed (the "fix image" rail): the source is NOT a product
+    // photo but the private generated result of source_asset_id, resolved FRESH in the worker.
+    // NOT a merchant-offered batch pick — only FixProductImage sets it.
+    public const SOURCE_RESULT = 'result';
+
+    // The picks a merchant may choose in Generate (unchanged — the studio offers only these).
     public const SOURCE_PICKS = [
         self::SOURCE_MAIN,
         self::SOURCE_ALT_1,
         self::SOURCE_ALT_2,
         self::SOURCE_ALT_3,
+    ];
+
+    // Every VALID stored pick, including the internal fix sentinel (what the entry point validates).
+    public const SOURCE_PICKS_ALL = [
+        self::SOURCE_MAIN,
+        self::SOURCE_ALT_1,
+        self::SOURCE_ALT_2,
+        self::SOURCE_ALT_3,
+        self::SOURCE_RESULT,
     ];
 
     // The counter columns the pipeline increments (never a magic string at a call site).

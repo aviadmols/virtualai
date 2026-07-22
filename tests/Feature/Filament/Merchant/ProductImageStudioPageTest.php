@@ -154,6 +154,84 @@ class ProductImageStudioPageTest extends TestCase
         });
     }
 
+    /**
+     * "Update prompt" — the modal regenerates from the ORIGINAL photo with the merchant's edited
+     * note. A NEW, separately-charged asset; the money guard stays in RegenerateProductImage.
+     */
+    public function test_update_prompt_action_regenerates_with_the_edited_note(): void
+    {
+        $source = Tenant::run($this->shop['account'], function (): ProductAsset {
+            $batch = ProductImageBatch::factory()->forSite($this->shop['site'])->running()->create(['notes' => 'original note']);
+
+            return ProductAsset::factory()->forProduct($this->shop['product'], $batch)->succeeded()->create();
+        });
+
+        Tenant::run($this->shop['account'], function () use ($source): void {
+            $this->page()
+                ->mountAction('updatePrompt', ['asset' => (int) $source->getKey()])
+                ->setActionData(['notes' => 'a brighter, warmer look'])
+                ->callMountedAction()
+                ->assertHasNoActionErrors()
+                ->assertNotified();
+
+            $child = ProductAsset::query()->where('source_asset_id', $source->getKey())->firstOrFail();
+            $this->assertSame('a brighter, warmer look', ProductImageBatch::query()->find($child->batch_id)->notes);
+            Bus::assertDispatched(SubmitProductImageJob::class);
+        });
+    }
+
+    /** "Fix image" — the modal queues an image-to-image fix of the CURRENT result (SOURCE_RESULT). */
+    public function test_fix_image_action_queues_a_fix_of_the_result(): void
+    {
+        $source = Tenant::run($this->shop['account'], function (): ProductAsset {
+            $batch = ProductImageBatch::factory()->forSite($this->shop['site'])->running()->create();
+
+            return ProductAsset::factory()->forProduct($this->shop['product'], $batch)->succeeded()->create([
+                'image_path' => 'accounts/x/sites/y/product-assets/result.png',
+                'image_mime' => 'image/png',
+            ]);
+        });
+
+        Tenant::run($this->shop['account'], function () use ($source): void {
+            $this->page()
+                ->mountAction('fixImage', ['asset' => (int) $source->getKey()])
+                ->setActionData(['instruction' => 'make the background pure white'])
+                ->callMountedAction()
+                ->assertHasNoActionErrors()
+                ->assertNotified();
+
+            $child = ProductAsset::query()->where('source_asset_id', $source->getKey())->firstOrFail();
+            $this->assertSame(ProductImageBatch::SOURCE_RESULT, ProductImageBatch::query()->find($child->batch_id)->source_pick);
+            Bus::assertDispatched(SubmitProductImageJob::class);
+        });
+    }
+
+    /** A double-clicked Fix on the page mints exactly ONE asset (the domain money guard holds). */
+    public function test_a_double_clicked_fix_on_the_page_queues_one_asset_once(): void
+    {
+        $source = Tenant::run($this->shop['account'], function (): ProductAsset {
+            $batch = ProductImageBatch::factory()->forSite($this->shop['site'])->running()->create();
+
+            return ProductAsset::factory()->forProduct($this->shop['product'], $batch)->succeeded()->create([
+                'image_path' => 'accounts/x/sites/y/product-assets/result.png',
+                'image_mime' => 'image/png',
+            ]);
+        });
+
+        Tenant::run($this->shop['account'], function () use ($source): void {
+            foreach ([1, 2] as $ignored) {
+                $this->page()
+                    ->mountAction('fixImage', ['asset' => (int) $source->getKey()])
+                    ->setActionData(['instruction' => 'brighten it'])
+                    ->callMountedAction()
+                    ->assertHasNoActionErrors();
+            }
+
+            $this->assertSame(1, ProductAsset::query()->where('source_asset_id', $source->getKey())->count());
+            Bus::assertDispatchedTimes(SubmitProductImageJob::class, 1);
+        });
+    }
+
     // --- Phase 5: the store rail on the review grid (push / re-push / undo). All FREE. ---
 
     /**

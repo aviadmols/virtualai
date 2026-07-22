@@ -5,11 +5,14 @@
  * rejection does not refund" before they run a batch), a live progress bar whose fill
  * is a CLASS (never an inline style — the no-inline-CSS law), and the per-tile action
  * row. Pure layout + token-backed colour; logical properties so the flow mirrors in HE.
- * TOKENS: --toa-surface-alt --toa-border --to-r-card --to-shadow-card --to-shadow-hover
+ * TOKENS: --toa-surface-alt --toa-border --to-r-card --to-r-card-lg --to-shadow-card
+ *   --to-shadow-hover --to-shadow-layered --to-shadow-layered-hover --to-shadow-accent-glow
  *   --to-ink --to-ink-muted --to-ink-subtle --to-warn --to-warn-bg --to-space-1
- *   --to-space-2 --to-space-3 --to-space-4 --to-space-6 --to-t-fast --to-bw-input
+ *   --to-space-2 --to-space-3 --to-space-4 --to-space-6 --to-t-fast --to-t-base --to-bw-input
  *   --toa-type-caption-size --toa-type-body-size --to-fw-medium --to-r-control --toa-accent
- *   --to-success --to-danger --to-bw-input-focus  (Phase 5: the per-tile STORE state)
+ *   --to-success --to-success-bg --to-danger --to-danger-bg --to-rule-soft --to-bw-input-focus
+ *   --toa-focus --toa-grad-accent --toa-btn-primary-bg --toa-accent-on  (Phase 5e: calm tiles)
+ *   --to-space-5 --to-space-8 --to-r-pill --to-paper --toa-grad-scrim  (v2: on-image controls)
  * ==========================================================================*/
 
 /* --- the charge notice --- */
@@ -116,7 +119,7 @@
 .to-studio-grid {
     display: grid;
     gap: var(--to-space-4);
-    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
 }
 
 .to-studio-tile {
@@ -124,21 +127,32 @@
     flex-direction: column;
     gap: var(--to-space-2);
     margin: 0;
+    transition: transform var(--to-t-base);
+}
+
+/* A subtle lift of the whole card on hover (image + controls move as one). */
+.to-studio-tile:hover {
+    transform: translateY(calc(var(--to-space-1) * -1));
 }
 
 .to-studio-tile__frame {
     position: relative;
     aspect-ratio: 1 / 1;
     overflow: hidden;
-    border-radius: var(--to-r-card);
+    border-radius: var(--to-r-card-lg);
     background: var(--toa-surface-alt);
     border: var(--to-bw-input) solid var(--toa-border);
-    box-shadow: var(--to-shadow-card);
-    transition: box-shadow var(--to-t-fast);
+    box-shadow: var(--to-shadow-layered, var(--to-shadow-card));
+    transition: box-shadow var(--to-t-base);
 }
 
 .to-studio-tile:hover .to-studio-tile__frame {
-    box-shadow: var(--to-shadow-hover);
+    box-shadow: var(--to-shadow-layered-hover, var(--to-shadow-hover));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .to-studio-tile { transition: none; }
+    .to-studio-tile:hover { transform: none; }
 }
 
 .to-studio-tile__img {
@@ -174,6 +188,10 @@
     position: absolute;
     inset-block-start: var(--to-space-2);
     inset-inline-start: var(--to-space-2);
+    /* Frost the pill so its status reads clearly over a light product image. */
+    border: var(--to-bw-input) solid var(--toa-border);
+    box-shadow: var(--to-shadow-hover);
+    backdrop-filter: blur(var(--to-space-1));
 }
 
 .to-studio-tile__caption {
@@ -193,10 +211,203 @@
     font-size: var(--toa-type-caption-size);
 }
 
+/* --- Per-tile actions: compact + tonal + calm. Exactly one vivid element per state — the
+ * soft-green Approve while deciding, the accent-gradient Push once approved; everything else is
+ * a soft tint or a quiet ghost. Rows: the decision pair, an optional publish row, then the
+ * low-emphasis icon-only utilities. Logical properties so each row mirrors under RTL. --- */
 .to-studio-tile__actions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--to-space-2);
+}
+
+/* The utilities sit tighter and trail to the inline-end, out of the way. */
+.to-studio-tile__actions--utility {
+    gap: var(--to-space-1);
+    justify-content: flex-end;
+}
+
+.to-studio-tile__act {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--to-space-1);
+    padding-block: var(--to-space-2);
+    padding-inline: var(--to-space-3);
+    border: var(--to-bw-input) solid transparent;
+    border-radius: var(--to-r-control);
+    font-family: inherit;
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color var(--to-t-fast), color var(--to-t-fast),
+        border-color var(--to-t-fast), box-shadow var(--to-t-fast);
+}
+
+.to-studio-tile__act:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-focus);
+}
+
+.to-studio-tile__act:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* The decision + publish buttons share their row evenly. */
+.to-studio-tile__act--grow { flex: 1 1 0; }
+
+.to-studio-tile__act-glyph {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+    flex: none;
+}
+
+/* Icon-only utility — square; the label lives in title + aria-label. */
+.to-studio-tile__act--icon {
+    padding-inline: var(--to-space-2);
+}
+
+/* Approve — tonal success, the confident (but calm) decision. */
+.to-studio-tile__act--approve {
+    background: var(--to-success-bg);
+    color: var(--to-success);
+}
+.to-studio-tile__act--approve:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--to-success) 16%, var(--to-success-bg));
+}
+
+/* Reject — tonal danger, quiet. */
+.to-studio-tile__act--reject {
+    background: var(--to-danger-bg);
+    color: var(--to-danger);
+}
+.to-studio-tile__act--reject:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--to-danger) 14%, var(--to-danger-bg));
+}
+
+/* Publish (push to store) — THE accent pop: the merchant's indigo->violet ramp, white glyph. */
+.to-studio-tile__act--publish {
+    background: var(--toa-btn-primary-bg, var(--toa-grad-accent));
+    color: var(--toa-accent-on);
+}
+.to-studio-tile__act--publish:hover:not(:disabled) {
+    box-shadow: var(--to-shadow-accent-glow);
+}
+
+/* Retry (re-push) — tonal warning. */
+.to-studio-tile__act--retry {
+    background: var(--to-warn-bg);
+    color: var(--to-warn);
+}
+.to-studio-tile__act--retry:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--to-warn) 14%, var(--to-warn-bg));
+}
+
+/* Ghost — lowest-emphasis utilities (regenerate, undo): a tint only on hover. */
+.to-studio-tile__act--ghost {
+    background: transparent;
+    color: var(--to-ink-muted);
+}
+.to-studio-tile__act--ghost:hover:not(:disabled) {
+    background: var(--to-rule-soft);
+    color: var(--to-ink);
+}
+
+/* Delete — a ghost that only reveals danger on hover (destructive, never loud). */
+.to-studio-tile__act--danger-ghost {
+    background: transparent;
+    color: var(--to-ink-subtle);
+}
+.to-studio-tile__act--danger-ghost:hover:not(:disabled) {
+    background: var(--to-danger-bg);
+    color: var(--to-danger);
+}
+
+/* --- On-image overlay controls (Image Studio v2). A frosted edit-tools cluster in the corner
+ * (always visible) + a decision bar over a scrim at the bottom (revealed on hover / keyboard focus,
+ * always shown on touch). Logical properties so both mirror under RTL. --- */
+.to-studio-tile__tools {
+    position: absolute;
+    inset-block-start: var(--to-space-2);
+    inset-inline-end: var(--to-space-2);
+    z-index: 2;
+    display: flex;
+    gap: var(--to-space-1);
+}
+
+.to-studio-tile__tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--to-space-8);
+    block-size: var(--to-space-8);
+    padding: 0;
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-pill);
+    /* Frosted so the glyph reads over ANY product photo (light or dark). */
+    background: color-mix(in srgb, var(--to-paper) 72%, transparent);
+    backdrop-filter: blur(var(--to-space-1));
+    box-shadow: var(--to-shadow-hover);
+    color: var(--to-ink);
+    cursor: pointer;
+    transition: background-color var(--to-t-fast), color var(--to-t-fast);
+}
+
+.to-studio-tile__tool:hover:not(:disabled) {
+    background: var(--to-paper);
+    color: var(--toa-accent);
+}
+
+.to-studio-tile__tool:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-focus);
+}
+
+.to-studio-tile__tool:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.to-studio-tile__tool-glyph {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+
+.to-studio-tile__bar {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: var(--to-space-2);
+    padding: var(--to-space-5) var(--to-space-3) var(--to-space-3);
+    background: var(--toa-grad-scrim, transparent);
+    /* Hidden at rest (and no pointer capture over the image) — revealed on hover / focus. */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--to-t-base);
+}
+
+.to-studio-tile:hover .to-studio-tile__bar,
+.to-studio-tile__frame:focus-within .to-studio-tile__bar {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .to-studio-tile__bar { transition: none; }
+}
+
+/* Touch (no hover): keep the decision bar permanently reachable. */
+@media (hover: none) {
+    .to-studio-tile__bar {
+        opacity: 1;
+        pointer-events: auto;
+    }
 }
 
 /* --- The STORE state of a tile (Phase 5: pushed to Shopify product media). --- */
@@ -271,7 +482,9 @@
     align-items: center;
     justify-content: center;
     padding: var(--to-space-6);
-    background: color-mix(in srgb, var(--to-ink) 82%, transparent);
+    /* A frosted dim — the blur lets us soften the scrim so the image still pops. */
+    background: color-mix(in srgb, var(--to-ink) 78%, transparent);
+    backdrop-filter: blur(var(--to-space-2));
     cursor: zoom-out;
 }
 
@@ -279,7 +492,7 @@
     max-inline-size: 100%;
     max-block-size: 100%;
     object-fit: contain;
-    border-radius: var(--to-r-card);
+    border-radius: var(--to-r-card-lg);
     box-shadow: var(--to-shadow-hover);
 }
 
