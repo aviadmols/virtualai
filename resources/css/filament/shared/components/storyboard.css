@@ -315,6 +315,12 @@
     font-style: italic;
 }
 
+/* The shot's camera work + motion beat (what the clip step animates). */
+.to-sb-frame__motion {
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+}
+
 .to-sb-frame__actions {
     display: flex;
     flex-wrap: wrap;

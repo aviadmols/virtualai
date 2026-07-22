@@ -47,11 +47,33 @@ class StoryboardFoundationTest extends TestCase
         $this->assertDatabaseCount('storyboard_step_runs', 0);
     }
 
-    public function test_expected_frame_count_is_ceil_of_duration_over_interval(): void
+    public function test_shot_bounds_derive_from_duration_and_the_pacing_hint(): void
     {
-        $this->assertSame(5, StoryboardProject::factory()->make(['duration_seconds' => 15, 'frame_interval_seconds' => 3])->expectedFrameCount());
-        $this->assertSame(6, StoryboardProject::factory()->make(['duration_seconds' => 16, 'frame_interval_seconds' => 3])->expectedFrameCount());
-        $this->assertSame(1, StoryboardProject::factory()->make(['duration_seconds' => 2, 'frame_interval_seconds' => 3])->expectedFrameCount());
+        // 15s at pacing 3 → shots may run up to 6s; between 3 and 15 shots.
+        $p = StoryboardProject::factory()->make(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
+        $this->assertSame(6, $p->maxShotSeconds());
+        $this->assertSame(3, $p->minShotCount());
+        $this->assertSame(15, $p->maxShotCount());
+
+        // A long film hits the hard shots cap; a tiny film can never exceed its seconds.
+        $long = StoryboardProject::factory()->make(['duration_seconds' => 600, 'frame_interval_seconds' => 3]);
+        $this->assertSame(StoryboardProject::MAX_SHOTS_CAP, $long->maxShotCount());
+        $tiny = StoryboardProject::factory()->make(['duration_seconds' => 2, 'frame_interval_seconds' => 3]);
+        $this->assertSame(2, $tiny->maxShotCount());
+        $this->assertSame(1, $tiny->minShotCount());
+    }
+
+    public function test_planned_shot_count_prefers_the_locked_plan_over_the_estimate(): void
+    {
+        // Before the director runs: the pacing estimate. After: the locked plan's OWN count.
+        $p = StoryboardProject::factory()->make(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
+        $this->assertSame(5, $p->plannedShotCount());
+
+        $p->pipeline = [StoryboardProject::PIPE_TIMING => [
+            ['frame_number' => 1, 'start_second' => 0, 'end_second' => 7],
+            ['frame_number' => 2, 'start_second' => 7, 'end_second' => 15],
+        ]];
+        $this->assertSame(2, $p->plannedShotCount());
     }
 
     public function test_every_pipeline_step_is_seeded_and_resolvable(): void
@@ -94,14 +116,22 @@ class StoryboardFoundationTest extends TestCase
         $this->assertArrayHasKey('description', $analysis->inputSchema['properties']);
         $this->assertArrayHasKey('subject_type', $analysis->inputSchema['properties']);
 
-        // A frame carrying reference images routes to the EDIT-capable model — configured on the
-        // operation (param) and catalogued with its provider, never hardcoded in a service.
+        // The anchor-less LOOK-SETTING generation upgrades to the premium first-frame model —
+        // configured on the operation (param) and catalogued with its provider, never hardcoded.
         $image = $resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
-        $this->assertSame('fal-ai/nano-banana/edit', $image->params['reference_model'] ?? null);
+        $this->assertSame('google/gemini-3-pro-image', $image->params['first_frame_model'] ?? null);
+        $this->assertDatabaseHas('ai_models', [
+            'operation_key' => AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
+            'model_id' => 'google/gemini-3-pro-image',
+            'provider' => 'openrouter',
+            'is_active' => true,
+        ]);
+        // The chained default is the EDIT-capable model (it SEES the previous frame + refs).
         $this->assertDatabaseHas('ai_models', [
             'operation_key' => AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
             'model_id' => 'fal-ai/nano-banana/edit',
             'provider' => 'fal',
+            'is_default' => true,
             'is_active' => true,
         ]);
     }
@@ -136,6 +166,15 @@ class StoryboardFoundationTest extends TestCase
             $this->assertArrayHasKey($section, $director->inputSchema['properties']);
         }
 
+        // Shot-based derivation: the DIRECTOR decides the cut list within the project bounds —
+        // each shot carries its own duration + ONE concrete camera movement.
+        $this->assertStringContainsString('{{min_shots}}', $director->systemPrompt);
+        $this->assertStringContainsString('{{max_shot_seconds}}', $director->systemPrompt);
+        $shotProps = $director->inputSchema['properties']['shot_timing']['items']['properties'];
+        $this->assertArrayHasKey('shot_number', $shotProps);
+        $this->assertArrayHasKey('duration_seconds', $shotProps);
+        $this->assertArrayHasKey('camera_movement', $shotProps);
+
         $scene = $resolver->for(AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN);
         $this->assertArrayHasKey('frames', $scene->inputSchema['properties']);
         // Each frame plans its own motion phrase (feeds the video clip step's {{motion}}) and a
@@ -151,7 +190,7 @@ class StoryboardFoundationTest extends TestCase
         $image = $resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
         $this->assertNull($image->inputSchema);
         $this->assertSame('high', $image->imageQuality);
-        $this->assertSame('fal-ai/krea-2/turbo', $image->model);
+        $this->assertSame('fal-ai/nano-banana/edit', $image->model);
     }
 
     public function test_storyboard_models_are_global_and_pinned_on_the_allow_list(): void

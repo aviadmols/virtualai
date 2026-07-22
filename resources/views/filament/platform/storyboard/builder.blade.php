@@ -14,7 +14,7 @@
     @php($assetTags = $this->getAssetTags())
     @php($finalVideo = $this->getFinalVideo())
 
-    <div class="to-sb" @if (! $editingFrameId && ! $improvingFrameId && ! $dialogueFrameId) wire:poll.5s @endif>
+    <div class="to-sb" @if (! $editingFrameId && ! $improvingFrameId && ! $dialogueFrameId && ! $motionFrameId) wire:poll.5s @endif>
         @if ($totalCost)
             <p class="to-sb-cost">{{ __('platform.storyboard.total_cost') }}: <strong>{{ $totalCost }}</strong></p>
         @endif
@@ -124,7 +124,7 @@
 
                         <div class="to-sb-frame__body">
                             <div class="to-sb-frame__head">
-                                <span class="to-sb-frame__num">#{{ $frame['number'] }} · {{ $frame['time'] }}</span>
+                                <span class="to-sb-frame__num">#{{ $frame['number'] }} · {{ $frame['time'] }} ({{ $frame['seconds'] }}s)</span>
                                 <span class="to-sb-frame__flags">
                                     @if ($frame['approved']) <span class="to-sb-flag to-sb-flag--ok">✓</span> @endif
                                     @if ($frame['locked']) <span class="to-sb-flag">🔒</span> @endif
@@ -213,6 +213,11 @@
                                     <p class="to-sb-frame__dialogue">💬 “{{ $frame['dialogue'] }}”</p>
                                 @endif
 
+                                {{-- The locked shot's camera work + motion beat (what the clip animates). --}}
+                                @if (filled($frame['motion']) || filled($frame['camera']))
+                                    <p class="to-sb-frame__motion">🎥 {{ collect([$frame['camera'], $frame['motion']])->filter()->implode(' — ') }}</p>
+                                @endif
+
                                 {{-- Version thumbnails --}}
                                 @if (count($frame['versions']) > 1)
                                     <div class="to-sb-frame__versions">
@@ -246,6 +251,28 @@
                                                 {{ __('platform.storyboard.save') }}
                                             </x-filament::button>
                                             <x-filament::button size="sm" color="gray" wire:click="cancelDialogue">
+                                                {{ __('platform.storyboard.cancel') }}
+                                            </x-filament::button>
+                                        </div>
+                                    </div>
+                                @endif
+
+                                {{-- Camera + motion: the shot's camera work and the motion beat the clip
+                                     step animates — locked by the plan, refinable per frame. --}}
+                                @if ($motionFrameId === $frame['id'])
+                                    <div class="to-sb-frame__edit">
+                                        <input type="text" class="to-sb-input" wire:model="motionCamera"
+                                            placeholder="{{ __('platform.storyboard.motion_camera_placeholder') }}" />
+                                        <textarea class="to-sb-input" wire:model="motionText" rows="2"
+                                            placeholder="{{ __('platform.storyboard.motion_placeholder') }}"></textarea>
+                                        <div class="to-sb-composer__hint">
+                                            <span>{{ __('platform.storyboard.motion_hint') }}</span>
+                                        </div>
+                                        <div class="to-sb-frame__actions">
+                                            <x-filament::button size="sm" wire:click="saveMotion" icon="heroicon-o-video-camera">
+                                                {{ __('platform.storyboard.save') }}
+                                            </x-filament::button>
+                                            <x-filament::button size="sm" color="gray" wire:click="cancelMotion">
                                                 {{ __('platform.storyboard.cancel') }}
                                             </x-filament::button>
                                         </div>
@@ -286,6 +313,9 @@
                                         </x-filament::button>
                                         <x-filament::button size="sm" color="gray" wire:click="startDialogue({{ $frame['id'] }})" icon="heroicon-o-chat-bubble-bottom-center-text">
                                             {{ __('platform.storyboard.dialogue') }}
+                                        </x-filament::button>
+                                        <x-filament::button size="sm" color="gray" wire:click="startMotion({{ $frame['id'] }})" icon="heroicon-o-video-camera">
+                                            {{ __('platform.storyboard.motion') }}
                                         </x-filament::button>
                                         <x-filament::button size="sm" :color="$frame['approved'] ? 'success' : 'gray'" wire:click="approveFrame({{ $frame['id'] }})">
                                             {{ __('platform.storyboard.approve') }}

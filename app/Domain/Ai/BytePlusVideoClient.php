@@ -2,6 +2,7 @@
 
 namespace App\Domain\Ai;
 
+use App\Domain\Ai\Concerns\EncodesImageDataUris;
 use App\Domain\Ai\Contracts\VideoGenerationProvider;
 use App\Domain\Platform\PlatformSettings;
 use Illuminate\Http\Client\ConnectionException;
@@ -26,6 +27,8 @@ use Illuminate\Support\Facades\Log;
  */
 final class BytePlusVideoClient implements VideoGenerationProvider
 {
+    use EncodesImageDataUris;
+
     // === CONSTANTS ===
     private const TASKS_PATH = '/contents/generations/tasks';
 
@@ -70,7 +73,11 @@ final class BytePlusVideoClient implements VideoGenerationProvider
     {
         $content = [['type' => 'text', 'text' => $prompt]];
 
-        foreach (array_values($imageUrls) as $i => $url) {
+        // Inline every input frame as a base64 data URI: ModelArk fetches url inputs ITSELF,
+        // and a signed/expiring media url it cannot reach fails the task silently server-side.
+        // Inlining kills that failure class (mirrors the AtlasCloud client); an unusable input
+        // is dropped rather than sent broken.
+        foreach ($this->asDataUris($imageUrls) as $i => $url) {
             $content[] = [
                 'type' => 'image_url',
                 'image_url' => ['url' => $url],

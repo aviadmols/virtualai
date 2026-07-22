@@ -54,6 +54,17 @@ class StoryboardProject extends Model
 
     public const VIDEO_FAILED = 'failed';
 
+    // Shot-based derivation bounds. The Story Director decides the CUT LIST (one shot = one
+    // continuous camera setup/movement = one frame); these walls keep its freedom inside cost
+    // and pacing limits. frame_interval_seconds is the merchant's PACING HINT, not a slicer.
+    public const MIN_SHOT_SECONDS = 1;
+
+    public const MAX_SHOTS_CAP = 20;
+
+    private const MAX_SHOT_SECONDS_FLOOR = 3;
+
+    private const MAX_SHOT_SECONDS_CEIL = 12;
+
     protected $fillable = [
         'created_by',
         'title',
@@ -84,9 +95,45 @@ class StoryboardProject extends Model
         ];
     }
 
-    /** How many frames this project's duration + interval imply (ceil covers a partial last frame). */
-    public function expectedFrameCount(): int
+    /**
+     * The longest single shot the director may cut: about twice the pacing hint, so a climax
+     * can breathe, clamped to a range that clip models can actually render in one piece.
+     */
+    public function maxShotSeconds(): int
     {
+        $hint = max(1, (int) $this->frame_interval_seconds);
+
+        return (int) min(self::MAX_SHOT_SECONDS_CEIL, max(self::MAX_SHOT_SECONDS_FLOOR, 2 * $hint));
+    }
+
+    /** The most shots the director may cut: hard cost cap, and never more than 1s-shots fit. */
+    public function maxShotCount(): int
+    {
+        $duration = max(1, (int) $this->duration_seconds);
+
+        return (int) min(self::MAX_SHOTS_CAP, intdiv($duration, self::MIN_SHOT_SECONDS));
+    }
+
+    /** The fewest shots that still cover the duration at maxShotSeconds (never above the cap). */
+    public function minShotCount(): int
+    {
+        $duration = max(1, (int) $this->duration_seconds);
+
+        return (int) min($this->maxShotCount(), max(1, (int) ceil($duration / $this->maxShotSeconds())));
+    }
+
+    /**
+     * The frame count this project will (or did) produce: the LOCKED shot plan's count once
+     * the director has run; before that, a pacing-hint estimate for display only.
+     */
+    public function plannedShotCount(): int
+    {
+        $timing = $this->pipeline[self::PIPE_TIMING] ?? null;
+
+        if (is_array($timing) && $timing !== []) {
+            return count($timing);
+        }
+
         $interval = max(1, (int) $this->frame_interval_seconds);
 
         return (int) max(1, (int) ceil($this->duration_seconds / $interval));

@@ -25,6 +25,16 @@ final class StoryboardClipGenerator
     // silent frame's prompt carries no dialogue text at all.
     private const DIALOGUE_PREFIX = 'The character speaks this line aloud, clearly and lip-synced: ';
 
+    // Per-clip duration bounds when the operation params carry none: the clip runs the FRAME's
+    // locked shot length, clamped into what the clip models reliably render in one piece.
+    private const PARAM_MIN_CLIP = 'min_clip_seconds';
+
+    private const PARAM_MAX_CLIP = 'max_clip_seconds';
+
+    private const DEFAULT_MIN_CLIP_SECONDS = 3;
+
+    private const DEFAULT_MAX_CLIP_SECONDS = 12;
+
     public function __construct(
         private readonly AiOperationResolver $resolver,
         private readonly VideoProviderRouter $router,
@@ -47,12 +57,24 @@ final class StoryboardClipGenerator
         $prompt = $config->substituteUser([
             'image_prompt' => (string) $frame->image_prompt,
             'motion' => (string) $frame->motion_prompt,
+            // The locked shot's camera work (angle + composition) — concrete craft the video
+            // model executes, on top of the motion beat.
+            'camera' => trim(implode(' — ', array_filter([
+                trim((string) $frame->camera_angle),
+                trim((string) $frame->composition),
+            ]))),
             'dialogue' => filled($frame->dialogue)
                 ? self::DIALOGUE_PREFIX.'"'.trim((string) $frame->dialogue).'"'
                 : '',
         ]);
         $baseUrl = $this->baseUrl($config->model);
         $video = $this->router->for($config->provider);
+
+        // The clip runs the FRAME's locked shot length (shot-based derivation), clamped into
+        // the admin-configured bounds — never one fixed duration for every shot.
+        $params = array_merge($config->params, [
+            'duration_seconds' => $this->clipSeconds($frame, $config->params),
+        ]);
 
         $frame->update([
             'video_status' => StoryboardFrame::VIDEO_GENERATING,
@@ -63,7 +85,7 @@ final class StoryboardClipGenerator
         ]);
 
         try {
-            $taskId = $video->submitTask($config->model, $prompt, [$firstFrame], $config->params, $baseUrl);
+            $taskId = $video->submitTask($config->model, $prompt, [$firstFrame], $params, $baseUrl);
         } catch (Throwable $e) {
             $frame->update([
                 'video_status' => StoryboardFrame::VIDEO_FAILED,
@@ -76,6 +98,21 @@ final class StoryboardClipGenerator
         $frame->update(['video_task_id' => $taskId]);
 
         return true;
+    }
+
+    /**
+     * The clip's duration: the frame's locked shot length (end - start), clamped into the
+     * operation's min/max clip bounds. Providers clamp further to their own enums.
+     *
+     * @param  array<string,mixed>  $params
+     */
+    private function clipSeconds(StoryboardFrame $frame, array $params): int
+    {
+        $shot = max(1, (int) $frame->end_second - (int) $frame->start_second);
+        $min = max(1, (int) ($params[self::PARAM_MIN_CLIP] ?? self::DEFAULT_MIN_CLIP_SECONDS));
+        $max = max($min, (int) ($params[self::PARAM_MAX_CLIP] ?? self::DEFAULT_MAX_CLIP_SECONDS));
+
+        return (int) max($min, min($max, $shot));
     }
 
     /** The per-model BytePlus region host from the catalog (null = the configured default). */

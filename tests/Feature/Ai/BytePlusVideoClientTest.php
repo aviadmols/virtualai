@@ -30,7 +30,13 @@ class BytePlusVideoClientTest extends TestCase
 
     public function test_submit_task_builds_the_content_array_and_returns_the_task_id(): void
     {
-        Http::fake([self::TASKS => Http::response(['id' => 'cgt-abc123'], 200)]);
+        $png = "\x89PNG\r\n\x1a\nIMG";
+        Http::fake([
+            self::TASKS => Http::response(['id' => 'cgt-abc123'], 200),
+            // The input frames are DOWNLOADED and inlined as data URIs — ModelArk never has to
+            // reach our (possibly private/signed) media urls itself.
+            'https://cdn.test/*' => Http::response($png, 200, ['Content-Type' => 'image/png']),
+        ]);
 
         $id = app(BytePlusVideoClient::class)->submitTask(
             'dreamina-seedance-2-0-260128',
@@ -41,7 +47,9 @@ class BytePlusVideoClientTest extends TestCase
 
         $this->assertSame('cgt-abc123', $id);
 
-        Http::assertSent(function ($req) {
+        $expectedDataUri = 'data:image/png;base64,'.base64_encode($png);
+
+        Http::assertSent(function ($req) use ($expectedDataUri) {
             $body = $req->data();
 
             return str_ends_with($req->url(), '/contents/generations/tasks')
@@ -50,7 +58,7 @@ class BytePlusVideoClientTest extends TestCase
                 && $body['content'][0]['type'] === 'text'
                 && $body['content'][1]['type'] === 'image_url'
                 && $body['content'][1]['role'] === 'first_frame'
-                && $body['content'][1]['image_url']['url'] === 'https://cdn.test/first.png'
+                && $body['content'][1]['image_url']['url'] === $expectedDataUri
                 && $body['content'][2]['role'] === 'reference_image'
                 && $body['resolution'] === '1080p'
                 && $body['duration'] === 8

@@ -24,6 +24,7 @@ use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
+use Illuminate\Support\Facades\Bus;
 
 /**
  * StoryboardBuilder — the working surface for one project: run the pipeline, watch step progress,
@@ -68,6 +69,14 @@ class StoryboardBuilder extends Page
 
     public string $dialogueText = '';
 
+    // Inline MOTION state: the camera work + motion beat the clip step animates — the locked
+    // shot plan writes them, this editor lets the admin refine them per frame.
+    public ?int $motionFrameId = null;
+
+    public string $motionText = '';
+
+    public string $motionCamera = '';
+
     // Natural speech pace: ~15 characters/second — the dialogue must FIT the frame's seconds
     // (e.g. a 3s frame → ~45 characters), so the video's timing survives.
     private const DIALOGUE_CHARS_PER_SECOND = 15;
@@ -101,6 +110,12 @@ class StoryboardBuilder extends Page
                     ->icon('heroicon-o-sparkles')
                     ->visible(fn (): bool => $this->record->frames()->exists())
                     ->action(fn () => $this->generateAllFrames()),
+                Action::make('generateAllClipsAction')
+                    ->label(__('platform.storyboard.generate_all_clips'))
+                    ->icon('heroicon-o-video-camera')
+                    ->requiresConfirmation()
+                    ->visible(fn (): bool => $this->record->frames()->whereNotNull('image_path')->exists())
+                    ->action(fn () => $this->generateAllClips()),
                 Action::make('combineVideo')
                     ->label(__('platform.storyboard.combine_video'))
                     ->icon('heroicon-o-film')
@@ -168,14 +183,31 @@ class StoryboardBuilder extends Page
         ];
     }
 
+    /**
+     * Generate the missing/failed frames STRICTLY IN ORDER (a Bus chain, one job at a time):
+     * frame N+1 is edit-chained on frame N's image, so parallel generation would break the
+     * continuity anchor. Frames that already have an image are SKIPPED — a re-press RESUMES
+     * after a failure instead of re-rolling (and re-paying for) the finished ones.
+     */
     public function generateAllFrames(): void
     {
-        $frames = $this->record->frames()->where('is_locked', false)->get();
+        $frames = $this->record->frames()
+            ->where('is_locked', false)
+            ->where(function ($query): void {
+                $query->whereNull('image_path')->orWhere('status', StoryboardFrame::STATUS_FAILED);
+            })
+            ->orderBy('frame_number')
+            ->get();
 
-        foreach ($frames as $frame) {
-            $frame->update(['status' => StoryboardFrame::STATUS_GENERATING]);
-            GenerateStoryboardFrameJob::dispatch($frame->id);
+        if ($frames->isEmpty()) {
+            Notification::make()->success()->title(__('platform.storyboard.generating_frames', ['count' => 0]))->send();
+
+            return;
         }
+
+        Bus::chain(
+            $frames->map(static fn (StoryboardFrame $frame): GenerateStoryboardFrameJob => new GenerateStoryboardFrameJob($frame->id))->all(),
+        )->dispatch();
 
         Notification::make()->success()->title(__('platform.storyboard.generating_frames', ['count' => $frames->count()]))->send();
     }
@@ -248,6 +280,8 @@ class StoryboardBuilder extends Page
         $this->editPrompt = (string) $frame->image_prompt;
         $this->editNegative = (string) $frame->negative_prompt;
         $this->cancelDialogue(); // only one inline editor open at a time
+        $this->cancelImprove();
+        $this->cancelMotion();
     }
 
     public function startDialogue(int $frameId): void
@@ -261,12 +295,53 @@ class StoryboardBuilder extends Page
         $this->dialogueText = (string) $frame->dialogue;
         $this->cancelEdit();
         $this->cancelImprove();
+        $this->cancelMotion();
     }
 
     public function cancelDialogue(): void
     {
         $this->dialogueFrameId = null;
         $this->dialogueText = '';
+    }
+
+    /** Open the inline MOTION editor: the shot's camera work + the motion beat to animate. */
+    public function startMotion(int $frameId): void
+    {
+        $frame = $this->frame($frameId);
+        if ($frame === null) {
+            return;
+        }
+
+        $this->motionFrameId = $frame->id;
+        $this->motionText = (string) $frame->motion_prompt;
+        $this->motionCamera = (string) $frame->camera_angle;
+        $this->cancelEdit(); // only one inline editor open at a time
+        $this->cancelImprove();
+        $this->cancelDialogue();
+    }
+
+    public function cancelMotion(): void
+    {
+        $this->motionFrameId = null;
+        $this->motionText = '';
+        $this->motionCamera = '';
+    }
+
+    /** Save the frame's camera work + motion beat (what the clip step animates). */
+    public function saveMotion(): void
+    {
+        $frame = $this->frame((int) $this->motionFrameId);
+        if ($frame === null) {
+            return;
+        }
+
+        $frame->update([
+            'motion_prompt' => trim($this->motionText) !== '' ? trim($this->motionText) : null,
+            'camera_angle' => trim($this->motionCamera) !== '' ? trim($this->motionCamera) : null,
+        ]);
+
+        $this->cancelMotion();
+        Notification::make()->success()->title(__('platform.storyboard.motion_saved'))->send();
     }
 
     /** Save the frame's spoken line — rejected when it cannot FIT the frame's seconds at speech pace. */
@@ -335,6 +410,7 @@ class StoryboardBuilder extends Page
         $this->improveInstruction = '';
         $this->cancelEdit(); // only one inline editor open at a time
         $this->cancelDialogue();
+        $this->cancelMotion();
     }
 
     public function cancelImprove(): void
@@ -415,11 +491,14 @@ class StoryboardBuilder extends Page
             'id' => $f->id,
             'number' => $f->frame_number,
             'time' => $f->start_second.'–'.$f->end_second.'s',
+            'seconds' => max(0, (int) $f->end_second - (int) $f->start_second),
             'description' => $f->description,
             'prompt' => $f->image_prompt,
             'textOverlay' => $f->text_overlay,
             'dialogue' => $f->dialogue,
             'dialogueLimit' => $this->dialogueLimit($f),
+            'motion' => $f->motion_prompt,
+            'camera' => $f->camera_angle,
             'status' => $f->status,
             'generating' => $f->status === StoryboardFrame::STATUS_GENERATING,
             'failed' => $f->status === StoryboardFrame::STATUS_FAILED,

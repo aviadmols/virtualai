@@ -128,12 +128,14 @@ class StoryboardProjectResource extends Resource
                         ->maxValue(600)
                         ->default(15)
                         ->required(),
+                    // A PACING HINT, not a slicer: the AI director decides the actual cut
+                    // list; a single shot may run up to about twice this (see maxShotSeconds).
                     TextInput::make('frame_interval_seconds')
                         ->label(__('platform.storyboard.field.interval'))
                         ->helperText(__('platform.storyboard.field.interval_help'))
                         ->numeric()
-                        ->minValue(1)
-                        ->maxValue(30)
+                        ->minValue(2)
+                        ->maxValue(15)
                         ->default(3)
                         ->required(),
                     TextInput::make('resolution')

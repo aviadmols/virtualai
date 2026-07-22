@@ -139,6 +139,48 @@ class StoryboardUiTest extends TestCase
         $this->assertSame('שלום, ברוכים הבאים למסיבה!', $frame->refresh()->dialogue);
     }
 
+    public function test_motion_is_saved_per_frame(): void
+    {
+        $project = StoryboardProject::factory()->create();
+        $frame = StoryboardFrame::factory()->create(['project_id' => $project->id]);
+
+        Livewire::test(StoryboardBuilder::class, ['record' => $project->getRouteKey()])
+            ->call('startMotion', $frame->id)
+            ->set('motionCamera', 'low-angle wide, 24mm')
+            ->set('motionText', 'slow push-in as she turns')
+            ->call('saveMotion');
+
+        $frame->refresh();
+        $this->assertSame('low-angle wide, 24mm', $frame->camera_angle);
+        $this->assertSame('slow push-in as she turns', $frame->motion_prompt);
+    }
+
+    public function test_generate_all_chains_frames_in_order_and_skips_ready_and_locked(): void
+    {
+        Bus::fake();
+        Storage::fake('s3'); // frames carry image paths the builder view signs
+        $project = StoryboardProject::factory()->create();
+
+        // #1 already generated (skipped), #2 locked (skipped), #3 failed (retried), #4 pending.
+        StoryboardFrame::factory()->create(['project_id' => $project->id, 'frame_number' => 1, 'image_path' => 'x.png', 'status' => StoryboardFrame::STATUS_READY]);
+        StoryboardFrame::factory()->create(['project_id' => $project->id, 'frame_number' => 2, 'is_locked' => true]);
+        $failed = StoryboardFrame::factory()->create(['project_id' => $project->id, 'frame_number' => 3, 'image_path' => 'y.png', 'status' => StoryboardFrame::STATUS_FAILED]);
+        $pending = StoryboardFrame::factory()->create(['project_id' => $project->id, 'frame_number' => 4]);
+
+        Livewire::test(StoryboardBuilder::class, ['record' => $project->getRouteKey()])
+            ->call('generateAllFrames');
+
+        // ONE chain, strictly in frame order — frame N+1 edits from frame N's image, so
+        // parallel dispatch would break the continuity anchor.
+        Bus::assertDispatched(GenerateStoryboardFrameJob::class, function (GenerateStoryboardFrameJob $job) use ($failed, $pending): bool {
+            $chainedIds = collect($job->chained)->map(
+                static fn (string $serialized): int => unserialize($serialized)->frameId,
+            )->all();
+
+            return $job->frameId === $failed->id && $chainedIds === [$pending->id];
+        });
+    }
+
     public function test_the_form_generate_action_creates_and_runs_the_pipeline(): void
     {
         Bus::fake();

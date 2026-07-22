@@ -28,13 +28,23 @@ class StoryboardPipelineTest extends TestCase
 
     private const CHAT = self::OR_BASE.'/chat/completions';
 
-    // The Story Director's VARIED pacing (2+2+2+4+5 = 15s) — the lock under test.
+    // The Story Director's VARIED cut list (2+2+2+4+5 = 15s) in the shot-based shape — the
+    // director DECIDES the count + camera movement; the normalizer locks it.
+    private const DIRECTOR_SHOTS = [
+        ['shot_number' => 1, 'duration_seconds' => 2, 'camera_movement' => 'static wide establishing'],
+        ['shot_number' => 2, 'duration_seconds' => 2, 'camera_movement' => 'slow push-in'],
+        ['shot_number' => 3, 'duration_seconds' => 2, 'camera_movement' => 'handheld follow'],
+        ['shot_number' => 4, 'duration_seconds' => 4, 'camera_movement' => 'low-angle tracking'],
+        ['shot_number' => 5, 'duration_seconds' => 5, 'camera_movement' => 'static close-up'],
+    ];
+
+    // The contiguous locked plan those shots normalize into.
     private const LOCKED_TIMING = [
-        ['frame_number' => 1, 'start_second' => 0, 'end_second' => 2],
-        ['frame_number' => 2, 'start_second' => 2, 'end_second' => 4],
-        ['frame_number' => 3, 'start_second' => 4, 'end_second' => 6],
-        ['frame_number' => 4, 'start_second' => 6, 'end_second' => 10],
-        ['frame_number' => 5, 'start_second' => 10, 'end_second' => 15],
+        ['frame_number' => 1, 'start_second' => 0, 'end_second' => 2, 'camera_movement' => 'static wide establishing'],
+        ['frame_number' => 2, 'start_second' => 2, 'end_second' => 4, 'camera_movement' => 'slow push-in'],
+        ['frame_number' => 3, 'start_second' => 4, 'end_second' => 6, 'camera_movement' => 'handheld follow'],
+        ['frame_number' => 4, 'start_second' => 6, 'end_second' => 10, 'camera_movement' => 'low-angle tracking'],
+        ['frame_number' => 5, 'start_second' => 10, 'end_second' => 15, 'camera_movement' => 'static close-up'],
     ];
 
     protected function setUp(): void
@@ -82,7 +92,7 @@ class StoryboardPipelineTest extends TestCase
                 'color_palette' => 'turquoise water, golden light',
                 'negative_prompt' => 'blurry, watermark',
             ],
-            'shot_timing' => array_slice(self::LOCKED_TIMING, 0, $frameCount),
+            'shot_timing' => array_slice(self::DIRECTOR_SHOTS, 0, $frameCount),
         ];
     }
 
@@ -246,5 +256,42 @@ class StoryboardPipelineTest extends TestCase
 
         $this->assertSame(StoryboardProject::STATUS_READY, $project->refresh()->status);
         $this->assertSame(3, $project->frames()->count());
+    }
+
+    public function test_a_frame_without_a_motion_beat_falls_back_to_the_slots_camera_movement(): void
+    {
+        $project = StoryboardProject::factory()->create(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
+
+        $frames = $this->breakdownFrames(5);
+        unset($frames[2]['motion']); // frame 3 arrives with NO motion beat
+
+        Http::fake([self::CHAT => Http::sequence()
+            ->push($this->orResponse($this->directorOutput(5)))
+            ->push($this->orResponse(['frames' => $frames]))]);
+
+        app(StoryboardPipeline::class)->run($project);
+
+        // The clip step always has something concrete to animate: the LOCKED camera move.
+        $third = $project->frames()->where('frame_number', 3)->first();
+        $this->assertSame('handheld follow', (string) $third->motion_prompt);
+    }
+
+    public function test_a_breakdown_count_mismatch_is_reconciled_to_the_locked_plan(): void
+    {
+        $project = StoryboardProject::factory()->create(['duration_seconds' => 15, 'frame_interval_seconds' => 3]);
+
+        // The director locked 5 shots; the breakdown returned only 3 frames.
+        Http::fake([self::CHAT => Http::sequence()
+            ->push($this->orResponse($this->directorOutput(5)))
+            ->push($this->orResponse(['frames' => $this->breakdownFrames(3)]))]);
+
+        app(StoryboardPipeline::class)->run($project);
+
+        // 3 frames materialise; the LAST stretches to the plan's end so the film still covers 15s.
+        $timings = $project->frames()->get()->map(
+            static fn (StoryboardFrame $f): array => [$f->start_second, $f->end_second],
+        )->all();
+
+        $this->assertSame([[0, 2], [2, 4], [4, 15]], $timings);
     }
 }

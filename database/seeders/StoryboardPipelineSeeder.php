@@ -31,35 +31,36 @@ class StoryboardPipelineSeeder extends Seeder
 
     private const TEXT_FALLBACK_LABEL = 'Gemini 3.5 Flash';
 
-    // Frame images run on fal's Krea 2 Turbo (fast, verified in the live fal catalog). NOTE: it is
-    // TEXT-TO-IMAGE only — @reference images and the current frame are not seen by this model; the
-    // self-contained scene-breakdown prompts carry the consistency. The Gemini image models stay
-    // catalogued as NON-default options the admin can switch to from the pipeline settings
-    // (gemini-3.1-flash-image returns 400 on OpenRouter; gemini-2.5-flash-image is the proven one).
-    private const IMAGE_MODEL = 'fal-ai/krea-2/turbo';
+    // Frame images: the DEFAULT is the EDIT-capable Nano Banana (fal) — every chained frame is
+    // generated FROM the previous frame's image + the @tag references, which is what carries
+    // cross-frame consistency. The anchor-less FIRST frame (which sets the whole film's look)
+    // upgrades to Nano Banana Pro via the `first_frame_model` param. Krea 2 Turbo stays
+    // catalogued as a cheap NON-default option (it is text-to-image and blind to references).
+    private const IMAGE_MODEL = 'fal-ai/nano-banana/edit';
 
-    private const IMAGE_MODEL_LABEL = 'Krea 2 Turbo (fal.ai)';
+    private const IMAGE_MODEL_LABEL = 'Nano Banana Edit (fal.ai)';
 
     private const IMAGE_PROVIDER = AiModel::PROVIDER_FAL;
 
+    private const IMAGE_MODEL_HINT = 40_000; // per image (estimate)
+
+    private const IMAGE_MODEL_KREA = 'fal-ai/krea-2/turbo';
+
+    private const IMAGE_MODEL_KREA_LABEL = 'Krea 2 Turbo (fal.ai)';
+
+    private const IMAGE_MODEL_KREA_HINT = 15_000;
+
     private const IMAGE_MODEL_GEMINI = 'google/gemini-2.5-flash-image';
 
-    private const IMAGE_MODEL_ALT = 'google/gemini-3-pro-image';
+    // The look-setting FIRST-frame model (params.first_frame_model): the premium image tier.
+    private const IMAGE_FIRST_MODEL = 'google/gemini-3-pro-image';
 
-    private const IMAGE_MODEL_ALT_LABEL = 'Gemini 3 Pro Image (Nano Banana Pro)';
+    private const IMAGE_FIRST_LABEL = 'Gemini 3 Pro Image (Nano Banana Pro)';
 
     // fal VIDEO options for the clip step (NON-default; ids verified in the live fal catalog).
     private const CLIP_FAL_KLING = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
 
     private const CLIP_FAL_VEO = 'fal-ai/veo3.1/fast/image-to-video';
-
-    // The EDIT-capable model used when a frame carries reference images (Krea is text-to-image
-    // and cannot see them). Admin-editable via the frame-image op's `reference_model` param.
-    private const IMAGE_REFERENCE_MODEL = 'fal-ai/nano-banana/edit';
-
-    private const IMAGE_REFERENCE_LABEL = 'Nano Banana Edit (fal.ai)';
-
-    private const IMAGE_REFERENCE_HINT = 40_000; // per image (estimate)
 
     private const TEXT_PARAMS = ['temperature' => 0.6, 'top_p' => 0.95, 'max_tokens' => 12000];
 
@@ -111,8 +112,8 @@ class StoryboardPipelineSeeder extends Seeder
             .'GENRE_PROFILE — commit to ONE precise filmable look: a genre label that fits the story\'s ACTUAL relationships and ages (two children => "Family Adventure Creature Thriller", never "Romantic ..."); emotional_tone across the arc; camera_language as concrete craft (lens mm, framing habits, movement style); lighting (key style, contrast, practicals); color_palette naming 3-5 actual colors and where each lives; typography; editing_pace that fits the format; negative_rules — visual clichés this film must NEVER use. Be specific enough that two artists apart would produce matching frames. '
             .'CHARACTERS — every character, location and asset. For a @tag-bound character IDENTITY IS THE REFERENCE IMAGE: set tag, and set identity_lock to a SHORT phrase containing ONLY features the reference analysis explicitly states (copy, never embellish) — if the analysis does not mention a feature (freckles, eye color), OMIT it entirely rather than guess. WARDROBE IS YOURS TO DESIGN: the photo\'s clothing is not binding — dress the character as their ROLE demands and state the FINAL wardrobe in story_wardrobe as an exact garment list; that list stays IDENTICAL across the film. Reference images define identity only — never their background, pose, lighting or angle. Give each character scale_reference, signature_prop, default_expression, movement_style, continuity_rules. For each location: time of day, terrain/architecture, set dressing, light sources. For each asset: exact appearance; must_be_exact=true for real products/logos. '
             .'VISUAL_BIBLE — the binding style contract, one or two tight sentences per field: global_style, camera, lighting, color_palette, mood, typography, continuity_rules, and one reusable negative_prompt (a SHORT comma list of at most 12 distinct terms). '
-            .'SHOT_TIMING — EXACTLY {{frame_count}} entries covering 0..{{duration}} seconds with no gaps or overlaps; vary shot lengths to serve the drama (a climax may breathe longer than a setup beat); every shot at least 1 second. This timing is LOCKED — the whole film is cut to it. Return ONLY a JSON object matching the schema.',
-            "Story idea:\n{{story_idea}}\n\nTarget genre: {{genre}}.\nFormat: a {{duration}}-second film told in {{frame_count}} shots, aspect ratio {{aspect_ratio}}.\nAvailable reference tags: {{reference_tags}}.\nReference image analyses (identity ground truth from the actual uploads):\n{{reference_descriptions}}\nReturn strict JSON for the schema.",
+            .'SHOT_TIMING — YOU decide the cut list. One shot = ONE continuous camera setup or movement; every cut or new camera move starts a NEW shot. Return between {{min_shots}} and {{max_shots}} shots whose duration_seconds sum EXACTLY to {{duration}}; each shot between 1 and {{max_shot_seconds}} seconds. Vary lengths to serve the drama — a climax may breathe longer than a setup beat. For each shot give camera_movement as ONE concrete executable move (e.g. "slow push-in from wide to medium on the door", "static low-angle wide", "handheld tracking left with the runner") — it will drive both the still frame\'s composition and the clip\'s animation, and it must obey the genre profile\'s negative_rules; shot_purpose names the beat (setup / escalation / climax / resolution). This timing is LOCKED — the whole film is cut to it. Return ONLY a JSON object matching the schema.',
+            "Story idea:\n{{story_idea}}\n\nTarget genre: {{genre}}.\nFormat: a {{duration}}-second film told in {{min_shots}}-{{max_shots}} shots (you choose the cut list), aspect ratio {{aspect_ratio}}.\nAvailable reference tags: {{reference_tags}}.\nReference image analyses (identity ground truth from the actual uploads):\n{{reference_descriptions}}\nReturn strict JSON for the schema.",
             $this->storyDirectorSchema(),
             params: self::DIRECTOR_PARAMS,
             estimate: self::DIRECTOR_STEP_EST,
@@ -130,7 +131,7 @@ class StoryboardPipelineSeeder extends Seeder
         $this->seedTextStep(
             AiOperation::KEY_STORYBOARD_SCENE_BREAKDOWN,
             'Storyboard · Scene Breakdown',
-            'You are an award-winning STORYBOARD DIRECTOR turning a LOCKED plan into frames. Everything you receive — story, genre profile, character bible, visual bible, shot timing, content type — is already decided and immutable: never re-time, re-dress, re-design or re-genre anything. Break the story into EXACTLY {{frame_count}} frames matching the locked shot_timing one-to-one (frame N is cut to slot N; the timing is not yours to change). Together the frames tell the arc the content_type demands: for complete_micro_story the final frame SHOWS the resolved outcome (the rescue succeeds, the threat is left behind, safety is visible) — never end on an unresolved standoff; for trailer a deliberate cliffhanger final beat is allowed. Each frame is a NEW story beat — never a redundant variation of the previous one. For every frame provide: description (for humans); camera_angle and composition in real shot grammar (shot size, angle, lens in mm, depth of field, subject placement) — camera work MUST obey the genre profile\'s negative_rules: where shaky-cam blur is banned, write "controlled handheld tension, subject clearly visible, no motion blur", never "erratic shake" or blur-inducing whip pans; action; characters — the EXACT names from the character bible; reference_tags verbatim from the available list; text_overlay in the story\'s ORIGINAL language (else null); motion — one short English sentence of camera + subject movement for animating this frame (it must also obey the negative_rules); scene_prompt; negative_prompt. The scene_prompt is THIS FRAME\'S BEAT ONLY: 2-4 tight English sentences of what the camera sees — the action and staging, the characters\' expressions and body language, the location\'s look in this shot, the light at this moment, and the camera/lens. DO NOT restate character identities, faces, wardrobe, the global style or the palette — the system appends the LOCKED character and style blocks verbatim after your text in every frame, so write a scene that reads naturally when those blocks follow. Refer to characters by their bible name (keep @reference tags verbatim where they appear) and never reference other frames ("same as before" is forbidden). negative_prompt: a SHORT comma-separated list of at most 10 distinct terms, without repeating the visual bible\'s reusable list. Return ONLY a JSON object matching the schema with exactly {{frame_count}} frames.',
+            'You are an award-winning STORYBOARD DIRECTOR turning a LOCKED plan into frames. Everything you receive — story, genre profile, character bible, visual bible, shot timing, content type — is already decided and immutable: never re-time, re-dress, re-design or re-genre anything. Break the story into EXACTLY {{frame_count}} frames matching the locked shot_timing one-to-one (frame N is cut to slot N; the timing is not yours to change). Slot N\'s camera_movement is BINDING: frame N\'s camera_angle and composition stage that exact move\'s starting position, and its motion field EXECUTES that exact move — you may add subject motion on top, never a contradicting camera move. Together the frames tell the arc the content_type demands: for complete_micro_story the final frame SHOWS the resolved outcome (the rescue succeeds, the threat is left behind, safety is visible) — never end on an unresolved standoff; for trailer a deliberate cliffhanger final beat is allowed. Each frame is a NEW story beat — never a redundant variation of the previous one. For every frame provide: description (for humans); camera_angle and composition in real shot grammar (shot size, angle, lens in mm, depth of field, subject placement) — camera work MUST obey the genre profile\'s negative_rules: where shaky-cam blur is banned, write "controlled handheld tension, subject clearly visible, no motion blur", never "erratic shake" or blur-inducing whip pans; action; characters — the EXACT names from the character bible; reference_tags verbatim from the available list; text_overlay in the story\'s ORIGINAL language (else null); motion — one short English sentence of camera + subject movement for animating this frame (it must also obey the negative_rules); scene_prompt; negative_prompt. The scene_prompt is THIS FRAME\'S BEAT ONLY: 2-4 tight English sentences of what the camera sees — the action and staging, the characters\' expressions and body language, the location\'s look in this shot, the light at this moment, and the camera/lens. DO NOT restate character identities, faces, wardrobe, the global style or the palette — the system appends the LOCKED character and style blocks verbatim after your text in every frame, so write a scene that reads naturally when those blocks follow. Refer to characters by their bible name (keep @reference tags verbatim where they appear) and never reference other frames ("same as before" is forbidden). negative_prompt: a SHORT comma-separated list of at most 10 distinct terms, without repeating the visual bible\'s reusable list. Return ONLY a JSON object matching the schema with exactly {{frame_count}} frames.',
             "LOCKED format: {{duration}}s, {{frame_count}} frames, aspect ratio {{aspect_ratio}}. Content type: {{content_type}}.\nLOCKED shot timing (frame N = slot N, immutable):\n{{shot_timing}}\nClean story: {{clean_story}}.\nGenre profile: {{genre_profile}}.\nCharacter bible: {{characters}}.\nVisual bible: {{visual_bible}}.\nReference tags available: {{reference_tags}}.\nReference image analyses (ground truth from the actual uploads):\n{{reference_descriptions}}\nReturn strict JSON for the schema with exactly {{frame_count}} frames.",
             $this->sceneBreakdownSchema(),
         );
@@ -275,7 +276,9 @@ class StoryboardPipelineSeeder extends Seeder
                 'fallback_model' => null,
                 'image_quality' => null,
                 'aspect_ratio' => null,
-                'params' => ['resolution' => '720p', 'duration_seconds' => 3, 'ratio' => 'adaptive'],
+                // No fixed duration: each clip runs ITS frame's locked shot length, clamped
+                // into these admin-editable bounds (StoryboardClipGenerator::clipSeconds).
+                'params' => ['resolution' => '720p', 'ratio' => 'adaptive', 'min_clip_seconds' => 3, 'max_clip_seconds' => 12],
                 'input_schema' => null,
                 'retention_days' => null,
                 'estimated_cost_micro_usd' => 200_000,
@@ -292,12 +295,13 @@ class StoryboardPipelineSeeder extends Seeder
         $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, self::CLIP_FAL_VEO, 'Veo 3.1 Fast (fal.ai)', unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_FAL);
 
         // Video providers take ONE prompt string (no system message), so everything the clip needs
-        // lives in the user template. {{motion}} is the frame's motion_prompt (camera + subject
-        // move); {{dialogue}} is the frame's spoken line (pre-formatted, empty when silent).
+        // lives in the user template. {{motion}} is the frame's motion_prompt (the locked camera
+        // move + subject motion); {{camera}} is the shot's camera work (angle — composition);
+        // {{dialogue}} is the frame's spoken line (pre-formatted, empty when silent).
         $this->seedPrompt(
             AiOperation::KEY_STORYBOARD_CLIP,
             null,
-            "{{image_prompt}}\n\nAnimate this exact frame into a short cinematic clip. Camera and subject motion: {{motion}}. Keep the characters, wardrobe, lighting, composition and art style identical to the source image; motion must be smooth, subtle and physically plausible — no morphing, no flicker, no new elements or on-screen text.\n{{dialogue}}",
+            "{{image_prompt}}\n\nAnimate this exact frame into a short cinematic clip. Camera and subject motion: {{motion}}. Camera work: {{camera}}. Keep the characters, wardrobe, lighting, composition and art style identical to the source image; motion must be smooth, subtle and physically plausible — no morphing, no flicker, no new elements or on-screen text.\n{{dialogue}}",
         );
     }
 
@@ -342,30 +346,30 @@ class StoryboardPipelineSeeder extends Seeder
                 'fallback_model' => null,
                 'image_quality' => self::IMAGE_QUALITY,
                 'aspect_ratio' => self::IMAGE_ASPECT,
-                // reference_model: a frame that carries reference images is generated by this
-                // EDIT-capable model instead of the (text-to-image) default, so the model actually
-                // SEES the tagged uploads. Admin-editable like every param.
-                'params' => ['temperature' => 0.7, 'top_p' => 0.95, 'reference_model' => self::IMAGE_REFERENCE_MODEL],
+                // first_frame_model: the anchor-less LOOK-SETTING generation (usually frame 1)
+                // upgrades to this premium model; every chained frame runs the edit-capable
+                // default. Low temperature — continuity wants low sampler variance.
+                'params' => ['temperature' => 0.3, 'top_p' => 0.9, 'first_frame_model' => self::IMAGE_FIRST_MODEL],
                 'input_schema' => null,
                 'retention_days' => null,
-                'estimated_cost_micro_usd' => 20_000,
+                'estimated_cost_micro_usd' => 45_000,
                 'credit_multiplier' => null,
             ],
         );
 
-        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL, self::IMAGE_MODEL_LABEL, isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 15_000, provider: self::IMAGE_PROVIDER);
-        // The reference-frames EDIT model + the Gemini image models stay catalogued as NON-default
-        // choices (admin switches in settings).
-        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_REFERENCE_MODEL, self::IMAGE_REFERENCE_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_REFERENCE_HINT, provider: self::IMAGE_PROVIDER);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL, self::IMAGE_MODEL_LABEL, isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_MODEL_HINT, provider: self::IMAGE_PROVIDER);
+        // The first-frame premium model + the cheap/legacy options stay catalogued (the admin
+        // switches in settings; first_frame_model resolves through this catalog).
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_FIRST_MODEL, self::IMAGE_FIRST_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_ALT_HINT);
         $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_GEMINI, 'Gemini 2.5 Flash Image', unit: AiModel::UNIT_PER_IMAGE, costHint: 40_000);
-        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_ALT, self::IMAGE_MODEL_ALT_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_ALT_HINT);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_KREA, self::IMAGE_MODEL_KREA_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_MODEL_KREA_HINT, provider: self::IMAGE_PROVIDER);
 
         // This system prompt IS applied at generation time (prepended to the frame's own
         // image_prompt) — it must stay placeholder-free: it is substituted with no vars, so any
         // {{token}} would reach the image model literally.
         $this->seedPrompt(
             AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
-            'Create ONE cinematic still frame of a film. Follow the prompt EXACTLY: the characters\' faces, hair, wardrobe and colors, the location, the camera, lens, lighting, composition and the stated art style. Attached reference images are ground truth for IDENTITY only — match each person\'s face, age, hair and body from them, but dress them EXACTLY as the prompt says and NEVER copy the reference\'s background, pose, lighting or camera angle. When an existing version of this frame is attached, treat it as the shot to EDIT: preserve its composition, characters and style and change only what the prompt asks. Deliver a clean full-bleed frame: no borders, watermarks, signatures or UI, and no text unless the prompt explicitly specifies on-screen text.',
+            'Create ONE cinematic still frame of a film. Follow the prompt EXACTLY: the characters\' faces, hair, wardrobe and colors, the location, the camera, lens, lighting, composition and the stated art style. When the previous shot of the film is attached, it is the CONTINUITY ANCHOR: keep the same people, wardrobe, palette, lighting and art style — only the staging changes. Attached reference images are ground truth for IDENTITY only — match each person\'s face, age, hair and body from them, but dress them EXACTLY as the prompt says and NEVER copy the reference\'s background, pose, lighting or camera angle. When an existing version of this frame is attached, treat it as the shot to EDIT: preserve its composition, characters and style and change only what the prompt asks. Deliver a clean full-bleed frame: no borders, watermarks, signatures or UI, and no text unless the prompt explicitly specifies on-screen text.',
             '{{image_prompt}}',
         );
     }
@@ -452,7 +456,11 @@ class StoryboardPipelineSeeder extends Seeder
         ];
     }
 
-    /** The LOCKED pacing: one slot per frame, covering the full duration. */
+    /**
+     * The LOCKED cut list: the DIRECTOR decides the shot count (within the project's bounds).
+     * One shot = one continuous camera setup/movement = one frame; camera_movement is the
+     * concrete executable move that drives both the still's staging and the clip's animation.
+     */
     private function shotTimingSchema(): array
     {
         return [
@@ -461,11 +469,12 @@ class StoryboardPipelineSeeder extends Seeder
                 'type' => 'object',
                 'additionalProperties' => false,
                 'properties' => [
-                    'frame_number' => ['type' => 'integer'],
-                    'start_second' => ['type' => 'integer'],
-                    'end_second' => ['type' => 'integer'],
+                    'shot_number' => ['type' => 'integer'],
+                    'duration_seconds' => ['type' => 'integer'],
+                    'camera_movement' => ['type' => 'string'],
+                    'shot_purpose' => ['type' => ['string', 'null']],
                 ],
-                'required' => ['frame_number', 'start_second', 'end_second'],
+                'required' => ['shot_number', 'duration_seconds', 'camera_movement'],
             ],
         ];
     }

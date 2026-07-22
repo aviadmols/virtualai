@@ -57,7 +57,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
     // A tiny neutral prompt for the image-step Test (a real generation).
     private const SAMPLE_IMAGE_PROMPT = 'a single red apple on a wooden table, soft cinematic lighting';
 
-    // The steps this page controls (in pipeline order).
+    // The steps this page controls (in pipeline order; improve-prompt is the on-demand extra).
     private const STEPS = [
         AiOperation::KEY_STORYBOARD_ASSET_ANALYSIS,
         AiOperation::KEY_STORYBOARD_STORY_DIRECTOR,
@@ -65,7 +65,22 @@ class StoryboardPipelineSettings extends Page implements HasForms
         AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
         AiOperation::KEY_STORYBOARD_CLIP,
         AiOperation::KEY_STORYBOARD_VIDEO_DIRECTOR,
+        AiOperation::KEY_STORYBOARD_IMPROVE_PROMPT,
     ];
+
+    // First-class inputs per step — managed OUT of the raw params KeyValue (stripped at mount,
+    // merged back on save) so the common knobs are typed fields, not free-text keys.
+    private const FRAME_MANAGED_PARAMS = ['first_frame_model'];
+
+    private const CLIP_MANAGED_PARAMS = ['resolution', 'ratio', 'min_clip_seconds', 'max_clip_seconds'];
+
+    private const QUALITIES = ['standard' => 'standard', 'high' => 'high'];
+
+    private const ASPECTS = ['16:9' => '16:9', '9:16' => '9:16', '1:1' => '1:1', '4:3' => '4:3', '3:4' => '3:4'];
+
+    private const CLIP_RESOLUTIONS = ['480p' => '480p', '720p' => '720p', '1080p' => '1080p'];
+
+    private const CLIP_RATIOS = ['adaptive' => 'adaptive', '16:9' => '16:9', '9:16' => '9:16', '1:1' => '1:1'];
 
     private const PROVIDERS = [
         AiModel::PROVIDER_OPENROUTER => 'OpenRouter',
@@ -118,14 +133,27 @@ class StoryboardPipelineSettings extends Page implements HasForms
             $provider = AiModel::query()->where('operation_key', $key)->where('model_id', $op?->default_model)->value('provider')
                 ?? AiModel::PROVIDER_OPENROUTER;
 
+            $params = $op?->params ?? [];
+            $managed = $this->managedParamKeys($key);
+
             $state[$key] = [
                 'provider' => $provider,
                 'model' => $op?->default_model,
                 'fallback_model' => $op?->fallback_model,
                 'system_prompt' => $prompt?->system_prompt,
                 'user_prompt' => $prompt?->user_prompt,
-                'params' => $op?->params ?? [],
+                // The managed keys surface as typed fields; the KeyValue keeps only the rest.
+                'params' => array_diff_key($params, array_flip($managed)),
             ];
+
+            foreach ($managed as $paramKey) {
+                $state[$key][$paramKey] = $params[$paramKey] ?? null;
+            }
+
+            if ($key === AiOperation::KEY_STORYBOARD_FRAME_IMAGE) {
+                $state[$key]['image_quality'] = $op?->image_quality;
+                $state[$key]['aspect_ratio'] = $op?->aspect_ratio;
+            }
         }
 
         $this->form->fill($state);
@@ -167,6 +195,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
                         ->required(),
                     TextInput::make($key.'.fallback_model')
                         ->label(__('platform.storyboard.pipe.fallback')),
+                    ...$this->firstClassInputs($key),
                     KeyValue::make($key.'.params')
                         ->label(__('platform.storyboard.pipe.params'))
                         ->keyLabel(__('platform.storyboard.pipe.param_key'))
@@ -185,6 +214,84 @@ class StoryboardPipelineSettings extends Page implements HasForms
         return $sections;
     }
 
+    /**
+     * The typed per-step inputs shown ABOVE the raw params editor (the managed keys). Frame
+     * image: quality + aspect (operation columns) + the first-frame model (param). Clip:
+     * resolution/ratio/duration bounds (params).
+     *
+     * @return array<int,\Filament\Forms\Components\Component>
+     */
+    private function firstClassInputs(string $key): array
+    {
+        if ($key === AiOperation::KEY_STORYBOARD_FRAME_IMAGE) {
+            return [
+                Select::make($key.'.image_quality')
+                    ->label(__('platform.storyboard.pipe.image_quality'))
+                    ->options(self::QUALITIES)
+                    ->selectablePlaceholder(false),
+                Select::make($key.'.aspect_ratio')
+                    ->label(__('platform.storyboard.pipe.aspect'))
+                    ->helperText(__('platform.storyboard.pipe.aspect_help'))
+                    ->options(self::ASPECTS)
+                    ->selectablePlaceholder(false),
+                Select::make($key.'.first_frame_model')
+                    ->label(__('platform.storyboard.pipe.first_frame_model'))
+                    ->helperText(__('platform.storyboard.pipe.first_frame_model_help'))
+                    ->options(fn (): array => $this->cataloguedModelOptions($key))
+                    ->searchable()
+                    ->native(false)
+                    ->columnSpanFull(),
+            ];
+        }
+
+        if ($key === AiOperation::KEY_STORYBOARD_CLIP) {
+            return [
+                Select::make($key.'.resolution')
+                    ->label(__('platform.storyboard.pipe.resolution'))
+                    ->options(self::CLIP_RESOLUTIONS)
+                    ->selectablePlaceholder(false),
+                Select::make($key.'.ratio')
+                    ->label(__('platform.storyboard.pipe.ratio'))
+                    ->options(self::CLIP_RATIOS)
+                    ->selectablePlaceholder(false),
+                TextInput::make($key.'.min_clip_seconds')
+                    ->label(__('platform.storyboard.pipe.min_clip'))
+                    ->numeric()
+                    ->minValue(1)
+                    ->maxValue(15),
+                TextInput::make($key.'.max_clip_seconds')
+                    ->label(__('platform.storyboard.pipe.max_clip'))
+                    ->helperText(__('platform.storyboard.pipe.clip_bounds_help'))
+                    ->numeric()
+                    ->minValue(1)
+                    ->maxValue(15),
+            ];
+        }
+
+        return [];
+    }
+
+    /** The step's managed param keys (typed fields, kept out of the raw KeyValue). @return array<int,string> */
+    private function managedParamKeys(string $key): array
+    {
+        return match ($key) {
+            AiOperation::KEY_STORYBOARD_FRAME_IMAGE => self::FRAME_MANAGED_PARAMS,
+            AiOperation::KEY_STORYBOARD_CLIP => self::CLIP_MANAGED_PARAMS,
+            default => [],
+        };
+    }
+
+    /** Every catalogued model for the op, any provider (the first-frame model resolves by id). @return array<string,string> */
+    private function cataloguedModelOptions(string $key): array
+    {
+        return AiModel::query()
+            ->where('operation_key', $key)
+            ->where('is_active', true)
+            ->orderBy('model_id')
+            ->pluck('model_id', 'model_id')
+            ->all();
+    }
+
     public function save(): void
     {
         $data = $this->form->getState();
@@ -200,11 +307,27 @@ class StoryboardPipelineSettings extends Page implements HasForms
                 continue;
             }
 
-            $op->update([
+            // Merge the typed managed fields back into the params bag (empty = key removed).
+            $params = $this->coerceParams(is_array($step['params']) ? $step['params'] : []);
+            foreach ($this->managedParamKeys($key) as $paramKey) {
+                if (filled($step[$paramKey] ?? null)) {
+                    $params[$paramKey] = $step[$paramKey];
+                }
+            }
+            $params = $this->coerceParams($params);
+
+            $columns = [
                 'default_model' => $step['model'],
                 'fallback_model' => filled($step['fallback_model']) ? $step['fallback_model'] : null,
-                'params' => $this->coerceParams(is_array($step['params']) ? $step['params'] : []),
-            ]);
+                'params' => $params,
+            ];
+
+            if ($key === AiOperation::KEY_STORYBOARD_FRAME_IMAGE) {
+                $columns['image_quality'] = filled($step['image_quality'] ?? null) ? $step['image_quality'] : null;
+                $columns['aspect_ratio'] = filled($step['aspect_ratio'] ?? null) ? $step['aspect_ratio'] : null;
+            }
+
+            $op->update($columns);
 
             Prompt::updateOrCreate(
                 ['scope' => Prompt::SCOPE_GLOBAL, 'operation_key' => $key, 'product_type' => null, 'account_id' => null, 'site_id' => null],
@@ -326,7 +449,10 @@ class StoryboardPipelineSettings extends Page implements HasForms
             'genre' => 'cinematic comedy trailer',
             'duration' => '15',
             'frame_interval' => '3',
-            'frame_count' => '5',
+            'frame_count' => '4',
+            'min_shots' => '3',
+            'max_shots' => '15',
+            'max_shot_seconds' => '6',
             'aspect_ratio' => '16:9',
             'reference_tags' => '@hero, @location_pool',
             'reference_descriptions' => '@hero (character): the party host, short dark hair, athletic build',
@@ -334,7 +460,7 @@ class StoryboardPipelineSettings extends Page implements HasForms
             'genre_profile' => '{"genre":"comedy trailer","emotional_tone":"fun"}',
             'characters' => '{"characters":[{"name":"Hero","description":"the party host"}]}',
             'visual_bible' => '{"global_style":"realistic cinematic","negative_prompt":"no cartoon"}',
-            'shot_timing' => '[{"frame_number":1,"start_second":0,"end_second":3},{"frame_number":2,"start_second":3,"end_second":6},{"frame_number":3,"start_second":6,"end_second":9},{"frame_number":4,"start_second":9,"end_second":12},{"frame_number":5,"start_second":12,"end_second":15}]',
+            'shot_timing' => '[{"frame_number":1,"start_second":0,"end_second":3,"camera_movement":"static wide establishing"},{"frame_number":2,"start_second":3,"end_second":7,"camera_movement":"slow push-in on @hero"},{"frame_number":3,"start_second":7,"end_second":11,"camera_movement":"handheld tracking with the float"},{"frame_number":4,"start_second":11,"end_second":15,"camera_movement":"static medium two-shot"}]',
             'content_type' => 'trailer',
             // Asset-analysis vars.
             'tag' => 'hero',
@@ -359,6 +485,8 @@ class StoryboardPipelineSettings extends Page implements HasForms
         'max_tokens' => 'int',
         'seed' => 'int',
         'duration_seconds' => 'int',
+        'min_clip_seconds' => 'int',
+        'max_clip_seconds' => 'int',
     ];
 
     /**

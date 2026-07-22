@@ -74,11 +74,19 @@ class StoryboardClipTest extends TestCase
     public function test_generate_clip_job_submits_and_dispatches_the_poller(): void
     {
         Bus::fake([PollStoryboardClipJob::class]);
-        Http::fake([self::TASKS => Http::response(['id' => self::TASK], 200)]);
+        Http::fake([
+            self::TASKS => Http::response(['id' => self::TASK], 200),
+            // The signed frame-image fetch — the client INLINES the frame as a data URI so the
+            // provider never has to reach our (possibly private) media url itself.
+            '*' => Http::response("\x89PNG\r\n\x1a\nIMG", 200),
+        ]);
 
         $frame = $this->frame([
             'motion_prompt' => 'slow pan left across the pool',
             'dialogue' => 'Welcome to the party!',
+            'camera_angle' => 'low-angle wide, 24mm',
+            'start_second' => 0,
+            'end_second' => 7,
         ]);
         (new GenerateStoryboardClipJob($frame->id))->handle(app(StoryboardClipGenerator::class));
 
@@ -87,17 +95,46 @@ class StoryboardClipTest extends TestCase
         $this->assertSame(self::TASK, $frame->video_task_id);
         Bus::assertDispatched(PollStoryboardClipJob::class);
 
-        // The submit body carries the frame image as the first_frame.
+        // The submit carries the frame image as the first_frame — INLINED as a data URI.
         Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
-            && $req->data()['content'][1]['role'] === 'first_frame');
+            && ($req->data()['content'][1]['role'] ?? null) === 'first_frame'
+            && str_starts_with((string) ($req->data()['content'][1]['image_url']['url'] ?? ''), 'data:image/'));
+
+        // Shot-based derivation: the clip runs THIS frame's locked shot length (7s), not a fixed 3s.
+        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
+            && ($req->data()['duration'] ?? null) === 7);
 
         // The frame's planned motion phrase reaches the provider via the {{motion}} placeholder.
         Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
             && str_contains((string) json_encode($req->data()), 'slow pan left across the pool'));
 
+        // The locked camera work rides along via {{camera}}.
+        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
+            && str_contains((string) json_encode($req->data()), 'low-angle wide, 24mm'));
+
         // The frame's spoken line rides along ({{dialogue}}), so the clip voices it lip-synced.
         Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
             && str_contains((string) json_encode($req->data()), 'Welcome to the party!'));
+    }
+
+    public function test_the_clip_duration_is_clamped_into_the_operation_bounds(): void
+    {
+        Bus::fake([PollStoryboardClipJob::class]);
+        Http::fake([
+            self::TASKS => Http::response(['id' => self::TASK], 200),
+            '*' => Http::response("\x89PNG\r\n\x1a\nIMG", 200),
+        ]);
+
+        // A 20s shot exceeds max_clip_seconds (12) — clamped; a 1s shot lifts to the min (3).
+        $long = $this->frame(['start_second' => 0, 'end_second' => 20]);
+        (new GenerateStoryboardClipJob($long->id))->handle(app(StoryboardClipGenerator::class));
+        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
+            && ($req->data()['duration'] ?? null) === 12);
+
+        $short = $this->frame(['start_second' => 0, 'end_second' => 1]);
+        (new GenerateStoryboardClipJob($short->id))->handle(app(StoryboardClipGenerator::class));
+        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
+            && ($req->data()['duration'] ?? null) === 3);
     }
 
     public function test_a_succeeded_poll_stores_the_clip_and_render_time(): void

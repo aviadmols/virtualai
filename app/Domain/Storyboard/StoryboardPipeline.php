@@ -116,8 +116,9 @@ final class StoryboardPipeline
         $pipeline[StoryboardProject::PIPE_TIMING] = StoryboardTimingPlan::normalize(
             $json['shot_timing'] ?? null,
             (int) $project->duration_seconds,
+            $project->minShotCount(),
+            $project->maxShotCount(),
             (int) $project->frame_interval_seconds,
-            $project->expectedFrameCount(),
         );
 
         $project->update(['pipeline' => $pipeline]);
@@ -132,23 +133,31 @@ final class StoryboardPipeline
         $charactersBag = is_array($pipeline[StoryboardProject::PIPE_CHARACTERS] ?? null) ? $pipeline[StoryboardProject::PIPE_CHARACTERS] : [];
         $visualBible = is_array($pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] ?? null) ? $pipeline[StoryboardProject::PIPE_VISUAL_BIBLE] : [];
 
-        // The LOCKED plan is the only timing authority — the breakdown's own numbers are ignored.
-        $plan = StoryboardTimingPlan::normalize(
+        // The LOCKED plan is the only authority for BOTH count and timing — the breakdown's
+        // own numbers are ignored. Lenient re-read: stored plans of any vintage re-normalize.
+        $plan = StoryboardTimingPlan::fromStored(
             $pipeline[StoryboardProject::PIPE_TIMING] ?? null,
             (int) $project->duration_seconds,
             (int) $project->frame_interval_seconds,
-            $project->expectedFrameCount(),
         );
 
         usort($frames, static fn (array $a, array $b): int => (int) ($a['frame_number'] ?? 0) <=> (int) ($b['frame_number'] ?? 0));
+        $frames = array_values($frames);
 
-        foreach (array_values($frames) as $i => $f) {
-            $slot = $plan[$i] ?? end($plan);
+        // Reconcile a count mismatch: extra breakdown frames are dropped; when the breakdown
+        // returned fewer, the LAST created frame stretches to the plan's end so the film still
+        // covers the full duration.
+        $count = min(count($frames), count($plan));
+
+        for ($i = 0; $i < $count; $i++) {
+            $f = $frames[$i];
+            $slot = $plan[$i];
+            $isLast = $i === $count - 1;
 
             $project->frames()->create([
                 'frame_number' => $i + 1,
                 'start_second' => $slot['start_second'],
-                'end_second' => $slot['end_second'],
+                'end_second' => $isLast ? $plan[count($plan) - 1]['end_second'] : $slot['end_second'],
                 'description' => $f['description'] ?? null,
                 'camera_angle' => $f['camera_angle'] ?? null,
                 'composition' => $f['composition'] ?? null,
@@ -156,7 +165,11 @@ final class StoryboardPipeline
                 'characters' => is_array($f['characters'] ?? null) ? $f['characters'] : [],
                 'reference_tags' => is_array($f['reference_tags'] ?? null) ? $f['reference_tags'] : [],
                 'text_overlay' => $f['text_overlay'] ?? null,
-                'motion_prompt' => is_string($f['motion'] ?? null) ? $f['motion'] : null,
+                // The breakdown's motion beat, else the slot's locked camera move — the clip
+                // step always has SOMETHING concrete to animate.
+                'motion_prompt' => is_string($f['motion'] ?? null) && trim($f['motion']) !== ''
+                    ? $f['motion']
+                    : ($slot['camera_movement'] ?? null),
                 // Deterministic assembly: scene beat + locked character blocks + locked style.
                 'image_prompt' => $this->composer->compose($f, $charactersBag, $visualBible),
                 'negative_prompt' => $this->composer->negativePrompt($f['negative_prompt'] ?? null, $visualBible),
@@ -192,7 +205,12 @@ final class StoryboardPipeline
             'genre' => (string) $project->genre,
             'duration' => (string) $project->duration_seconds,
             'frame_interval' => (string) $project->frame_interval_seconds,
-            'frame_count' => (string) $project->expectedFrameCount(),
+            // The locked plan's count once the director ran (the breakdown consumes this);
+            // before that, the pacing estimate. Plus the director's shot-freedom bounds.
+            'frame_count' => (string) $project->plannedShotCount(),
+            'min_shots' => (string) $project->minShotCount(),
+            'max_shots' => (string) $project->maxShotCount(),
+            'max_shot_seconds' => (string) $project->maxShotSeconds(),
             'aspect_ratio' => (string) $project->aspect_ratio,
             'reference_tags' => $tags,
             'clean_story' => $this->encode($pipeline[StoryboardProject::PIPE_STORY] ?? null),
