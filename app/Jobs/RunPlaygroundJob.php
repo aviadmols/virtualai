@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Domain\Ai\ImagePayload;
+use App\Domain\Ai\KlingAvatarClient;
 use App\Domain\Ai\ParsedCost;
 use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Credits\CreditMath;
@@ -34,6 +35,7 @@ final class RunPlaygroundJob implements ShouldQueue
 
     // === CONSTANTS ===
     public int $tries = 1;     // a run never re-executes (no double provider spend)
+
     public int $timeout = 70;  // GEN_TIMEOUT — image gen fits; video only submits here
 
     // Seconds before the first video poll (a task is never ready instantly).
@@ -56,7 +58,8 @@ final class RunPlaygroundJob implements ShouldQueue
         $run->update(['status' => PlaygroundRun::STATUS_RUNNING]);
 
         try {
-            $run->isVideo()
+            // Video AND avatar are async (submit here, poll separately); an image runs synchronously.
+            $run->producesVideo()
                 ? $this->submitVideo($run, $router, $media)
                 : $this->runImage($run, $images, $media);
         } catch (Throwable $e) {
@@ -87,13 +90,27 @@ final class RunPlaygroundJob implements ShouldQueue
         ]);
     }
 
-    /** Submit the async video task via the run's provider client, then hand off to the poller (delayed). */
+    /**
+     * Submit the async video task, then hand off to the poller (delayed). A normal video run routes
+     * through the provider router; an AVATAR run uses the native Kling avatar client directly (kling
+     * is the router's video client, not the avatar endpoint) with the signed audio url threaded in.
+     */
     private function submitVideo(PlaygroundRun $run, VideoProviderRouter $router, MediaStorage $media): void
     {
         $urls = $this->inputUrls($run, $media);
         $baseUrl = is_array($run->meta) ? ($run->meta[PlaygroundRun::META_BASE_URL] ?? null) : null;
+        $params = $run->meta ?? [];
 
-        $taskId = $router->for($run->provider)->submitTask($run->model_id, $run->prompt, $urls, $run->meta ?? [], $baseUrl);
+        if ($run->isAvatar()) {
+            $client = app(KlingAvatarClient::class);
+            $params[KlingAvatarClient::PARAM_AUDIO_URL] = $run->audio_path !== null
+                ? $media->signedUrl($run->audio_path)
+                : null;
+        } else {
+            $client = $router->for($run->provider);
+        }
+
+        $taskId = $client->submitTask($run->model_id, (string) $run->prompt, $urls, $params, $baseUrl);
 
         $run->update([
             'provider_task_id' => $taskId,

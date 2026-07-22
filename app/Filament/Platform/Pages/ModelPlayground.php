@@ -67,6 +67,15 @@ class ModelPlayground extends Page implements HasForms
 
     private const MAX_INPUT_KB = 5120;
 
+    // Avatar (Kling AI Avatar): audio cap 5 MB, quality tier std|pro (the endpoint has no model id).
+    private const MAX_AUDIO_KB = 5120;
+
+    private const AUDIO_MIME_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/aac', 'audio/x-m4a'];
+
+    private const AVATAR_MODES = ['std', 'pro'];
+
+    private const DEFAULT_AVATAR_MODE = 'std';
+
     private const PROMPT_PREVIEW_CHARS = 140;
 
     // Provider id → display label (image: all; video: byteplus + atlascloud + fal + kling).
@@ -156,6 +165,7 @@ class ModelPlayground extends Page implements HasForms
                             ->options([
                                 PlaygroundRun::KIND_IMAGE => __('platform.playground.kind.image'),
                                 PlaygroundRun::KIND_VIDEO => __('platform.playground.kind.video'),
+                                PlaygroundRun::KIND_AVATAR => __('platform.playground.kind.avatar'),
                             ])
                             ->default(PlaygroundRun::KIND_IMAGE)
                             ->selectablePlaceholder(false)
@@ -169,18 +179,21 @@ class ModelPlayground extends Page implements HasForms
                             ->live()
                             ->required()
                             ->helperText(__('platform.playground.field.provider_help')),
+                        // The avatar endpoint has no model id, so the field is hidden + optional there.
                         TextInput::make('model_id')
                             ->label(__('platform.playground.field.model_id'))
                             ->placeholder(__('platform.playground.field.model_id_placeholder'))
                             ->helperText(__('platform.playground.field.model_id_help'))
                             ->datalist(fn (Get $get): array => self::modelSuggestions((string) $get('kind'), (string) $get('provider')))
-                            ->required()
+                            ->visible(fn (Get $get): bool => $get('kind') !== PlaygroundRun::KIND_AVATAR)
+                            ->required(fn (Get $get): bool => $get('kind') !== PlaygroundRun::KIND_AVATAR)
                             ->maxLength(255)
                             ->columnSpanFull(),
+                        // A prompt is optional for an avatar (the audio drives it); required otherwise.
                         Textarea::make('prompt')
                             ->label(__('platform.playground.field.prompt'))
                             ->rows(4)
-                            ->required()
+                            ->required(fn (Get $get): bool => $get('kind') !== PlaygroundRun::KIND_AVATAR)
                             ->columnSpanFull(),
                         FileUpload::make('inputs')
                             ->label(__('platform.playground.field.inputs'))
@@ -192,6 +205,8 @@ class ModelPlayground extends Page implements HasForms
                             ->disk(self::mediaDisk())
                             ->directory('playground/inputs')
                             ->visibility('private')
+                            // The avatar's reference image is required (its first input).
+                            ->required(fn (Get $get): bool => $get('kind') === PlaygroundRun::KIND_AVATAR)
                             ->columnSpanFull(),
                         TextInput::make('price')
                             ->label(__('platform.playground.field.price'))
@@ -221,6 +236,28 @@ class ModelPlayground extends Page implements HasForms
                             ->options(array_combine(self::RATIOS, self::RATIOS))
                             ->placeholder(__('platform.playground.field.ratio_auto')),
                     ]),
+                // Avatar (Kling AI Avatar): the image (above) + this audio → a talking-avatar video.
+                Section::make(__('platform.playground.avatar.title'))
+                    ->description(__('platform.playground.avatar.sub'))
+                    ->columns(2)
+                    ->visible(fn (Get $get): bool => $get('kind') === PlaygroundRun::KIND_AVATAR)
+                    ->schema([
+                        FileUpload::make('audio')
+                            ->label(__('platform.playground.field.audio'))
+                            ->helperText(__('platform.playground.field.audio_help'))
+                            ->acceptedFileTypes(self::AUDIO_MIME_TYPES)
+                            ->maxSize(self::MAX_AUDIO_KB)
+                            ->disk(self::mediaDisk())
+                            ->directory('playground/inputs')
+                            ->visibility('private')
+                            ->required(fn (Get $get): bool => $get('kind') === PlaygroundRun::KIND_AVATAR)
+                            ->columnSpanFull(),
+                        Select::make('mode')
+                            ->label(__('platform.playground.field.mode'))
+                            ->helperText(__('platform.playground.field.mode_help'))
+                            ->options(array_combine(self::AVATAR_MODES, self::AVATAR_MODES))
+                            ->default(self::DEFAULT_AVATAR_MODE),
+                    ]),
             ])
             ->statePath('data');
     }
@@ -238,18 +275,24 @@ class ModelPlayground extends Page implements HasForms
             $provider = PlaygroundRun::PROVIDER_BYTEPLUS;
         }
 
+        // The avatar is Kling-only (its own endpoint).
+        if ($kind === PlaygroundRun::KIND_AVATAR) {
+            $provider = PlaygroundRun::PROVIDER_KLING;
+        }
+
         $priceMicro = filled($data['price'] ?? null) ? CreditMath::usdToMicro((float) $data['price']) : null;
 
         $run = PlaygroundRun::create([
             'created_by' => auth()->id(),
             'kind' => $kind,
             'provider' => $provider,
-            'model_id' => (string) $data['model_id'],
-            'prompt' => (string) $data['prompt'],
+            'model_id' => (string) ($data['model_id'] ?? ''),
+            'prompt' => (string) ($data['prompt'] ?? ''),
             'input_paths' => array_values($data['inputs'] ?? []),
+            'audio_path' => self::firstPath($data['audio'] ?? null),
             'price_hint_micro_usd' => $priceMicro,
             'status' => PlaygroundRun::STATUS_QUEUED,
-            'meta' => $this->buildMeta($kind, $provider, (string) $data['model_id'], $data),
+            'meta' => $this->buildMeta($kind, $provider, (string) ($data['model_id'] ?? ''), $data),
         ]);
 
         RunPlaygroundJob::dispatch($run->id);
@@ -274,6 +317,10 @@ class ModelPlayground extends Page implements HasForms
             if (filled($data['ratio'] ?? null)) {
                 $meta[PlaygroundRun::META_RATIO] = (string) $data['ratio'];
             }
+        }
+
+        if ($kind === PlaygroundRun::KIND_AVATAR) {
+            $meta[PlaygroundRun::META_MODE] = (string) ($data['mode'] ?? self::DEFAULT_AVATAR_MODE);
         }
 
         if ($provider === PlaygroundRun::PROVIDER_BYTEPLUS) {
@@ -305,7 +352,7 @@ class ModelPlayground extends Page implements HasForms
             ->get()
             ->map(fn (PlaygroundRun $r): array => [
                 'id' => $r->id,
-                'isVideo' => $r->isVideo(),
+                'isVideo' => $r->producesVideo(),
                 'model' => $r->model_id,
                 'providerLabel' => self::PROVIDER_LABELS[$r->provider] ?? $r->provider,
                 'prompt' => Str::limit((string) $r->prompt, self::PROMPT_PREVIEW_CHARS),
@@ -322,14 +369,26 @@ class ModelPlayground extends Page implements HasForms
             ->all();
     }
 
-    /** Providers offered for a kind — video is the async video-capable set. @return array<string,string> */
+    /** Providers offered for a kind — video is the async set; the avatar is Kling-only. @return array<string,string> */
     private static function providerOptions(string $kind): array
     {
+        if ($kind === PlaygroundRun::KIND_AVATAR) {
+            return [ImageGenerationProvider::PROVIDER_KLING => self::PROVIDER_LABELS[ImageGenerationProvider::PROVIDER_KLING]];
+        }
+
         if ($kind === PlaygroundRun::KIND_VIDEO) {
             return self::VIDEO_PROVIDER_LABELS;
         }
 
         return self::PROVIDER_LABELS;
+    }
+
+    /** Normalize a FileUpload state (array of paths, or a bare path) to a single stored path or null. */
+    private static function firstPath(mixed $upload): ?string
+    {
+        $path = is_array($upload) ? (reset($upload) ?: null) : $upload;
+
+        return is_string($path) && $path !== '' ? $path : null;
     }
 
     /** Datalist model-id suggestions: catalogued models for images, known video ids per provider. */

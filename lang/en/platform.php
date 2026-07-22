@@ -136,6 +136,10 @@ return [
             'title' => 'Video options',
             'sub' => 'Sent to BytePlus (Seedance). Only these knobs are sent.',
         ],
+        'avatar' => [
+            'title' => 'Avatar (image + audio → talking video)',
+            'sub' => 'Kling AI Avatar. Add a reference image above and an audio track; Kling renders the avatar speaking it.',
+        ],
         'field' => [
             'kind' => 'Type',
             'provider' => 'Provider',
@@ -152,10 +156,15 @@ return [
             'duration' => 'Duration (seconds)',
             'ratio' => 'Aspect ratio',
             'ratio_auto' => 'Model default',
+            'audio' => 'Audio',
+            'audio_help' => 'The voice the avatar speaks. mp3 / wav / m4a / aac, up to 5 MB, 2–300 seconds.',
+            'mode' => 'Quality',
+            'mode_help' => 'std = cost-effective, pro = higher quality.',
         ],
         'kind' => [
             'image' => 'Image',
             'video' => 'Video',
+            'avatar' => 'Avatar',
         ],
         'status' => [
             'queued' => 'Queued',

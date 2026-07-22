@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Domain\Ai\Contracts\VideoGenerationProvider;
+use App\Domain\Ai\KlingAvatarClient;
 use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Media\MediaStorage;
 use App\Models\PlaygroundRun;
@@ -64,8 +65,9 @@ final class PollPlaygroundVideoJob implements ShouldQueue
         }
 
         $baseUrl = is_array($run->meta) ? ($run->meta[PlaygroundRun::META_BASE_URL] ?? null) : null;
-        // Resolve the SAME upstream client that submitted this task (the run's provider).
-        $video = $router->for($run->provider);
+        // Resolve the SAME client that submitted this task: the native Kling avatar client for an
+        // avatar run, else the run's provider video client.
+        $video = $run->isAvatar() ? app(KlingAvatarClient::class) : $router->for($run->provider);
 
         try {
             $task = $video->pollTask($run->provider_task_id, $baseUrl);

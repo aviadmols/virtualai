@@ -25,7 +25,10 @@ class PlaygroundRun extends Model
 
     public const KIND_VIDEO = 'video';
 
-    public const KINDS = [self::KIND_IMAGE, self::KIND_VIDEO];
+    // A talking-avatar run: image + audio -> lip-synced video, via the native Kling avatar API.
+    public const KIND_AVATAR = 'avatar';
+
+    public const KINDS = [self::KIND_IMAGE, self::KIND_VIDEO, self::KIND_AVATAR];
 
     public const STATUS_QUEUED = 'queued';
 
@@ -61,7 +64,7 @@ class PlaygroundRun extends Model
     // the BytePlus default so a stale image-provider selection can't mis-route).
     public const VIDEO_PROVIDERS = [self::PROVIDER_BYTEPLUS, self::PROVIDER_ATLASCLOUD, self::PROVIDER_FAL, self::PROVIDER_KLING];
 
-    // meta keys — the video request knobs + the resolved region host.
+    // meta keys — the video request knobs + the resolved region host + the avatar mode.
     public const META_RATIO = 'ratio';
 
     public const META_RESOLUTION = 'resolution';
@@ -70,6 +73,9 @@ class PlaygroundRun extends Model
 
     public const META_BASE_URL = 'base_url';
 
+    // The avatar quality tier (std|pro) — read by KlingAvatarClient as its `mode`.
+    public const META_MODE = 'mode';
+
     protected $fillable = [
         'created_by',
         'kind',
@@ -77,6 +83,7 @@ class PlaygroundRun extends Model
         'model_id',
         'prompt',
         'input_paths',
+        'audio_path',
         'status',
         'provider_task_id',
         'result_path',
@@ -112,5 +119,17 @@ class PlaygroundRun extends Model
     public function isVideo(): bool
     {
         return $this->kind === self::KIND_VIDEO;
+    }
+
+    /** A talking-avatar run (image + audio -> video, native Kling). */
+    public function isAvatar(): bool
+    {
+        return $this->kind === self::KIND_AVATAR;
+    }
+
+    /** Produces an mp4 (video OR avatar) — drives the async submit/poll path + the <video> display. */
+    public function producesVideo(): bool
+    {
+        return $this->isVideo() || $this->isAvatar();
     }
 }
