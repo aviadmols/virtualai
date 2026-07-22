@@ -127,6 +127,16 @@ final class CombineStoryboardVideoJob implements ShouldQueue
         }
 
         $config = app(AiOperationResolver::class)->for(AiOperation::KEY_STORYBOARD_CLIP);
+
+        // Kling native i2v takes ONE input frame and clamps to 10s — it would silently animate
+        // frame 1, drop the other references, and mistime the director's shot list. Fail loud
+        // with the way forward instead (the Animate mode is the per-shot Kling path).
+        if ($config->provider === ImageGenerationProvider::PROVIDER_KLING) {
+            $this->markFailed($project, 'The clip model runs on Kling, which cannot render a multi-reference film in one call — use the "Animate every frame" mode, or switch the clip step to a Seedance-class model.');
+
+            return;
+        }
+
         $client = $router->for($config->provider);
         $ratio = ($this->ratio !== null && $this->ratio !== '') ? $this->ratio : ($project->aspect_ratio ?? self::DEFAULT_RATIO);
         // The seconds the model will ACTUALLY render (fal models clamp to a per-model enum) — the

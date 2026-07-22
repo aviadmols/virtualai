@@ -53,6 +53,25 @@ class StoryboardCombineVideoTest extends TestCase
             ->update(['default_model' => 'bytedance/seedance-2.0/reference-to-video']);
     }
 
+    public function test_the_concat_command_trims_each_clip_to_its_shot_seconds(): void
+    {
+        // ffmpeg is unavailable in the suite — pin the COMMAND: every input is CFR'd then
+        // trimmed to ITS shot's locked seconds with a PTS reset, so a 5s Kling render of a
+        // 3s shot never stretches the film.
+        $composer = app(StoryboardVideoComposer::class);
+        $method = new \ReflectionMethod($composer, 'concatCommand');
+
+        $args = $method->invoke($composer, [
+            ['file' => '/tmp/clip_0000.mp4', 'seconds' => 3],
+            ['file' => '/tmp/clip_0001.mp4', 'seconds' => 6],
+        ], 1080, 1920, '/tmp/final.mp4');
+
+        $filter = $args[array_search('-filter_complex', $args, true) + 1];
+        $this->assertStringContainsString('fps=30,trim=duration=3,setpts=PTS-STARTPTS[v0]', $filter);
+        $this->assertStringContainsString('fps=30,trim=duration=6,setpts=PTS-STARTPTS[v1]', $filter);
+        $this->assertStringContainsString('concat=n=2:v=1:a=0', $filter);
+    }
+
     public function test_animate_with_no_frame_images_fails_cleanly_and_never_charges(): void
     {
         $project = StoryboardProject::factory()->create([
@@ -84,6 +103,25 @@ class StoryboardCombineVideoTest extends TestCase
 
         $project->refresh();
         $this->assertSame(StoryboardProject::VIDEO_FAILED, $project->final_video_status);
+        $this->assertDatabaseCount('credit_ledger', 0);
+    }
+
+    public function test_reference_mode_on_the_kling_clip_default_fails_loud_with_the_way_forward(): void
+    {
+        // The seeded clip default is Kling native i2v: it keeps ONE input frame and clamps to
+        // 10s — a multi-reference film would silently animate frame 1 with everything else
+        // dropped. The job must fail LOUD and point at Animate instead of half-rendering.
+        $this->seed(StoryboardPipelineSeeder::class);
+
+        $project = StoryboardProject::factory()->create(['story_idea' => 'A knight @image1 fights a dragon']);
+        $project->assets()->create(['tag' => 'image1', 'type' => 'character', 'file_path' => 'storyboard/inputs/a.png']);
+
+        (new CombineStoryboardVideoJob($project->id, CombineStoryboardVideoJob::MODE_REFERENCE, '720p', 10, 'A film', '16:9'))
+            ->handle(app(StoryboardVideoComposer::class));
+
+        $project->refresh();
+        $this->assertSame(StoryboardProject::VIDEO_FAILED, $project->final_video_status);
+        $this->assertStringContainsString('Animate', (string) ($project->final_video_meta['error'] ?? ''));
         $this->assertDatabaseCount('credit_ledger', 0);
     }
 

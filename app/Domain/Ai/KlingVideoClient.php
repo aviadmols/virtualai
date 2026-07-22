@@ -42,6 +42,8 @@ final class KlingVideoClient implements VideoGenerationProvider
 
     private const FIELD_IMAGE = 'image';
 
+    private const FIELD_IMAGE_TAIL = 'image_tail';
+
     private const FIELD_DURATION = 'duration';
 
     private const FIELD_ASPECT_RATIO = 'aspect_ratio';
@@ -56,6 +58,10 @@ final class KlingVideoClient implements VideoGenerationProvider
     private const PARAM_MODE = 'mode';
 
     private const PARAM_RESOLUTION = 'resolution';
+
+    // The END-frame url (image-to-video only): the clip finishes ON this image — the
+    // storyboard passes the NEXT shot's opening frame here so consecutive clips CONNECT.
+    public const PARAM_IMAGE_TAIL = 'image_tail_url';
 
     // Kling clip lengths (whole seconds, sent as a STRING enum) — the allowed set is PER MODEL
     // LINE, not global. Verified against the live per-version schemas: v1 / v1-5 / v1-6 / v2 /
@@ -271,6 +277,15 @@ final class KlingVideoClient implements VideoGenerationProvider
 
         if ($frame !== null) {
             $body[self::FIELD_IMAGE] = $frame;
+
+            // END-frame (image-to-video only): the clip lands ON this image, so consecutive
+            // storyboard clips connect — clip N ends exactly where clip N+1 begins. RAW
+            // base64, same treatment as the start frame; an unreadable tail is dropped
+            // (the clip still renders, just without the landing constraint).
+            $tail = $this->rawBase64((string) ($params[self::PARAM_IMAGE_TAIL] ?? ''));
+            if ($tail !== null) {
+                $body[self::FIELD_IMAGE_TAIL] = $tail;
+            }
         }
 
         // Kling takes the duration as a STRING enum of whole seconds, and which seconds are legal
@@ -344,17 +359,30 @@ final class KlingVideoClient implements VideoGenerationProvider
                 continue;
             }
 
-            $dataUri = $this->asDataUri($url);
-            if ($dataUri === null) {
-                continue;
+            $raw = $this->rawBase64($url);
+            if ($raw !== null) {
+                return $raw;
             }
-
-            $comma = strpos($dataUri, ',');
-
-            return $comma === false ? $dataUri : substr($dataUri, $comma + 1);
         }
 
         return null;
+    }
+
+    /** One url → RAW base64 (no data: prefix), or null when empty/unreadable. */
+    private function rawBase64(string $url): ?string
+    {
+        if ($url === '') {
+            return null;
+        }
+
+        $dataUri = $this->asDataUri($url);
+        if ($dataUri === null) {
+            return null;
+        }
+
+        $comma = strpos($dataUri, ',');
+
+        return $comma === false ? $dataUri : substr($dataUri, $comma + 1);
     }
 
     /** @return array<string,mixed> */

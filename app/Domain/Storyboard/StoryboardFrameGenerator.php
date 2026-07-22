@@ -3,6 +3,7 @@
 namespace App\Domain\Storyboard;
 
 use App\Domain\Ai\AiOperationResolver;
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Domain\Ai\ImagePayload;
 use App\Domain\Ai\OperationConfig;
 use App\Domain\Credits\CreditMath;
@@ -47,6 +48,9 @@ final class StoryboardFrameGenerator
 
     private const REFS_FOLLOW_NOTE = 'Any remaining attached images are @tag identity references — identity ground truth only, never their background, pose or lighting.';
 
+    // Single-reference providers (Kling) get ONE image and ONE matching lead.
+    private const SINGLE_REF_LEAD = 'The attached image is a @tag identity reference — match the person\'s face, age, hair and body from it, never its background, pose, lighting or camera angle.';
+
     public function __construct(
         private readonly AiOperationResolver $resolver,
         private readonly StoryboardFrameImageCaller $caller,
@@ -71,37 +75,24 @@ final class StoryboardFrameGenerator
         $anchor = $this->anchorImage($frame);
         $refs = $this->referenceImages($frame);
 
-        // Attachment order = the order the leads describe: own image (edit), then the previous
-        // shot (continuity), then the @tag identity references.
-        $inputs = [];
-        $leads = [];
-
-        if ($ownImage !== null) {
-            $inputs[] = $ownImage;
-            $leads[] = self::OWN_IMAGE_LEAD;
-
-            if ($anchor !== null) {
-                $inputs[] = $anchor;
-                $leads[] = self::ANCHOR_FOLLOWS_NOTE;
-            }
-        } elseif ($anchor !== null) {
-            $inputs[] = $anchor;
-            $leads[] = self::PREVIOUS_SHOT_LEAD;
-        }
-
-        if ($refs !== []) {
-            $leads[] = self::REFS_FOLLOW_NOTE;
-        }
-
-        // MAX_ATTACHMENTS caps the WHOLE payload (leading images + references), not just the
-        // references — the leads always describe the images that actually survive the cap.
-        $inputs = array_slice(array_merge($inputs, $refs), 0, self::MAX_ATTACHMENTS);
-
-        $prompt = $this->buildPrompt($config, $frame, $editInstruction, $leads);
+        // Resolve the model/provider FIRST — the input payload depends on the provider's
+        // capabilities (Kling consumes exactly ONE image), and the prompt leads must never
+        // describe attachments the provider does not receive.
         [$model, $provider, $priceHint] = $this->modelFor($config, chained: $ownImage !== null || $anchor !== null);
 
+        [$inputs, $leads] = $provider === ImageGenerationProvider::PROVIDER_KLING
+            ? $this->singleImagePayload($ownImage, $anchor, $refs)
+            : $this->multiImagePayload($ownImage, $anchor, $refs);
+
+        $prompt = $this->buildPrompt($config, $frame, $editInstruction, $leads);
+
+        // The fallback model only makes sense on the SAME provider's client (callWithFallback
+        // runs both through one adapter) — and the resolved provider can differ from the
+        // primary when the first-frame upgrade kicked in.
+        $fallbackModel = $provider === $config->fallbackProvider ? $config->fallbackModel : null;
+
         try {
-            $result = $this->caller->run($config, $provider, $model, $prompt, $inputs, $priceHint);
+            $result = $this->caller->run($config, $provider, $model, $prompt, $inputs, $priceHint, $fallbackModel);
         } catch (Throwable $e) {
             $frame->update([
                 'status' => StoryboardFrame::STATUS_FAILED,
@@ -124,6 +115,66 @@ final class StoryboardFrameGenerator
             'status' => StoryboardFrame::STATUS_READY,
             'image_cost_micro_usd' => $cost,
         ]);
+    }
+
+    /**
+     * The multi-image payload (OpenRouter/fal edit models): own image (edit), then the
+     * previous shot (continuity), then the @tag identity references — capped as a whole.
+     *
+     * @param  array<int,ImagePayload>  $refs
+     * @return array{0: array<int,ImagePayload>, 1: array<int,string>}
+     */
+    private function multiImagePayload(?ImagePayload $ownImage, ?ImagePayload $anchor, array $refs): array
+    {
+        $inputs = [];
+        $leads = [];
+
+        if ($ownImage !== null) {
+            $inputs[] = $ownImage;
+            $leads[] = self::OWN_IMAGE_LEAD;
+
+            if ($anchor !== null) {
+                $inputs[] = $anchor;
+                $leads[] = self::ANCHOR_FOLLOWS_NOTE;
+            }
+        } elseif ($anchor !== null) {
+            $inputs[] = $anchor;
+            $leads[] = self::PREVIOUS_SHOT_LEAD;
+        }
+
+        if ($refs !== []) {
+            $leads[] = self::REFS_FOLLOW_NOTE;
+        }
+
+        // MAX_ATTACHMENTS caps the WHOLE payload (leading images + references), not just the
+        // references — the leads always describe the images that actually survive the cap.
+        return [array_slice(array_merge($inputs, $refs), 0, self::MAX_ATTACHMENTS), $leads];
+    }
+
+    /**
+     * The single-image payload (Kling): the client sends exactly ONE reference, so attach the
+     * strongest continuity signal available — the frame's own image (regenerate), else the
+     * previous shot (identity propagates through the chain), else the first @tag reference —
+     * with ONLY that image's lead sentence.
+     *
+     * @param  array<int,ImagePayload>  $refs
+     * @return array{0: array<int,ImagePayload>, 1: array<int,string>}
+     */
+    private function singleImagePayload(?ImagePayload $ownImage, ?ImagePayload $anchor, array $refs): array
+    {
+        if ($ownImage !== null) {
+            return [[$ownImage], [self::OWN_IMAGE_LEAD]];
+        }
+
+        if ($anchor !== null) {
+            return [[$anchor], [self::PREVIOUS_SHOT_LEAD]];
+        }
+
+        if ($refs !== []) {
+            return [[array_values($refs)[0]], [self::SINGLE_REF_LEAD]];
+        }
+
+        return [[], []];
     }
 
     /** Make a previously generated version the frame's shown image. */

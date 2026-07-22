@@ -4,8 +4,6 @@ namespace Tests\Feature\Storyboard;
 
 use App\Domain\Storyboard\StoryboardFrameGenerator;
 use App\Jobs\GenerateStoryboardFrameJob;
-use App\Models\AiModel;
-use App\Models\AiOperation;
 use App\Models\Prompt;
 use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
@@ -17,66 +15,64 @@ use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 /**
- * Per-frame image generation — the Pro-first / edit-chained design:
- *   - an anchor-LESS frame (usually frame 1) upgrades to the premium first_frame_model
- *     (OpenRouter, gemini-3-pro-image) with QUALITY + the PROJECT's aspect in the body;
- *   - every later frame runs the EDIT default (fal nano-banana) CHAINED on the previous
- *     frame's image (data-URI inlined) so the film stays visually consistent;
- *   - a regenerate edits the frame's own current image;
+ * Per-frame image generation — the Kling-native chained design:
+ *   - Kling consumes exactly ONE reference image, so each frame attaches the strongest
+ *     continuity signal available: its own image (regenerate) → the previous frame (the
+ *     chain — identity propagates through it) → the first @tag identity reference;
+ *   - the prompt lead names exactly the image Kling receives (never phantom attachments);
+ *   - a refusal on the primary (kling-v3) falls back to the SAME-provider kling-v2-1;
  *   - versions are recorded and selectable; a locked frame is untouched; never charges.
+ * The Kling image API (submit → poll → result-url download) is faked.
  */
 class StoryboardFrameGenerationTest extends TestCase
 {
     use RefreshDatabase;
 
-    // The chained EDIT default (fal queue API: submit → status → result → download).
-    private const NB_MODEL = 'fal-ai/nano-banana/edit';
-    private const NB_SUBMIT = 'https://queue.fal.run/'.self::NB_MODEL;
-    private const NB_REQUEST = 'req-nb1';
-    private const NB_STATUS = self::NB_SUBMIT.'/requests/'.self::NB_REQUEST.'/status';
-    private const NB_RESULT = self::NB_SUBMIT.'/requests/'.self::NB_REQUEST.'/response';
-    private const FAL_IMAGE_URL = 'https://v3.fal.media/files/frame.png';
+    private const BASE = 'https://api-singapore.klingai.com';
+    private const SUBMIT = self::BASE.'/v1/images/generations';
+    private const TASK = 'sb-task-1';
+    private const QUERY = self::SUBMIT.'/'.self::TASK;
+    private const IMAGE_URL = 'https://cdn.klingai.test/frame.png';
 
-    // The look-setting first-frame model (OpenRouter chat completions).
-    private const PRO_MODEL = 'google/gemini-3-pro-image';
-    private const OR_CHAT = 'https://openrouter.ai/api/v1/chat/completions';
+    private const PNG = "\x89PNG\r\n\x1a\nFRAME";
 
     protected function setUp(): void
     {
         parent::setUp();
-        config()->set('services.fal.api_key', 'fal-test-key');
-        config()->set('services.fal.base_url', 'https://queue.fal.run');
-        config()->set('services.fal.catalog_url', 'https://fal.ai/api');
-        config()->set('services.fal.timeout', 30);
-        config()->set('services.openrouter.key', 'sk-or-test');
-        config()->set('services.openrouter.base_url', 'https://openrouter.ai/api/v1');
-        config()->set('services.openrouter.timeout', 30);
+        config()->set('services.kling.api_key', 'api-key-kling-test');
+        config()->set('services.kling.base_url', self::BASE);
+        config()->set('services.kling.timeout', 30);
         config()->set('trayon.media.disk', 's3');
         Storage::fake('s3');
         $this->seed(StoryboardPipelineSeeder::class);
         Sleep::fake();
     }
 
+    /** One Kling envelope. @param array<string,mixed> $extra */
+    private function task(string $status, array $extra = []): array
+    {
+        return [
+            'code' => 0,
+            'message' => 'ok',
+            'request_id' => 'req-1',
+            'data' => array_merge(['task_id' => self::TASK, 'task_status' => $status], $extra),
+        ];
+    }
+
+    private function succeeded(): array
+    {
+        return $this->task('succeed', [
+            'task_result' => ['images' => [['index' => 0, 'url' => self::IMAGE_URL]]],
+        ]);
+    }
+
     private function fakeImage(): void
     {
-        $png = "\x89PNG\r\n\x1a\nFRAME";
-        $dataUrl = 'data:image/png;base64,'.base64_encode($png);
-
         Http::fake([
-            self::OR_CHAT => Http::response([
-                'id' => 'or-1',
-                'model' => self::PRO_MODEL,
-                'choices' => [['message' => [
-                    'role' => 'assistant',
-                    'content' => '',
-                    'images' => [['type' => 'image_url', 'image_url' => ['url' => $dataUrl]]],
-                ]]],
-            ], 200),
-            self::NB_STATUS => Http::response(['status' => 'COMPLETED'], 200),
-            self::NB_RESULT => Http::response(['images' => [['url' => self::FAL_IMAGE_URL, 'content_type' => 'image/png']]], 200),
-            self::NB_SUBMIT => Http::response(['request_id' => self::NB_REQUEST], 200),
-            self::FAL_IMAGE_URL => Http::response($png, 200),
-            '*' => Http::response($png, 200), // signed input-image fetches (data-URI inlining)
+            self::QUERY => Http::response($this->succeeded(), 200),
+            self::SUBMIT => Http::response($this->task('submitted'), 200),
+            self::IMAGE_URL => Http::response(self::PNG, 200),
+            '*' => Http::response(self::PNG, 200), // signed input-image fetches (base64 inlining)
         ]);
     }
 
@@ -107,7 +103,22 @@ class StoryboardFrameGenerationTest extends TestCase
         ]);
     }
 
-    public function test_an_anchorless_frame_runs_the_premium_first_frame_model_with_quality_and_project_aspect(): void
+    /** The decoded submit body of the LAST request to the generations endpoint. */
+    private function submitBody(): array
+    {
+        $body = [];
+        Http::assertSent(function ($request) use (&$body): bool {
+            if ($request->url() === self::SUBMIT) {
+                $body = (array) json_decode((string) $request->body(), true);
+            }
+
+            return true;
+        });
+
+        return $body;
+    }
+
+    public function test_a_referenceless_frame_generates_on_kling_with_the_project_aspect(): void
     {
         $this->fakeImage();
         $frame = $this->frame([], ['aspect_ratio' => '9:16']);
@@ -118,67 +129,72 @@ class StoryboardFrameGenerationTest extends TestCase
         $this->assertSame(StoryboardFrame::STATUS_READY, $frame->status);
         Storage::disk('s3')->assertExists($frame->image_path);
 
-        // The look-setter went to OpenRouter's premium model — with the configured QUALITY and
-        // the PROJECT's aspect (not the operation's 16:9) actually in the body.
-        Http::assertSent(function ($request): bool {
-            if ($request->url() !== self::OR_CHAT) {
-                return false;
-            }
-            $body = (array) json_decode((string) $request->body(), true);
-
-            return ($body['model'] ?? null) === self::PRO_MODEL
-                && ($body['quality'] ?? null) === 'high'
-                && ($body['aspect_ratio'] ?? null) === '9:16';
-        });
+        $body = $this->submitBody();
+        $this->assertSame('kling-v3', $body['model_name'] ?? null);
+        $this->assertSame('9:16', $body['aspect_ratio'] ?? null);
+        // No input image → no reference knobs, no raw model id, no sampler leak.
+        $this->assertArrayNotHasKey('image', $body);
+        $this->assertArrayNotHasKey('image_reference', $body);
+        $this->assertArrayNotHasKey('model', $body);
+        $this->assertArrayNotHasKey('temperature', $body);
 
         $this->assertSame(1, $frame->versions()->where('is_selected', true)->count());
-        $this->assertSame(self::PRO_MODEL, $frame->versions()->first()->model);
-        // Flat-rate: the catalogued first-frame model's price hint is the recorded cost.
-        $this->assertSame(120_000, $frame->image_cost_micro_usd);
+        $this->assertSame('kling-v3', $frame->versions()->first()->model);
+        // Flat-rate: the operation's estimate is the recorded cost (no inline USD in the fake).
+        $this->assertSame(28_000, $frame->image_cost_micro_usd);
         $this->assertDatabaseCount('credit_ledger', 0);
     }
 
-    public function test_a_later_frame_chains_on_the_previous_frames_image_via_the_edit_model(): void
+    public function test_a_later_frame_chains_on_the_previous_frames_image_as_the_single_reference(): void
     {
         $this->fakeImage();
-        $second = $this->chainedFrame(['aspect_ratio' => '9:16']);
+        $second = $this->chainedFrame();
 
         app(StoryboardFrameGenerator::class)->generate($second);
 
         $this->assertSame(StoryboardFrame::STATUS_READY, $second->refresh()->status);
 
-        // The chained frame ran the EDIT default with the ANCHOR inlined as a data URI and the
-        // project aspect mapped onto fal's image_size enum.
-        Http::assertSent(function ($request): bool {
-            if ($request->url() !== self::NB_SUBMIT) {
-                return false;
-            }
-            $body = (array) json_decode((string) $request->body(), true);
+        $body = $this->submitBody();
+        // The anchor rides as Kling's single `image` reference — RAW base64, no data: prefix.
+        $this->assertNotSame('', (string) ($body['image'] ?? ''));
+        $this->assertStringNotContainsString('data:', (string) $body['image']);
+        // The reference-tuning knob rides ONLY alongside an actual reference.
+        $this->assertSame('subject', $body['image_reference'] ?? null);
 
-            return str_starts_with((string) ($body['image_url'] ?? ''), 'data:image/')
-                && ($body['image_size'] ?? null) === 'portrait_16_9';
-        });
-
-        // The continuity lead labels the anchor as the PREVIOUS SHOT.
+        // The continuity lead names exactly what Kling received: the PREVIOUS SHOT.
         $prompt = (string) $second->versions()->first()->prompt;
         $this->assertStringContainsString('PREVIOUS SHOT', $prompt);
-        $this->assertSame(self::NB_MODEL, $second->versions()->first()->model);
+        $this->assertStringNotContainsString('Any remaining attached images', $prompt);
     }
 
-    public function test_a_missing_first_frame_catalog_row_falls_back_to_the_default_model(): void
+    public function test_a_refusal_on_the_primary_falls_back_to_the_same_provider_fallback(): void
     {
-        $this->fakeImage();
-        AiModel::query()
-            ->where('operation_key', AiOperation::KEY_STORYBOARD_FRAME_IMAGE)
-            ->where('model_id', self::PRO_MODEL)
-            ->update(['is_active' => false]);
+        // kling-v3 submits then terminally FAILS (the refusal class); kling-v2-1 succeeds.
+        Http::fake([
+            self::QUERY => Http::sequence()
+                ->push($this->task('failed', ['task_status_msg' => 'content policy']), 200)
+                ->push($this->succeeded(), 200),
+            self::SUBMIT => Http::response($this->task('submitted'), 200),
+            self::IMAGE_URL => Http::response(self::PNG, 200),
+            '*' => Http::response(self::PNG, 200),
+        ]);
 
         $frame = $this->frame();
         app(StoryboardFrameGenerator::class)->generate($frame);
 
-        // No catalogued first-frame model -> the edit default generated it (never a hard fail).
         $this->assertSame(StoryboardFrame::STATUS_READY, $frame->refresh()->status);
-        $this->assertSame(self::NB_MODEL, $frame->versions()->first()->model);
+        $this->assertSame('kling-v2-1', $frame->versions()->first()->model);
+
+        // Both models were actually submitted, in order.
+        $models = [];
+        Http::assertSent(function ($request) use (&$models): bool {
+            if ($request->url() === self::SUBMIT) {
+                $models[] = json_decode((string) $request->body(), true)['model_name'] ?? null;
+            }
+
+            return true;
+        });
+        $this->assertSame(['kling-v3', 'kling-v2-1'], $models);
     }
 
     public function test_regenerate_edits_the_frames_own_image_and_adds_a_selected_version(): void
@@ -187,7 +203,7 @@ class StoryboardFrameGenerationTest extends TestCase
         $frame = $this->frame();
         $generator = app(StoryboardFrameGenerator::class);
 
-        $generator->generate($frame);              // first run: the look-setter
+        $generator->generate($frame);
         $generator->generate($frame->refresh());   // regenerate: EDIT the current image
 
         $frame->refresh();
@@ -196,10 +212,30 @@ class StoryboardFrameGenerationTest extends TestCase
         $this->assertCount(1, $selected);
         $this->assertSame(2, $selected->first()->version_number);
 
-        // The regenerate carried the frame's own image into the EDIT model.
-        Http::assertSent(fn ($request): bool => $request->url() === self::NB_SUBMIT
-            && str_contains((string) $request->body(), 'image_url'));
+        // The regenerate carried the frame's own image as the single reference, and the lead
+        // names it as the CURRENT version to edit.
         $this->assertStringContainsString('CURRENT version', (string) $frame->versions()->where('version_number', 2)->first()->prompt);
+    }
+
+    public function test_a_tag_reference_becomes_the_single_reference_on_an_anchorless_frame(): void
+    {
+        $this->fakeImage();
+        $frame = $this->frame(['reference_tags' => ['hero']]);
+        $frame->project->assets()->create(['tag' => 'hero', 'type' => 'character', 'file_path' => 'storyboard/inputs/hero.png']);
+        Storage::disk('s3')->put('storyboard/inputs/hero.png', "\x89PNG\r\n\x1a\nHERO");
+
+        app(StoryboardFrameGenerator::class)->generate($frame);
+
+        $this->assertSame(StoryboardFrame::STATUS_READY, $frame->refresh()->status);
+
+        $body = $this->submitBody();
+        $this->assertNotSame('', (string) ($body['image'] ?? ''));
+        $this->assertSame('subject', $body['image_reference'] ?? null);
+
+        // The lead names the identity reference — not a previous shot that wasn't attached.
+        $prompt = (string) $frame->versions()->first()->prompt;
+        $this->assertStringContainsString('identity reference', $prompt);
+        $this->assertStringNotContainsString('PREVIOUS SHOT', $prompt);
     }
 
     public function test_the_generation_prompt_is_led_by_the_operations_system_prompt(): void
@@ -219,32 +255,6 @@ class StoryboardFrameGenerationTest extends TestCase
         $this->assertNotSame('', trim($system));
         $this->assertStringStartsWith($system, $recorded);
         $this->assertStringContainsString('Cinematic pool party, bright daylight', $recorded);
-    }
-
-    public function test_reference_tags_ride_along_to_the_look_setting_model(): void
-    {
-        $this->fakeImage();
-        $frame = $this->frame(['reference_tags' => ['hero']]);
-        $frame->project->assets()->create(['tag' => 'hero', 'type' => 'character', 'file_path' => 'storyboard/inputs/hero.png']);
-        Storage::disk('s3')->put('storyboard/inputs/hero.png', "\x89PNG\r\n\x1a\nHERO");
-
-        app(StoryboardFrameGenerator::class)->generate($frame);
-
-        $this->assertSame(StoryboardFrame::STATUS_READY, $frame->refresh()->status);
-        // An anchor-less frame still upgrades to the premium model — the @hero identity
-        // reference rides as an image content part.
-        Http::assertSent(function ($request): bool {
-            if ($request->url() !== self::OR_CHAT) {
-                return false;
-            }
-            $body = (array) json_decode((string) $request->body(), true);
-            $content = $body['messages'][0]['content'] ?? [];
-
-            return collect(is_array($content) ? $content : [])->contains(
-                fn ($part): bool => ($part['type'] ?? '') === 'image_url',
-            );
-        });
-        $this->assertSame(self::PRO_MODEL, $frame->versions()->first()->model);
     }
 
     public function test_selecting_an_older_version_swaps_the_frame_image(): void

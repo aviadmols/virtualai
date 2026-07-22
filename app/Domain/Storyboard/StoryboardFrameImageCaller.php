@@ -59,6 +59,11 @@ final class StoryboardFrameImageCaller
     // The sampler knobs forwarded from the resolved params bag (OpenRouter chat shape).
     private const SAMPLER_KNOBS = ['seed', 'temperature', 'top_p'];
 
+    // Kling body keys forwarded from the params bag — ONLY when an input image rides along
+    // (image_reference without an image is a Kling 400). The client passes unknown keys
+    // through verbatim, so these are admin-tunable without a deploy.
+    private const KLING_PASSTHROUGH = ['image_reference', 'image_fidelity', 'n'];
+
     private const NO_IMAGE_MESSAGE = 'The provider returned no usable image.';
 
     public function __construct(
@@ -69,6 +74,8 @@ final class StoryboardFrameImageCaller
      * Run one frame generation and return the bytes + parsed cost + model used.
      *
      * @param  array<int,ImagePayload>  $inputs  chain anchor + reference images (signed urls)
+     * @param  ?string  $fallbackModel  a SAME-provider fallback (e.g. Kling v2-1 when v3
+     *                                  refuses) — the caller decides provider compatibility
      */
     public function run(
         OperationConfig $config,
@@ -77,13 +84,14 @@ final class StoryboardFrameImageCaller
         string $prompt,
         array $inputs,
         ?int $priceHintMicroUsd,
+        ?string $fallbackModel = null,
     ): PlaygroundImageResult {
         $client = $this->router->for($provider);
 
         $response = $client->callWithFallback(
             self::OP_KEY,
             $model,
-            null,
+            $fallbackModel,
             fn (string $m): array => $this->buildBody($config, $provider, $m, $prompt, $inputs),
         );
 
@@ -242,6 +250,13 @@ final class StoryboardFrameImageCaller
         $urls = array_values(array_map(static fn (ImagePayload $i): string => $i->url, $inputs));
         if ($urls !== []) {
             $body[KlingImageClient::KEY_IMAGE_URLS] = $urls;
+
+            // Reference-tuning knobs ride ONLY alongside an actual reference image.
+            foreach (self::KLING_PASSTHROUGH as $knob) {
+                if (array_key_exists($knob, $config->params)) {
+                    $body[$knob] = $config->params[$knob];
+                }
+            }
         }
 
         if ($config->aspectRatio !== null) {

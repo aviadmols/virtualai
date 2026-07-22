@@ -159,15 +159,24 @@ class KlingCatalogSeederTest extends TestCase
         })->run();
     }
 
-    public function test_no_kling_model_is_a_default_or_a_fallback(): void
+    public function test_kling_defaults_exist_only_on_the_storyboard_engine(): void
     {
-        // fal keeps every default: pointing an operation at Kling must stay a deliberate admin act.
-        $flagged = AiModel::query()
+        // The storyboard engine (frames + clips) deliberately runs Kling-native — the chained
+        // single-reference images + the image_tail shot connection live there. Every OTHER
+        // surface keeps its fal/OpenRouter default: pointing one at Kling stays an admin act.
+        $flaggedOps = AiModel::query()
             ->where('provider', AiModel::PROVIDER_KLING)
             ->where(fn ($q) => $q->where('is_default', true)->orWhere('is_fallback', true))
-            ->count();
+            ->pluck('operation_key')
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
 
-        $this->assertSame(0, $flagged);
+        $this->assertSame(
+            [AiOperation::KEY_STORYBOARD_CLIP, AiOperation::KEY_STORYBOARD_FRAME_IMAGE],
+            $flaggedOps,
+        );
     }
 
     public function test_no_kling_model_is_seeded_without_a_positive_price(): void

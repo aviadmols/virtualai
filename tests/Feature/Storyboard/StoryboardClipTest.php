@@ -48,16 +48,35 @@ class StoryboardClipTest extends TestCase
     private const FAL_STATUS = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST.'/status';
     private const FAL_RESULT = self::FAL_SUBMIT.'/requests/'.self::FAL_REQUEST.'/response';
 
+    // Kling native (the seeded clip default): i2v endpoint + a composite "{path}|{task}" id.
+    private const KLING_BASE = 'https://api-singapore.klingai.com';
+    private const KLING_I2V = self::KLING_BASE.'/v1/videos/image2video';
+    private const KLING_TASK = 'kv-task-1';
+
     protected function setUp(): void
     {
         parent::setUp();
         config()->set('services.byteplus.api_key', 'bp-real-key');
         config()->set('services.byteplus.base_url', self::BASE);
         config()->set('services.byteplus.timeout', 30);
+        config()->set('services.kling.api_key', 'api-key-kling-test');
+        config()->set('services.kling.base_url', self::KLING_BASE);
+        config()->set('services.kling.timeout', 30);
         config()->set('trayon.media.disk', 'public'); // local driver -> signedUrl via the signed route
         Storage::fake('public');
         $this->seed(StoryboardPipelineSeeder::class);
         Sleep::fake();
+    }
+
+    /** One Kling video envelope. */
+    private function klingTask(string $status): array
+    {
+        return [
+            'code' => 0,
+            'message' => 'ok',
+            'request_id' => 'req-1',
+            'data' => ['task_id' => self::KLING_TASK, 'task_status' => $status],
+        ];
     }
 
     private function frame(array $overrides = []): StoryboardFrame
@@ -71,13 +90,12 @@ class StoryboardClipTest extends TestCase
         ], $overrides));
     }
 
-    public function test_generate_clip_job_submits_and_dispatches_the_poller(): void
+    public function test_generate_clip_job_submits_on_kling_and_dispatches_the_poller(): void
     {
         Bus::fake([PollStoryboardClipJob::class]);
         Http::fake([
-            self::TASKS => Http::response(['id' => self::TASK], 200),
-            // The signed frame-image fetch — the client INLINES the frame as a data URI so the
-            // provider never has to reach our (possibly private) media url itself.
+            self::KLING_I2V => Http::response($this->klingTask('submitted'), 200),
+            // The signed frame-image fetches — the client INLINES frames as raw base64.
             '*' => Http::response("\x89PNG\r\n\x1a\nIMG", 200),
         ]);
 
@@ -88,53 +106,102 @@ class StoryboardClipTest extends TestCase
             'start_second' => 0,
             'end_second' => 7,
         ]);
+
+        // The NEXT shot's opening frame exists → it rides as this clip's END frame.
+        StoryboardFrame::factory()->create([
+            'project_id' => $frame->project_id,
+            'frame_number' => (int) $frame->frame_number + 1,
+            'image_path' => 'storyboard/2/frames/2/img.png',
+        ]);
+        Storage::disk('public')->put('storyboard/2/frames/2/img.png', "\x89PNG\r\n\x1a\nNEXT");
+
         (new GenerateStoryboardClipJob($frame->id))->handle(app(StoryboardClipGenerator::class));
 
         $frame->refresh();
         $this->assertSame(StoryboardFrame::VIDEO_GENERATING, $frame->video_status);
-        $this->assertSame(self::TASK, $frame->video_task_id);
+        $this->assertSame('/v1/videos/image2video|'.self::KLING_TASK, $frame->video_task_id);
         Bus::assertDispatched(PollStoryboardClipJob::class);
 
-        // The submit carries the frame image as the first_frame — INLINED as a data URI.
-        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
-            && ($req->data()['content'][1]['role'] ?? null) === 'first_frame'
-            && str_starts_with((string) ($req->data()['content'][1]['image_url']['url'] ?? ''), 'data:image/'));
+        Http::assertSent(function ($req): bool {
+            if (! str_ends_with($req->url(), '/v1/videos/image2video')) {
+                return false;
+            }
+            $body = (array) json_decode((string) $req->body(), true);
+            $prompt = (string) ($body['prompt'] ?? '');
 
-        // Shot-based derivation: the clip runs THIS frame's locked shot length (7s), not a fixed 3s.
-        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
-            && ($req->data()['duration'] ?? null) === 7);
-
-        // The frame's planned motion phrase reaches the provider via the {{motion}} placeholder.
-        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
-            && str_contains((string) json_encode($req->data()), 'slow pan left across the pool'));
-
-        // The locked camera work rides along via {{camera}}.
-        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
-            && str_contains((string) json_encode($req->data()), 'low-angle wide, 24mm'));
-
-        // The frame's spoken line rides along ({{dialogue}}), so the clip voices it lip-synced.
-        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
-            && str_contains((string) json_encode($req->data()), 'Welcome to the party!'));
+            return ($body['model_name'] ?? null) === 'kling-v2-5-turbo'
+                // Start frame RAW base64 (no data: prefix) + the SHOT-CONNECTION end frame.
+                && ($body['image'] ?? '') !== '' && ! str_contains((string) $body['image'], 'data:')
+                && ($body['image_tail'] ?? '') !== '' && ! str_contains((string) $body['image_tail'], 'data:')
+                // 1080p → Kling `pro` mode (image_tail needs it); 7s shot → Kling enum '5'.
+                && ($body['mode'] ?? null) === 'pro'
+                && ($body['duration'] ?? null) === '5'
+                // Motion + camera work + the spoken line all reach the prompt.
+                && str_contains($prompt, 'slow pan left across the pool')
+                && str_contains($prompt, 'low-angle wide, 24mm')
+                && str_contains($prompt, 'Welcome to the party!');
+        });
     }
 
-    public function test_the_clip_duration_is_clamped_into_the_operation_bounds(): void
+    public function test_the_last_frame_submits_without_a_tail_and_durations_clamp_to_the_kling_enum(): void
     {
         Bus::fake([PollStoryboardClipJob::class]);
         Http::fake([
-            self::TASKS => Http::response(['id' => self::TASK], 200),
+            self::KLING_I2V => Http::response($this->klingTask('submitted'), 200),
             '*' => Http::response("\x89PNG\r\n\x1a\nIMG", 200),
         ]);
 
-        // A 20s shot exceeds max_clip_seconds (12) — clamped; a 1s shot lifts to the min (3).
+        // No next frame → no image_tail. A 20s shot clamps 12 (op bound) → '10' (Kling enum);
+        // a 1s shot lifts to 3 (op bound) → '5' (Kling's shortest).
         $long = $this->frame(['start_second' => 0, 'end_second' => 20]);
         (new GenerateStoryboardClipJob($long->id))->handle(app(StoryboardClipGenerator::class));
-        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
-            && ($req->data()['duration'] ?? null) === 12);
+        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/v1/videos/image2video')
+            && ! array_key_exists('image_tail', (array) json_decode((string) $req->body(), true))
+            && (json_decode((string) $req->body(), true)['duration'] ?? null) === '10');
 
         $short = $this->frame(['start_second' => 0, 'end_second' => 1]);
         (new GenerateStoryboardClipJob($short->id))->handle(app(StoryboardClipGenerator::class));
-        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/contents/generations/tasks')
-            && ($req->data()['duration'] ?? null) === 3);
+        Http::assertSent(fn ($req) => str_ends_with($req->url(), '/v1/videos/image2video')
+            && (json_decode((string) $req->body(), true)['duration'] ?? null) === '5');
+    }
+
+    public function test_a_rejected_tail_retries_once_without_it(): void
+    {
+        Bus::fake([PollStoryboardClipJob::class]);
+        Http::fake([
+            self::KLING_I2V => Http::sequence()
+                // Kling 400s the tail (model/mode gate) → the submit retries WITHOUT it.
+                ->push(['code' => 1201, 'message' => 'image_tail not supported'], 400)
+                ->push($this->klingTask('submitted'), 200),
+            '*' => Http::response("\x89PNG\r\n\x1a\nIMG", 200),
+        ]);
+
+        $frame = $this->frame(['start_second' => 0, 'end_second' => 5]);
+        StoryboardFrame::factory()->create([
+            'project_id' => $frame->project_id,
+            'frame_number' => (int) $frame->frame_number + 1,
+            'image_path' => 'storyboard/2/frames/2/img.png',
+        ]);
+        Storage::disk('public')->put('storyboard/2/frames/2/img.png', "\x89PNG\r\n\x1a\nNEXT");
+
+        (new GenerateStoryboardClipJob($frame->id))->handle(app(StoryboardClipGenerator::class));
+
+        $frame->refresh();
+        // The clip still renders — the drop is recorded, never silent.
+        $this->assertSame(StoryboardFrame::VIDEO_GENERATING, $frame->video_status);
+        $this->assertTrue((bool) ($frame->video_meta['tail_dropped'] ?? false));
+        $this->assertNotSame('', (string) ($frame->video_meta['tail_error'] ?? ''));
+
+        // First submit carried the tail; the retry did not.
+        $tails = [];
+        Http::assertSent(function ($req) use (&$tails): bool {
+            if (str_ends_with($req->url(), '/v1/videos/image2video')) {
+                $tails[] = array_key_exists('image_tail', (array) json_decode((string) $req->body(), true));
+            }
+
+            return true;
+        });
+        $this->assertSame([true, false], $tails);
     }
 
     public function test_a_succeeded_poll_stores_the_clip_and_render_time(): void

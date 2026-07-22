@@ -31,18 +31,28 @@ class StoryboardPipelineSeeder extends Seeder
 
     private const TEXT_FALLBACK_LABEL = 'Gemini 3.5 Flash';
 
-    // Frame images: the DEFAULT is the EDIT-capable Nano Banana (fal) — every chained frame is
-    // generated FROM the previous frame's image + the @tag references, which is what carries
-    // cross-frame consistency. The anchor-less FIRST frame (which sets the whole film's look)
-    // upgrades to Nano Banana Pro via the `first_frame_model` param. Krea 2 Turbo stays
-    // catalogued as a cheap NON-default option (it is text-to-image and blind to references).
-    private const IMAGE_MODEL = 'fal-ai/nano-banana/edit';
+    // Frame images run on KLING's native API: every chained frame is generated FROM the
+    // previous frame's image (Kling's single `image` reference — identity propagates through
+    // the chain), and Kling doesn't refuse people/child imagery the way the Gemini image
+    // tier does. kling-v2-1 is the same-provider fallback (engages on a refusal, never on a
+    // bad request). Nano Banana / Gemini / Krea stay catalogued as NON-default options.
+    private const IMAGE_MODEL = 'kling-v3';
 
-    private const IMAGE_MODEL_LABEL = 'Nano Banana Edit (fal.ai)';
+    private const IMAGE_MODEL_LABEL = 'Kling Image 3.0';
 
-    private const IMAGE_PROVIDER = AiModel::PROVIDER_FAL;
+    private const IMAGE_PROVIDER = AiModel::PROVIDER_KLING;
 
-    private const IMAGE_MODEL_HINT = 40_000; // per image (estimate)
+    private const IMAGE_MODEL_HINT = 28_000; // per image, Kling I2I rate (estimate)
+
+    private const IMAGE_FALLBACK_MODEL = 'kling-v2-1';
+
+    private const IMAGE_FALLBACK_LABEL = 'Kling Image 2.1';
+
+    private const IMAGE_MODEL_NB = 'fal-ai/nano-banana/edit';
+
+    private const IMAGE_MODEL_NB_LABEL = 'Nano Banana Edit (fal.ai)';
+
+    private const IMAGE_MODEL_NB_HINT = 40_000;
 
     private const IMAGE_MODEL_KREA = 'fal-ai/krea-2/turbo';
 
@@ -52,10 +62,20 @@ class StoryboardPipelineSeeder extends Seeder
 
     private const IMAGE_MODEL_GEMINI = 'google/gemini-2.5-flash-image';
 
-    // The look-setting FIRST-frame model (params.first_frame_model): the premium image tier.
-    private const IMAGE_FIRST_MODEL = 'google/gemini-3-pro-image';
+    private const IMAGE_MODEL_GEMINI_PRO = 'google/gemini-3-pro-image';
 
-    private const IMAGE_FIRST_LABEL = 'Gemini 3 Pro Image (Nano Banana Pro)';
+    private const IMAGE_MODEL_GEMINI_PRO_LABEL = 'Gemini 3 Pro Image (Nano Banana Pro)';
+
+    // Kling reference mode: 'subject' anchors the whole person/subject (not just the face).
+    private const IMAGE_REFERENCE_MODE = 'subject';
+
+    // The clip DEFAULT: Kling native i2v — the only seeded line with the image_tail END-frame
+    // field the shot connection uses. Priced per-second (70k µUSD @1080p) × 5s default.
+    private const CLIP_MODEL = 'kling-v2-5-turbo';
+
+    private const CLIP_MODEL_LABEL = 'Kling 2.5 Turbo (video)';
+
+    private const CLIP_MODEL_HINT = 350_000;
 
     // fal VIDEO options for the clip step (NON-default; ids verified in the live fal catalog).
     private const CLIP_FAL_KLING = 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video';
@@ -261,9 +281,10 @@ class StoryboardPipelineSeeder extends Seeder
         );
     }
 
-    /** Seed the per-frame VIDEO clip step (image-to-video via BytePlus/Seedance). INACTIVE-ready:
-     *  the model id is volatile so verify it + set a BytePlus key before generating clips. Public
-     *  so a data migration can re-seed JUST this step. */
+    /** Seed the per-frame VIDEO clip step (image-to-video via Kling native). The default runs
+     *  1080p — Kling maps it to `pro` mode, which is what accepts the image_tail END frame the
+     *  shot connection relies on (std would 400 every tail). Public so a data migration can
+     *  re-seed JUST this step. */
     public function seedClipStep(): void
     {
         $this->clearModelFlags(AiOperation::KEY_STORYBOARD_CLIP);
@@ -272,21 +293,23 @@ class StoryboardPipelineSeeder extends Seeder
             ['operation_key' => AiOperation::KEY_STORYBOARD_CLIP],
             [
                 'label' => 'Storyboard · Video Clip',
-                'default_model' => 'dreamina-seedance-2-0-260128',
+                'default_model' => self::CLIP_MODEL,
                 'fallback_model' => null,
                 'image_quality' => null,
                 'aspect_ratio' => null,
                 // No fixed duration: each clip runs ITS frame's locked shot length, clamped
                 // into these admin-editable bounds (StoryboardClipGenerator::clipSeconds).
-                'params' => ['resolution' => '720p', 'ratio' => 'adaptive', 'min_clip_seconds' => 3, 'max_clip_seconds' => 12],
+                // 1080p → Kling `pro` mode: image_tail (the shot-connection END frame) needs it.
+                'params' => ['resolution' => '1080p', 'ratio' => 'adaptive', 'min_clip_seconds' => 3, 'max_clip_seconds' => 12],
                 'input_schema' => null,
                 'retention_days' => null,
-                'estimated_cost_micro_usd' => 200_000,
+                'estimated_cost_micro_usd' => self::CLIP_MODEL_HINT,
                 'credit_multiplier' => null,
             ],
         );
 
-        $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, 'dreamina-seedance-2-0-260128', 'Seedance 2.0 (BytePlus)', isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_BYTEPLUS);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, self::CLIP_MODEL, self::CLIP_MODEL_LABEL, isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: self::CLIP_MODEL_HINT, provider: AiModel::PROVIDER_KLING);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, 'dreamina-seedance-2-0-260128', 'Seedance 2.0 (BytePlus)', unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_BYTEPLUS);
         // A NON-default AtlasCloud option so an admin can switch the clip step to AtlasCloud from the
         // pipeline settings; BytePlus Seedance stays the default. The model id is volatile — verify it.
         $this->seedModel(AiOperation::KEY_STORYBOARD_CLIP, 'bytedance/seedance-2.0/reference-to-video', 'Seedance 2.0 (AtlasCloud)', unit: AiModel::UNIT_PER_IMAGE, costHint: 200_000, provider: AiModel::PROVIDER_ATLASCLOUD);
@@ -343,33 +366,37 @@ class StoryboardPipelineSeeder extends Seeder
             [
                 'label' => 'Storyboard · Frame Image',
                 'default_model' => self::IMAGE_MODEL,
-                'fallback_model' => null,
+                'fallback_model' => self::IMAGE_FALLBACK_MODEL,
                 'image_quality' => self::IMAGE_QUALITY,
                 'aspect_ratio' => self::IMAGE_ASPECT,
-                // first_frame_model: the anchor-less LOOK-SETTING generation (usually frame 1)
-                // upgrades to this premium model; every chained frame runs the edit-capable
-                // default. Low temperature — continuity wants low sampler variance.
-                'params' => ['temperature' => 0.3, 'top_p' => 0.9, 'first_frame_model' => self::IMAGE_FIRST_MODEL],
+                // image_reference rides only when a reference image is attached (the caller
+                // guards it). temperature/top_p reach only sampler-aware providers (OpenRouter)
+                // if the admin ever switches back — Kling ignores nothing it isn't sent.
+                'params' => ['temperature' => 0.3, 'top_p' => 0.9, 'image_reference' => self::IMAGE_REFERENCE_MODE],
                 'input_schema' => null,
                 'retention_days' => null,
-                'estimated_cost_micro_usd' => 45_000,
+                'estimated_cost_micro_usd' => self::IMAGE_MODEL_HINT,
                 'credit_multiplier' => null,
             ],
         );
 
         $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL, self::IMAGE_MODEL_LABEL, isDefault: true, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_MODEL_HINT, provider: self::IMAGE_PROVIDER);
-        // The first-frame premium model + the cheap/legacy options stay catalogued (the admin
-        // switches in settings; first_frame_model resolves through this catalog).
-        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_FIRST_MODEL, self::IMAGE_FIRST_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_ALT_HINT);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_FALLBACK_MODEL, self::IMAGE_FALLBACK_LABEL, isFallback: true, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_MODEL_HINT, provider: self::IMAGE_PROVIDER);
+        // The premium/legacy options stay catalogued (the admin switches in settings; the
+        // first_frame_model param mechanism also resolves through this catalog).
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_GEMINI_PRO, self::IMAGE_MODEL_GEMINI_PRO_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_ALT_HINT);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_NB, self::IMAGE_MODEL_NB_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_MODEL_NB_HINT, provider: AiModel::PROVIDER_FAL);
         $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_GEMINI, 'Gemini 2.5 Flash Image', unit: AiModel::UNIT_PER_IMAGE, costHint: 40_000);
-        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_KREA, self::IMAGE_MODEL_KREA_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_MODEL_KREA_HINT, provider: self::IMAGE_PROVIDER);
+        $this->seedModel(AiOperation::KEY_STORYBOARD_FRAME_IMAGE, self::IMAGE_MODEL_KREA, self::IMAGE_MODEL_KREA_LABEL, unit: AiModel::UNIT_PER_IMAGE, costHint: self::IMAGE_MODEL_KREA_HINT, provider: AiModel::PROVIDER_FAL);
 
         // This system prompt IS applied at generation time (prepended to the frame's own
         // image_prompt) — it must stay placeholder-free: it is substituted with no vars, so any
-        // {{token}} would reach the image model literally.
+        // {{token}} would reach the image model literally. ONE image is attached at most
+        // (Kling's single-reference contract): the current version (edit), the previous shot
+        // (continuity), or a @tag identity reference — the lead sentence names which.
         $this->seedPrompt(
             AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
-            'Create ONE cinematic still frame of a film. Follow the prompt EXACTLY: the characters\' faces, hair, wardrobe and colors, the location, the camera, lens, lighting, composition and the stated art style. When the previous shot of the film is attached, it is the CONTINUITY ANCHOR: keep the same people, wardrobe, palette, lighting and art style — only the staging changes. Attached reference images are ground truth for IDENTITY only — match each person\'s face, age, hair and body from them, but dress them EXACTLY as the prompt says and NEVER copy the reference\'s background, pose, lighting or camera angle. When an existing version of this frame is attached, treat it as the shot to EDIT: preserve its composition, characters and style and change only what the prompt asks. Deliver a clean full-bleed frame: no borders, watermarks, signatures or UI, and no text unless the prompt explicitly specifies on-screen text.',
+            'Create ONE cinematic still frame of a film. Follow the prompt EXACTLY: the characters\' faces, hair, wardrobe and colors, the location, the camera, lens, lighting, composition and the stated art style. When the previous shot of the film is attached, it is the CONTINUITY ANCHOR: keep the same people, wardrobe, palette, lighting and art style — only the staging changes. When a @tag identity reference is attached, it is ground truth for IDENTITY only — match the person\'s face, age, hair and body from it, but dress them EXACTLY as the prompt says and NEVER copy the reference\'s background, pose, lighting or camera angle. When the current version of this frame is attached, treat it as the shot to EDIT: preserve its composition, characters and style and change only what the prompt asks. Deliver a clean full-bleed frame: no borders, watermarks, signatures or UI, and no text unless the prompt explicitly specifies on-screen text.',
             '{{image_prompt}}',
         );
     }

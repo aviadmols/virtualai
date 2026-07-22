@@ -89,9 +89,9 @@ class StoryboardFoundationTest extends TestCase
             $this->assertNotEmpty($config->model, "step {$stepKey} has a default model");
             $this->assertNotNull($config->userPrompt, "step {$stepKey} has a user prompt");
 
-            // Planning is OpenRouter; the frame image runs on fal.ai (Krea 2 Turbo).
+            // Planning is OpenRouter; the frame image runs on Kling's native API.
             $expected = $stepKey === AiOperation::KEY_STORYBOARD_FRAME_IMAGE
-                ? ImageGenerationProvider::PROVIDER_FAL
+                ? ImageGenerationProvider::PROVIDER_KLING
                 : ImageGenerationProvider::PROVIDER_OPENROUTER;
             $this->assertSame($expected, $config->provider, "step {$stepKey} provider");
         }
@@ -117,22 +117,26 @@ class StoryboardFoundationTest extends TestCase
         $this->assertArrayHasKey('description', $analysis->inputSchema['properties']);
         $this->assertArrayHasKey('subject_type', $analysis->inputSchema['properties']);
 
-        // The anchor-less LOOK-SETTING generation upgrades to the premium first-frame model —
-        // configured on the operation (param) and catalogued with its provider, never hardcoded.
+        // The frame engine is Kling-native: the chained single-reference default with a
+        // SAME-provider fallback that engages on a refusal (the Gemini pain), and the
+        // reference-tuning knob in the params — all DB config, never hardcoded.
         $image = $resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
-        $this->assertSame('google/gemini-3-pro-image', $image->params['first_frame_model'] ?? null);
+        $this->assertSame('subject', $image->params['image_reference'] ?? null);
+        $this->assertSame('kling-v2-1', $image->fallbackModel);
+        $this->assertSame(ImageGenerationProvider::PROVIDER_KLING, $image->fallbackProvider);
         $this->assertDatabaseHas('ai_models', [
             'operation_key' => AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
-            'model_id' => 'google/gemini-3-pro-image',
-            'provider' => 'openrouter',
+            'model_id' => 'kling-v3',
+            'provider' => 'kling',
+            'is_default' => true,
             'is_active' => true,
         ]);
-        // The chained default is the EDIT-capable model (it SEES the previous frame + refs).
+        // The premium/edit alternatives stay catalogued for the admin (and the
+        // first_frame_model param mechanism, which remains available).
         $this->assertDatabaseHas('ai_models', [
             'operation_key' => AiOperation::KEY_STORYBOARD_FRAME_IMAGE,
             'model_id' => 'fal-ai/nano-banana/edit',
             'provider' => 'fal',
-            'is_default' => true,
             'is_active' => true,
         ]);
     }
@@ -191,7 +195,7 @@ class StoryboardFoundationTest extends TestCase
         $image = $resolver->for(AiOperation::KEY_STORYBOARD_FRAME_IMAGE);
         $this->assertNull($image->inputSchema);
         $this->assertSame('high', $image->imageQuality);
-        $this->assertSame('fal-ai/nano-banana/edit', $image->model);
+        $this->assertSame('kling-v3', $image->model);
     }
 
     public function test_storyboard_models_are_global_and_pinned_on_the_allow_list(): void

@@ -3,6 +3,9 @@
 namespace App\Domain\Storyboard;
 
 use App\Domain\Ai\AiOperationResolver;
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
+use App\Domain\Ai\KlingVideoClient;
+use App\Domain\Ai\OpenRouterException;
 use App\Domain\Ai\VideoProviderRouter;
 use App\Domain\Media\MediaStorage;
 use App\Models\AiModel;
@@ -14,9 +17,14 @@ use Throwable;
  * StoryboardClipGenerator — animates a frame's selected image into a short video clip.
  *
  * Uses the storyboard_clip AiOperation (admin-configured model + params + motion prompt) and submits
- * an image-to-video task via the provider the operation resolves to (BytePlus/Seedance or AtlasCloud)
- * — VideoProviderRouter picks the client (the frame image = the input reference). Async: this only
- * SUBMITS + records the task id + the provider; PollStoryboardClipJob completes it. NOT a money path.
+ * an image-to-video task via the provider the operation resolves to (Kling / BytePlus / AtlasCloud /
+ * fal) — VideoProviderRouter picks the client (the frame image = the input reference).
+ *
+ * SHOT CONNECTION (Kling): the NEXT frame's image rides as the clip's END frame (image_tail),
+ * so clip N lands exactly where clip N+1 begins and consecutive shots CONNECT. When a model/mode
+ * rejects the tail (Kling 400s vary by line), the submit retries ONCE without it — a running clip
+ * beats a perfect one that never renders. Async: this only SUBMITS + records the task id;
+ * PollStoryboardClipJob completes it. NOT a money path.
  */
 final class StoryboardClipGenerator
 {
@@ -34,6 +42,11 @@ final class StoryboardClipGenerator
     private const DEFAULT_MIN_CLIP_SECONDS = 3;
 
     private const DEFAULT_MAX_CLIP_SECONDS = 12;
+
+    // video_meta keys recording the tail fallback (visible in the builder's process log).
+    private const META_TAIL_DROPPED = 'tail_dropped';
+
+    private const META_TAIL_ERROR = 'tail_error';
 
     public function __construct(
         private readonly AiOperationResolver $resolver,
@@ -76,6 +89,15 @@ final class StoryboardClipGenerator
             'duration_seconds' => $this->clipSeconds($frame, $config->params),
         ]);
 
+        // SHOT CONNECTION: on Kling, the NEXT shot's opening frame is this clip's END frame.
+        $tail = $config->provider === ImageGenerationProvider::PROVIDER_KLING
+            ? $this->nextFrameUrl($frame)
+            : null;
+
+        if ($tail !== null) {
+            $params[KlingVideoClient::PARAM_IMAGE_TAIL] = $tail;
+        }
+
         $frame->update([
             'video_status' => StoryboardFrame::VIDEO_GENERATING,
             'video_poll_attempts' => 0,
@@ -85,7 +107,7 @@ final class StoryboardClipGenerator
         ]);
 
         try {
-            $taskId = $video->submitTask($config->model, $prompt, [$firstFrame], $params, $baseUrl);
+            $taskId = $this->submitWithTailFallback($video, $config->model, $prompt, $firstFrame, $params, $baseUrl, $frame, $tail !== null);
         } catch (Throwable $e) {
             $frame->update([
                 'video_status' => StoryboardFrame::VIDEO_FAILED,
@@ -98,6 +120,59 @@ final class StoryboardClipGenerator
         $frame->update(['video_task_id' => $taskId]);
 
         return true;
+    }
+
+    /**
+     * Submit, retrying ONCE without the end frame on a BAD REQUEST: which Kling lines/modes
+     * accept image_tail is not a published contract, and a clip without the landing constraint
+     * beats no clip at all. A 400 creates no upstream task, so the retry cannot double-render
+     * (and storyboard never charges). Any other failure propagates to the caller's handler.
+     *
+     * @param  array<string,mixed>  $params
+     */
+    private function submitWithTailFallback(
+        object $video,
+        string $model,
+        string $prompt,
+        string $firstFrame,
+        array $params,
+        ?string $baseUrl,
+        StoryboardFrame $frame,
+        bool $tailSent,
+    ): string {
+        try {
+            return $video->submitTask($model, $prompt, [$firstFrame], $params, $baseUrl);
+        } catch (OpenRouterException $e) {
+            if (! $tailSent || $e->errorCode !== OpenRouterException::CODE_BAD_REQUEST) {
+                throw $e;
+            }
+
+            $frame->update([
+                'video_meta' => array_merge($frame->video_meta ?? [], [
+                    self::META_TAIL_DROPPED => true,
+                    self::META_TAIL_ERROR => $e->getMessage(),
+                ]),
+            ]);
+
+            unset($params[KlingVideoClient::PARAM_IMAGE_TAIL]);
+
+            return $video->submitTask($model, $prompt, [$firstFrame], $params, $baseUrl);
+        }
+    }
+
+    /** The IMMEDIATE next frame's signed image url (the shot this clip must land on), or null. */
+    private function nextFrameUrl(StoryboardFrame $frame): ?string
+    {
+        $next = $frame->project->frames()
+            ->where('frame_number', (int) $frame->frame_number + 1)
+            ->whereNotNull('image_path')
+            ->first();
+
+        if ($next === null || ! $this->media->exists($next->image_path)) {
+            return null;
+        }
+
+        return $this->media->signedUrl($next->image_path);
     }
 
     /**

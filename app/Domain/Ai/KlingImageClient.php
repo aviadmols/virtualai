@@ -48,6 +48,10 @@ final class KlingImageClient implements ImageGenerationProvider
 
     public const KEY_IMAGE_URLS = 'image_urls';
 
+    // Stamped onto the returned envelope by callWithFallback: the model that ACTUALLY
+    // rendered (Kling's own envelope never echoes it). Server-side only.
+    private const KEY_MODEL_USED = '_model_used';
+
     // Kling's own request fields.
     private const FIELD_MODEL_NAME = 'model_name';
 
@@ -100,7 +104,12 @@ final class KlingImageClient implements ImageGenerationProvider
 
             while (true) {
                 try {
-                    return $this->generate($buildBody($model), $operationKey);
+                    $response = $this->generate($buildBody($model), $operationKey);
+                    // Kling's envelope does not echo the model — stamp which attempt actually
+                    // rendered, so a fallback render is recorded as the fallback.
+                    $response[self::KEY_MODEL_USED] = $model;
+
+                    return $response;
                 } catch (OpenRouterException $e) {
                     $last = $e;
 
@@ -312,7 +321,11 @@ final class KlingImageClient implements ImageGenerationProvider
 
     public function extractModelUsed(array $response, string $requested): string
     {
-        return $requested; // Kling's task envelope does not echo the model name.
+        // Kling's task envelope does not echo the model name — callWithFallback stamps the
+        // attempt that actually rendered (so a fallback render is recorded truthfully).
+        $stamped = $response[self::KEY_MODEL_USED] ?? null;
+
+        return is_string($stamped) && $stamped !== '' ? $stamped : $requested;
     }
 
     public function extractGenerationId(array $response): ?string

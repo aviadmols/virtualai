@@ -83,13 +83,22 @@ final class StoryboardVideoComposer
 
     /**
      * Join the per-frame AI motion clips (video_path), in frame order, into ONE real animated MP4.
+     * Each clip is TRIMMED to its frame's locked shot length — video models render fixed enum
+     * lengths (Kling: 5s/10s), so an untrimmed 5s render of a 3s shot would stretch the film.
      * Skips frames whose clip failed / vanished. @throws RuntimeException when no clips or ffmpeg fails.
      */
     public function concatClips(StoryboardProject $project, string $resolution): string
     {
-        $paths = $project->frames()->whereNotNull('video_path')->pluck('video_path')->all();
+        $clips = $project->frames()
+            ->whereNotNull('video_path')
+            ->get(['video_path', 'start_second', 'end_second'])
+            ->map(static fn ($f): array => [
+                'path' => (string) $f->video_path,
+                'seconds' => max(1, (int) $f->end_second - (int) $f->start_second),
+            ])
+            ->all();
 
-        if ($paths === []) {
+        if ($clips === []) {
             throw new RuntimeException('No generated video clips to combine.');
         }
 
@@ -99,7 +108,7 @@ final class StoryboardVideoComposer
         File::ensureDirectoryExists($dir);
 
         try {
-            $inputs = $this->downloadClips($paths, $dir);
+            $inputs = $this->downloadClipTuples($clips, $dir);
             $output = $dir.'/final.mp4';
 
             $result = Process::timeout(self::PROCESS_TIMEOUT)
@@ -179,21 +188,27 @@ final class StoryboardVideoComposer
         ]);
     }
 
-    /** Write each source clip to the temp dir; returns the ordered local file paths. */
-    private function downloadClips(array $paths, string $dir): array
+    /**
+     * Write each source clip to the temp dir; returns ordered [file, seconds] tuples so the
+     * skip-missing logic and the per-clip trim durations stay in lockstep.
+     *
+     * @param  array<int,array{path:string,seconds:int}>  $clips
+     * @return array<int,array{file:string,seconds:int}>
+     */
+    private function downloadClipTuples(array $clips, string $dir): array
     {
         $files = [];
 
-        foreach ($paths as $i => $path) {
-            $bytes = $this->media->get($path);
+        foreach ($clips as $i => $clip) {
+            $bytes = $this->media->get($clip['path']);
             if ($bytes === null) {
                 continue; // a clip that vanished from the disk is skipped, not fatal
             }
 
-            $ext = pathinfo((string) $path, PATHINFO_EXTENSION) ?: self::DEFAULT_VIDEO_EXT;
+            $ext = pathinfo($clip['path'], PATHINFO_EXTENSION) ?: self::DEFAULT_VIDEO_EXT;
             $file = $dir.'/clip_'.str_pad((string) $i, 4, '0', STR_PAD_LEFT).'.'.$ext;
             File::put($file, $bytes);
-            $files[] = $file;
+            $files[] = ['file' => $file, 'seconds' => $clip['seconds']];
         }
 
         if ($files === []) {
@@ -204,26 +219,29 @@ final class StoryboardVideoComposer
     }
 
     /**
-     * The ffmpeg argv to concat N video inputs: each scaled + padded to the target box + normalised
-     * fps, then joined into a single H.264 stream (video only — clips carry no audio).
+     * The ffmpeg argv to concat N video inputs: each scaled + padded to the target box,
+     * normalised to CFR, TRIMMED to its shot's locked seconds (PTS reset so concat starts
+     * each segment at zero), then joined into a single H.264 stream (video only — clips
+     * carry no audio). A trim longer than the clip is a harmless no-op.
      *
-     * @param  array<int,string>  $inputs
+     * @param  array<int,array{file:string,seconds:int}>  $inputs
      * @return array<int,string>
      */
     private function concatCommand(array $inputs, int $width, int $height, string $output): array
     {
         $args = [$this->binary(), '-y'];
 
-        foreach ($inputs as $file) {
+        foreach ($inputs as $input) {
             $args[] = '-i';
-            $args[] = $file;
+            $args[] = $input['file'];
         }
 
         $filter = '';
         $count = count($inputs);
-        for ($i = 0; $i < $count; $i++) {
+        foreach (array_values($inputs) as $i => $input) {
             $filter .= "[{$i}:v]scale={$width}:{$height}:force_original_aspect_ratio=decrease,"
-                ."pad={$width}:{$height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=".self::FPS."[v{$i}];";
+                ."pad={$width}:{$height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=".self::FPS
+                .",trim=duration={$input['seconds']},setpts=PTS-STARTPTS[v{$i}];";
         }
         for ($i = 0; $i < $count; $i++) {
             $filter .= "[v{$i}]";

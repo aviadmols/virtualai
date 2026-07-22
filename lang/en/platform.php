@@ -199,7 +199,7 @@ return [
         'combine_mode_reference' => 'AI video from the story (prompt + references)',
         'combine_mode_animate' => 'Real video — animate every frame (AI)',
         'combine_mode_slideshow' => 'Quick slideshow (still images)',
-        'combine_mode_help' => 'AI video generates ONE film from your prompt + the reference images (AtlasCloud). Animate turns each frame into a motion clip and stitches them. Slideshow is an instant, free preview of the stills.',
+        'combine_mode_help' => 'Animate (recommended) turns each shot into a motion clip that lands on the next shot\'s opening frame, and cuts them to the locked timing — the most consistent, connected film. AI video renders ONE short film from the prompt + references (10s-class models only). Slideshow is an instant, free preview of the stills.',
         'combine_prompt' => 'Video prompt (optional)',
         'combine_prompt_help' => 'Leave empty and a Director AI composes the film prompt from your storyboard — the frame images, timed shots, characters, plot & dialogue. Or write your own (@image1… references your images).',
         'combine_prompt_placeholder' => 'Auto — follows your storyboard (characters, plot & structure)',

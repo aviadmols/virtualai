@@ -128,7 +128,10 @@ class StoryboardBuilder extends Page
                                 CombineStoryboardVideoJob::MODE_ANIMATE => __('platform.storyboard.combine_mode_animate'),
                                 CombineStoryboardVideoJob::MODE_SLIDESHOW => __('platform.storyboard.combine_mode_slideshow'),
                             ])
-                            ->default(CombineStoryboardVideoJob::MODE_REFERENCE)
+                            // ANIMATE (per-shot clips + concat) is the recommended default:
+                            // it is the only mode that honors the locked shot timing, and the
+                            // Kling image_tail chain makes consecutive clips CONNECT.
+                            ->default(CombineStoryboardVideoJob::MODE_ANIMATE)
                             ->selectablePlaceholder(false)
                             ->live()
                             ->helperText(__('platform.storyboard.combine_mode_help'))

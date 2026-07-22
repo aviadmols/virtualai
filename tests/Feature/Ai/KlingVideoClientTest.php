@@ -108,6 +108,59 @@ class KlingVideoClientTest extends TestCase
         });
     }
 
+    public function test_an_end_frame_rides_as_image_tail_on_image_to_video_only(): void
+    {
+        Http::fake([
+            self::SUBMIT_I2V => Http::response($this->task('submitted'), 200),
+            self::SUBMIT_T2V => Http::response($this->task('submitted'), 200),
+            self::FRAME_URL => Http::response('FRAMEBYTES', 200, ['Content-Type' => 'image/png']),
+            'https://media.test/next.png' => Http::response('NEXTBYTES', 200, ['Content-Type' => 'image/png']),
+        ]);
+
+        // i2v: the END frame (the next shot's opening image) rides as image_tail — RAW base64.
+        $this->client()->submitTask(
+            self::MODEL,
+            'slow push-in',
+            [self::FRAME_URL],
+            ['duration_seconds' => 5, KlingVideoClient::PARAM_IMAGE_TAIL => 'https://media.test/next.png'],
+        );
+
+        Http::assertSent(fn ($req) => $req->url() === self::SUBMIT_I2V
+            && $req->data()['image'] === base64_encode('FRAMEBYTES')
+            && $req->data()['image_tail'] === base64_encode('NEXTBYTES'));
+
+        // t2v (no input frame): the tail param is IGNORED — image_tail is an i2v-only field.
+        $this->client()->submitTask(
+            self::MODEL,
+            'a city at dawn',
+            [],
+            [KlingVideoClient::PARAM_IMAGE_TAIL => 'https://media.test/next.png'],
+        );
+
+        Http::assertSent(fn ($req) => $req->url() === self::SUBMIT_T2V
+            && ! isset($req->data()['image_tail']));
+    }
+
+    public function test_an_unreadable_tail_is_dropped_but_the_clip_still_submits(): void
+    {
+        Http::fake([
+            self::SUBMIT_I2V => Http::response($this->task('submitted'), 200),
+            self::FRAME_URL => Http::response('FRAMEBYTES', 200, ['Content-Type' => 'image/png']),
+            'https://media.test/gone.png' => Http::response('', 404),
+        ]);
+
+        $taskId = $this->client()->submitTask(
+            self::MODEL,
+            'slow push-in',
+            [self::FRAME_URL],
+            [KlingVideoClient::PARAM_IMAGE_TAIL => 'https://media.test/gone.png'],
+        );
+
+        $this->assertSame('/v1/videos/image2video|'.self::TASK, $taskId);
+        Http::assertSent(fn ($req) => $req->url() === self::SUBMIT_I2V
+            && ! isset($req->data()['image_tail']));
+    }
+
     public function test_no_input_frame_submits_text_to_video_and_drops_an_adaptive_ratio(): void
     {
         Http::fake([self::SUBMIT_T2V => Http::response($this->task('submitted'), 200)]);
