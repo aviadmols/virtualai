@@ -8,6 +8,7 @@ use App\Domain\Banners\BannerRules;
 use App\Domain\Banners\BannerService;
 use App\Domain\Banners\InvalidBannerException;
 use App\Domain\Banners\StartBannerGeneration;
+use App\Domain\Media\MediaStorage;
 use App\Filament\Merchant\Pages\BannerPlacements;
 use App\Filament\Merchant\Resources\BannerResource;
 use App\Models\Banner;
@@ -16,9 +17,9 @@ use App\Models\StylePreset;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\View;
+use Filament\Forms\Components\ViewField;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
@@ -48,6 +49,12 @@ class EditBanner extends EditRecord
 
     // How many products the @-mention picker lists (same bound as the try-on prompt editor).
     private const PRODUCT_LIMIT = 50;
+
+    // The shared visual style picker (sample cards) rendered inside the Generate modal.
+    private const STYLE_PICKER_VIEW = 'filament.merchant.components.style-picker';
+
+    // The Generate modal width — roomy enough for the style cards + the brief side by side.
+    private const GENERATE_MODAL_WIDTH = '3xl';
 
     public function getTitle(): string
     {
@@ -158,22 +165,34 @@ class EditBanner extends EditRecord
         return Action::make('generate')
             ->label(__('banners.generate.action'))
             ->icon('heroicon-o-sparkles')
+            ->modalIcon('heroicon-o-sparkles')
             ->modalHeading(__('banners.generate.heading'))
+            ->modalDescription(__('banners.generate.sub'))
+            ->modalWidth(self::GENERATE_MODAL_WIDTH)
             ->modalSubmitActionLabel(__('banners.generate.submit'))
             ->form([
-                // Optional global STYLE — swaps the banner prompt for the chosen look. Shown only
-                // when approved banner styles exist; the brief still guides the content.
-                Select::make('style_id')
+                // Optional global STYLE — the approved banner presets as OPEN visual sample cards
+                // (not a dropdown), plus a leading "free style" card since a style is optional.
+                // Picking a card only swaps the prompt; the brief still guides the content.
+                ViewField::make('style_id')
                     ->label(__('banners.generate.style'))
                     ->helperText(__('banners.generate.style_help'))
-                    ->options($this->styleOptions())
-                    ->native(false)
-                    ->visible(fn (): bool => $this->styleOptions() !== []),
+                    ->view(self::STYLE_PICKER_VIEW)
+                    ->viewData(fn (): array => [
+                        'styles' => $this->styleCards(),
+                        'allowNone' => true,
+                        'noneLabel' => __('banners.generate.style_none'),
+                        'noneHelp' => __('banners.generate.style_none_help'),
+                    ])
+                    ->default('')
+                    ->visible(fn (): bool => $this->styleOptions() !== [])
+                    ->live(),
                 Textarea::make('brief')
                     ->label(__('banners.generate.brief'))
                     ->helperText(__('banners.generate.brief_help'))
+                    ->placeholder(__('banners.generate.brief_placeholder'))
                     ->required()
-                    ->rows(4)
+                    ->rows(5)
                     // The @-mention picker (below) targets this field to insert @product_{id} tags.
                     ->extraInputAttributes(['data-banner-brief' => 'true']),
                 // Tag a product with @ so the banner is generated FROM it (its image + facts). The
@@ -202,7 +221,8 @@ class EditBanner extends EditRecord
                 clientRequestId: (string) Str::uuid(),
                 referenceBytes: $referenceBytes,
                 referenceMime: $referenceMime,
-                styleId: ($data['style_id'] ?? null) !== null ? (int) $data['style_id'] : null,
+                // '' is the "free style" card (no preset) — only a numeric id selects a style.
+                styleId: is_numeric($data['style_id'] ?? null) ? (int) $data['style_id'] : null,
             ));
 
             Notification::make()->success()->title(__('banners.generate.queued'))->send();
@@ -218,12 +238,36 @@ class EditBanner extends EditRecord
         }
     }
 
-    /** Approved banner styles (id => name) for the generate form. @return array<int,string> */
+    /** Approved banner styles (id => name) — the cheap existence check for the picker. @return array<int,string> */
     private function styleOptions(): array
     {
         return StylePreset::query()
             ->approvedForOperations(StylePreset::SURFACE_OPERATIONS[StylePreset::SURFACE_BANNER])
             ->pluck('name', 'id')->all();
+    }
+
+    /**
+     * The approved banner styles as visual sample cards: id, name, and short-lived signed URLs
+     * for the generated SAMPLE (after) + the uploaded REFERENCE (before) — the Image-Studio
+     * style-picker idiom. No operation sub-label: every banner style shares one operation.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function styleCards(): array
+    {
+        $media = app(MediaStorage::class);
+
+        return StylePreset::query()
+            ->approvedForOperations(StylePreset::SURFACE_OPERATIONS[StylePreset::SURFACE_BANNER])
+            ->get(['id', 'name', 'sample_image_path', 'reference_image_path'])
+            ->map(fn (StylePreset $p): array => [
+                'id' => (int) $p->id,
+                'name' => (string) $p->name,
+                'operation' => null,
+                'after' => $media->signedUrl($p->sample_image_path),
+                'before' => $media->signedUrl($p->reference_image_path),
+            ])
+            ->all();
     }
 
     /**

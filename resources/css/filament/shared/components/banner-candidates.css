@@ -86,3 +86,110 @@
     justify-content: space-between;
     gap: var(--to-space-2);
 }
+
+/* --- The chosen candidate: an accent ring on the frame + an on-image flag. --- */
+.to-candidate--selected .to-candidate__frame {
+    border-color: var(--toa-accent);
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-accent), var(--to-shadow-card);
+}
+
+.to-candidate__flag {
+    position: absolute;
+    inset-block-start: var(--to-space-2);
+    inset-inline-start: var(--to-space-2);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-1);
+    padding: var(--to-space-1) var(--to-space-2);
+    border-radius: var(--to-r-pill);
+    background: var(--toa-accent);
+    color: var(--toa-accent-on);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-candidate__flag svg {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+
+/* --- Whole-image select: an invisible full-frame button whose label surfaces on hover/focus
+       over a soft scrim. Touch/keyboard still have the explicit foot button. --- */
+.to-candidate__pick {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--to-t-fast);
+}
+
+.to-candidate__pick:hover,
+.to-candidate__pick:focus-visible {
+    background: var(--to-scrim);
+}
+
+.to-candidate__pick-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-1);
+    padding: var(--to-space-1) var(--to-space-3);
+    border-radius: var(--to-r-pill);
+    background: var(--toa-surface);
+    color: var(--to-ink);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    box-shadow: var(--to-shadow-hover);
+    opacity: 0;
+    transition: opacity var(--to-t-fast);
+}
+
+.to-candidate__pick-label svg {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+
+.to-candidate__pick:hover .to-candidate__pick-label,
+.to-candidate__pick:focus-visible .to-candidate__pick-label {
+    opacity: 1;
+}
+
+/* --- Empty state: a centered invitation, not a bare sentence. --- */
+.to-candidate-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--to-space-2);
+    padding: var(--to-space-8) var(--to-space-4);
+    text-align: center;
+    border: var(--to-bw-input) dashed var(--toa-border-strong);
+    border-radius: var(--to-r-card);
+    background: var(--toa-surface-alt);
+}
+
+.to-candidate-empty__icon {
+    display: inline-flex;
+    color: var(--to-ink-subtle);
+}
+
+.to-candidate-empty__icon svg {
+    inline-size: var(--to-space-8);
+    block-size: var(--to-space-8);
+}
+
+.to-candidate-empty__title {
+    margin: 0;
+    color: var(--to-ink);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-medium);
+}
+
+.to-candidate-empty__sub {
+    margin: 0;
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+}

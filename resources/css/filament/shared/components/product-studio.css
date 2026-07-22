@@ -611,6 +611,12 @@
     block-size: var(--to-space-6);
 }
 
+/* The "no preset / free style" card — a dashed empty frame instead of imagery. */
+.to-stylepick__placeholder--none {
+    border: var(--to-bw-input) dashed var(--toa-border-strong);
+    border-radius: var(--to-r-card);
+}
+
 /* The selected check — hidden until the radio is checked. */
 .to-stylepick__check {
     position: absolute;

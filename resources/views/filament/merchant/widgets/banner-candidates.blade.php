@@ -11,7 +11,13 @@
         icon="heroicon-o-sparkles"
     >
         @if ($candidates->isEmpty())
-            <p class="to-candidate__state-note">{{ __('banners.candidates.none') }}</p>
+            <div class="to-candidate-empty">
+                <span class="to-candidate-empty__icon">
+                    <x-filament::icon icon="heroicon-o-photo" />
+                </span>
+                <p class="to-candidate-empty__title">{{ __('banners.candidates.none_title') }}</p>
+                <p class="to-candidate-empty__sub">{{ __('banners.candidates.none') }}</p>
+            </div>
         @else
             {{-- Poll only while a candidate is still generating; the attribute drops when idle → polling stops. --}}
             <div
@@ -23,12 +29,38 @@
                         $thumb = $this->thumbUrl($asset);
                         $isFailed = in_array($asset->status, [BannerAsset::STATUS_FAILED, BannerAsset::STATUS_CANCELLED], true);
                         $isPending = in_array($asset->status, [BannerAsset::STATUS_PENDING, BannerAsset::STATUS_PROCESSING], true);
+                        $isReady = $asset->status === BannerAsset::STATUS_SUCCEEDED && $thumb;
+                        $isSelected = $this->isSelected($asset);
                     @endphp
 
-                    <div class="to-candidate" wire:key="banner-candidate-{{ $asset->id }}">
+                    <div
+                        class="to-candidate {{ $isSelected ? 'to-candidate--selected' : '' }}"
+                        wire:key="banner-candidate-{{ $asset->id }}"
+                    >
                         <div class="to-candidate__frame">
-                            @if ($asset->status === BannerAsset::STATUS_SUCCEEDED && $thumb)
+                            @if ($isReady)
                                 <img class="to-candidate__img" src="{{ $thumb }}" alt="" loading="lazy">
+
+                                @if ($isSelected)
+                                    {{-- The chosen artwork — flagged right on the image. --}}
+                                    <span class="to-candidate__flag">
+                                        <x-filament::icon icon="heroicon-m-check-circle" />
+                                        {{ __('banners.candidates.in_use') }}
+                                    </span>
+                                @else
+                                    {{-- The whole image is the select target; the label surfaces on hover/focus. --}}
+                                    <button
+                                        type="button"
+                                        class="to-candidate__pick"
+                                        wire:click="useAsset({{ $asset->id }})"
+                                        wire:loading.attr="disabled"
+                                    >
+                                        <span class="to-candidate__pick-label">
+                                            <x-filament::icon icon="heroicon-m-check" />
+                                            {{ __('banners.candidates.select') }}
+                                        </span>
+                                    </button>
+                                @endif
                             @elseif ($isPending)
                                 <div class="to-candidate__state">
                                     <x-filament::loading-indicator />
@@ -55,21 +87,15 @@
                                 {{ __('banners.candidates.status.'.$asset->status) }}
                             </x-filament::badge>
 
-                            @if ($asset->status === BannerAsset::STATUS_SUCCEEDED)
-                                @if ($this->isSelected($asset))
-                                    <x-filament::badge color="success" icon="heroicon-m-check">
-                                        {{ __('banners.candidates.in_use') }}
-                                    </x-filament::badge>
-                                @else
-                                    <x-filament::button
-                                        size="xs"
-                                        icon="heroicon-m-check"
-                                        wire:click="useAsset({{ $asset->id }})"
-                                        wire:loading.attr="disabled"
-                                    >
-                                        {{ __('banners.candidates.select') }}
-                                    </x-filament::button>
-                                @endif
+                            @if ($isReady && ! $isSelected)
+                                <x-filament::button
+                                    size="xs"
+                                    icon="heroicon-m-check"
+                                    wire:click="useAsset({{ $asset->id }})"
+                                    wire:loading.attr="disabled"
+                                >
+                                    {{ __('banners.candidates.select') }}
+                                </x-filament::button>
                             @elseif ($isFailed)
                                 <x-filament::button
                                     size="xs"

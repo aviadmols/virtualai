@@ -19,6 +19,7 @@ use Filament\Forms\Components\Livewire;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\View;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\ImageColumn;
@@ -64,6 +65,9 @@ class BannerResource extends Resource
 
     private const ICON_CTR = 'heroicon-m-chart-bar';
 
+    // The editor's guided-flow strip (generate → choose → place → activate).
+    private const STEPS_VIEW = 'filament.merchant.components.banner-steps';
+
     // i18n keys — never a literal in the resource.
     private const LABEL_SINGULAR = 'banners.singular';
 
@@ -107,6 +111,11 @@ class BannerResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
+            // Where this banner stands in its creation flow — computed from the record's state.
+            View::make(self::STEPS_VIEW)
+                ->columnSpanFull()
+                ->visibleOn('edit'),
+
             Section::make(__('banners.singular'))
                 ->columns(2)
                 ->schema([
@@ -142,6 +151,7 @@ class BannerResource extends Resource
             // in the form (NOT a dropdown). A self-polling Livewire component that owns selection
             // (BannerService::selectAsset); there is no selected_asset_id form control.
             Livewire::make(BannerCandidatesWidget::class, fn (?Banner $record): array => ['record' => $record])
+                ->columnSpanFull()
                 ->visibleOn('edit'),
 
             Section::make(__('banners.overlay.section'))

@@ -1,0 +1,96 @@
+/* ============================================================================
+ * Banner steps — the editor's guided-flow strip (generate → choose → place →
+ * activate). A card of four equal columns: a numbered dot + label + a short
+ * wrapping hint. A DONE step's dot fills accent with a check; the CURRENT step
+ * is ringed and tinted. Collapses to a two-column grid on narrow screens.
+ * Merchant-only file. Tokens → classes only; logical properties (mirrors in HE).
+ * TOKENS: --toa-surface --toa-surface-alt --toa-border --toa-accent
+ *   --toa-accent-on --toa-accent-soft --toa-radius-card --toa-shadow-card
+ *   --to-ink --to-ink-muted --to-ink-subtle --to-r-card --to-shadow-card
+ *   --to-bw-input --to-bw-input-focus --to-space-* --to-fw-medium
+ *   --to-fw-semibold --toa-type-caption-size --toa-type-body-size --to-lh-title
+ * ==========================================================================*/
+
+.to-banner-steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--to-space-4);
+    margin: 0;
+    padding: var(--to-space-5);
+    list-style: none;
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--toa-radius-card, var(--to-r-card));
+    background: var(--toa-surface);
+    box-shadow: var(--toa-shadow-card, var(--to-shadow-card));
+}
+
+.to-banner-steps__step {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--to-space-3);
+    min-inline-size: 0;
+}
+
+/* The numbered dot — upcoming: neutral; current: accent ring; done: accent fill + check. */
+.to-banner-steps__dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    inline-size: var(--to-space-8);
+    block-size: var(--to-space-8);
+    border-radius: 50%;
+    border: var(--to-bw-input) solid var(--toa-border);
+    background: var(--toa-surface-alt);
+    color: var(--to-ink-muted);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-semibold);
+}
+
+.to-banner-steps__dot svg {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+
+.to-banner-steps__step--current .to-banner-steps__dot {
+    border-color: var(--toa-accent);
+    background: var(--toa-accent-soft);
+    color: var(--toa-accent);
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-accent-soft);
+}
+
+.to-banner-steps__step--done .to-banner-steps__dot {
+    border-color: var(--toa-accent);
+    background: var(--toa-accent);
+    color: var(--toa-accent-on);
+}
+
+.to-banner-steps__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+}
+
+.to-banner-steps__label {
+    color: var(--to-ink);
+    font-size: var(--toa-type-body-size);
+    font-weight: var(--to-fw-medium);
+    line-height: var(--to-lh-title);
+}
+
+.to-banner-steps__step--current .to-banner-steps__label {
+    color: var(--toa-accent);
+}
+
+.to-banner-steps__hint {
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-caption-size);
+}
+
+/* Narrow screens: two columns. */
+@media (max-width: 48rem) {
+    .to-banner-steps {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

@@ -121,12 +121,70 @@
     text-overflow: ellipsis;
 }
 
-/* --- Banner brief @-product picker: help + chips + the live "Based on:" tag row (parsed from
- * the brief). Reuses the token chip/menu look; adds only the removable tags. --- */
+/* --- Banner brief @-product picker: a "Tag a product" toolbar + the searchable product menu +
+ * the live "Based on:" tag row (parsed from the brief). Reuses the token menu look; adds the
+ * toolbar button, the menu's search field, and the removable tags. --- */
 .to-banner-mention {
     display: flex;
     flex-direction: column;
     gap: var(--to-space-3);
+}
+
+/* The toolbar: the explicit tag button on the start side, the "type @" hint beside it. */
+.to-mention-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--to-space-3);
+}
+
+.to-mention-add {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--to-space-1);
+    padding: var(--to-space-1) var(--to-space-3);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-pill);
+    background: var(--toa-surface);
+    color: var(--toa-accent);
+    font-size: var(--toa-type-caption-size);
+    font-weight: var(--to-fw-medium);
+    cursor: pointer;
+    transition: border-color var(--to-t-fast), background var(--to-t-fast), box-shadow var(--to-t-fast);
+}
+
+.to-mention-add:hover {
+    border-color: var(--toa-accent);
+    background: var(--toa-accent-soft);
+    box-shadow: var(--to-shadow-soft);
+}
+
+.to-mention-add__icon {
+    inline-size: var(--to-space-4);
+    block-size: var(--to-space-4);
+}
+
+.to-mention-bar__hint {
+    color: var(--to-ink-subtle);
+    font-size: var(--toa-type-caption-size);
+}
+
+/* The searchable product menu (shares .to-token-menu) — the search field pins to the top. */
+.to-mention-menu__search {
+    inline-size: 100%;
+    margin-block-end: var(--to-space-1);
+    padding: var(--to-space-2);
+    border: var(--to-bw-input) solid var(--toa-border);
+    border-radius: var(--to-r-control);
+    background: var(--toa-surface-alt);
+    color: var(--to-ink);
+    font-size: var(--toa-type-caption-size);
+}
+
+.to-mention-menu__search:focus {
+    outline: none;
+    border-color: var(--toa-accent);
+    box-shadow: 0 0 0 var(--to-bw-input-focus) var(--toa-focus);
 }
 
 .to-mention-based {

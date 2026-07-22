@@ -69,12 +69,19 @@ return [
     'generate' => [
         'action' => 'Generate image',
         'heading' => 'Describe the banner',
-        'style' => 'Style (optional)',
-        'style_help' => 'Pick a curated look. Your brief still guides the content.',
+        'sub' => 'Pick a look, write what you want, and generate — every run adds a new candidate below.',
+        'style' => 'Style',
+        'style_help' => 'Pick a curated look — or Free style. Your brief still guides the content.',
+        'style_none' => 'Free style',
+        'style_none_help' => 'No preset — the brief alone shapes the look.',
         'brief' => 'Brief',
         'brief_help' => 'Describe the banner you want — theme, mood, colors, product. Each generate makes a new candidate.',
+        'brief_placeholder' => 'e.g. A bold summer-sale hero in warm sunset tones, with the product front and center',
         // The @-mention product picker on the brief.
-        'mention_help' => 'Type @ to tag a product — the banner is built from its image and details.',
+        'mention_add' => 'Tag a product',
+        'mention_help' => 'Or type @ in the brief — the banner is built from the product\'s image and details.',
+        'mention_search' => 'Search products…',
+        'mention_no_match' => 'No products match.',
         'mention_products' => 'Products',
         'mention_based_on' => 'Based on:',
         'mention_empty' => 'Import products first to tag them here.',
@@ -86,10 +93,23 @@ return [
         'failed' => 'Could not start the generation. Please try again.',
     ],
 
+    // The editor's guided-flow strip: generate → choose → place → activate.
+    'steps' => [
+        'generate' => 'Generate',
+        'generate_hint' => 'Describe it and create candidates',
+        'choose' => 'Choose image',
+        'choose_hint' => 'Pick the winning candidate',
+        'place' => 'Place it',
+        'place_hint' => 'Pick spots on your store',
+        'activate' => 'Activate',
+        'activate_hint' => 'Go live for shoppers',
+    ],
+
     'candidates' => [
         'section' => 'Generated candidates',
         'section_help' => 'Each generation costs credits. Choose one as the banner image.',
-        'none' => 'No candidates yet — click "Generate image" above.',
+        'none_title' => 'Your generated images will land here',
+        'none' => 'Click "Generate image" above to create the first candidate.',
         'select' => 'Use this image',
         'in_use' => 'In use',
         'retry' => 'Try again',
