@@ -54,6 +54,10 @@ final readonly class OperationConfig
         // caller then falls back to the operation estimate (flatRatePriceMicroUsd()).
         public ?int $modelCostHintMicroUsd = null,
         public ?int $fallbackModelCostHintMicroUsd = null,
+        // The version of the platform-global rules directive woven into the system prompt for this
+        // surface (0 = none). Output-deciding, so it is folded into the generation idempotency keys:
+        // a Super-Admin rule edit bumps this and re-generates instead of colliding as a duplicate.
+        public int $directiveVersion = 0,
     ) {}
 
     /**
@@ -132,6 +136,7 @@ final readonly class OperationConfig
             fallbackProvider: $this->fallbackProvider,
             modelCostHintMicroUsd: $this->modelCostHintMicroUsd,
             fallbackModelCostHintMicroUsd: $this->fallbackModelCostHintMicroUsd,
+            directiveVersion: $this->directiveVersion,
         );
     }
 

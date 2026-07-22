@@ -2,15 +2,17 @@
 
 namespace App\Domain\Ai;
 
+use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Domain\Ai\Preview\OperationPreview;
 use App\Domain\Ai\Preview\ResolutionStep;
 use App\Domain\Ai\Preview\ResolutionTrace;
 use App\Domain\Ai\Preview\ResolvedOperation;
-use App\Domain\Ai\Contracts\ImageGenerationProvider;
 use App\Models\AiModel;
 use App\Models\AiOperation;
+use App\Models\PlatformDirective;
 use App\Models\Prompt;
 use App\Models\Site;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -39,7 +41,9 @@ final class AiOperationResolver
 {
     // === CONSTANTS ===
     private const NO_OPERATION_MESSAGE = 'Unknown AI operation "%s": no ai_operations row. The control plane must be seeded.';
+
     private const NO_GLOBAL_PROMPT_MESSAGE = 'No global prompt for operation "%s": the global prompt is the guaranteed floor and must be seeded (scope=global).';
+
     private const NO_MODEL_MESSAGE = 'No model resolved for operation "%s": neither ai_operations.default_model nor an ai_models is_default row exists.';
 
     // Warned when a configured per-site model override is dropped because it is
@@ -51,17 +55,26 @@ final class AiOperationResolver
     // by the lowest stable id, so a leg with two competing rows always resolves
     // to the same defined row even before the unique constraint is in place.
     private const PROMPT_ORDER_COLUMN = 'version';
+
     private const PROMPT_TIEBREAK_COLUMN = 'id';
 
     // Trace kinds (for the read-only preview): which decision a ResolutionTrace
     // describes. Non-sensitive descriptors only — no secrets ever enter a trace.
     private const TRACE_KIND_MODEL = 'model';
+
     private const TRACE_KIND_PROMPT = 'prompt';
+
+    // How the Super-Admin's platform-global rules directive joins the system prompt: a labelled
+    // separator so the model reads it as authoritative always-apply constraints.
+    private const DIRECTIVE_LABEL = 'Platform rules (always apply): ';
 
     // Model-resolution trace levels (mirror resolveModel's precedence).
     private const MODEL_LEVEL_SITE_OVERRIDE = 'site_override';
+
     private const MODEL_LEVEL_ACCOUNT_OVERRIDE = 'account_override';
+
     private const MODEL_LEVEL_OPERATION_DEFAULT = 'operation_default';
+
     private const MODEL_LEVEL_CATALOG_DEFAULT = 'catalog_default';
 
     /**
@@ -128,11 +141,15 @@ final class AiOperationResolver
         $promptTrace = [];
         $prompt = $this->resolvePrompt($operationKey, $site, $productType, $promptTrace);
 
+        // Weave the Super-Admin's platform-global rules directive for this surface into the system
+        // prompt (applies across all sites); its version is folded into the idempotency keys.
+        [$systemPrompt, $directiveVersion] = $this->applyDirective($operationKey, $prompt->system_prompt);
+
         $config = new OperationConfig(
             operationKey: $operationKey,
             model: $model,
             fallbackModel: $fallback,
-            systemPrompt: $prompt->system_prompt,
+            systemPrompt: $systemPrompt,
             userPrompt: $prompt->user_prompt,
             imageQuality: $operation->image_quality,
             aspectRatio: $operation->aspect_ratio,
@@ -155,6 +172,7 @@ final class AiOperationResolver
             fallbackModelCostHintMicroUsd: $fallback !== null
                 ? $this->costHintForModel($operationKey, $fallback)
                 : null,
+            directiveVersion: $directiveVersion,
         );
 
         return new ResolvedOperation(
@@ -163,6 +181,46 @@ final class AiOperationResolver
             modelTrace: new ResolutionTrace(self::TRACE_KIND_MODEL, $modelTrace),
             promptTrace: new ResolutionTrace(self::TRACE_KIND_PROMPT, $promptTrace),
         );
+    }
+
+    /**
+     * Weave the platform-global rules directive for this operation's SURFACE into the system prompt.
+     * An active, non-empty directive is appended under a label and its version returned (folded into
+     * the idempotency keys so a rule edit re-generates); otherwise the base prompt + version 0. Only
+     * the image_studio + try_on surfaces carry a directive — every other operation is untouched.
+     *
+     * @return array{0:?string,1:int}
+     */
+    private function applyDirective(string $operationKey, ?string $systemPrompt): array
+    {
+        $surface = self::surfaceFor($operationKey);
+        $directive = $surface !== null ? PlatformDirective::activeFor($surface) : null;
+
+        if ($directive === null) {
+            return [$systemPrompt, 0];
+        }
+
+        $rules = trim((string) $directive->rules);
+        $base = trim((string) $systemPrompt);
+        $woven = $base === ''
+            ? self::DIRECTIVE_LABEL.$rules
+            : $base."\n\n".self::DIRECTIVE_LABEL.$rules;
+
+        return [$woven, (int) $directive->version];
+    }
+
+    /** Map an operation key to its Global-Rules surface, or null when the operation has none. */
+    private static function surfaceFor(string $operationKey): ?string
+    {
+        if (in_array($operationKey, AiOperation::PRODUCT_IMAGE_KEYS, true)) {
+            return PlatformDirective::SURFACE_IMAGE_STUDIO;
+        }
+
+        if ($operationKey === AiOperation::KEY_TRY_ON_GENERATION) {
+            return PlatformDirective::SURFACE_TRY_ON;
+        }
+
+        return null;
     }
 
     /**
@@ -467,7 +525,7 @@ final class AiOperationResolver
      * deterministic so a leg with competing rows always resolves to one defined
      * row (the highest version; ties broken by the lowest id).
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Prompt>  $query
+     * @param  Builder<Prompt>  $query
      */
     private function firstDeterministic($query): ?Prompt
     {

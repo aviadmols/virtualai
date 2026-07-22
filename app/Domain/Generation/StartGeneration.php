@@ -9,6 +9,7 @@ use App\Domain\Media\MediaStorage;
 use App\Models\ActivityEvent;
 use App\Models\EndUser;
 use App\Models\Generation;
+use App\Models\PlatformDirective;
 use App\Models\Site;
 use Illuminate\Support\Facades\DB;
 
@@ -47,6 +48,9 @@ final class StartGeneration
             productId: (int) $request->product->getKey(),
             variant: (array) ($request->variant?->options ?? []),
             clientRequestId: $request->clientRequestId,
+            // The try-on Global-Rules directive version (0 = none): the key is minted here, before
+            // the resolver runs, so fold it in explicitly — a rule edit re-generates, not collides.
+            directiveVersion: PlatformDirective::activeVersionFor(PlatformDirective::SURFACE_TRY_ON),
         );
 
         // LAYER 4 at the entry point: a double-click (same key) returns the existing

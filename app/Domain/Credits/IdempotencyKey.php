@@ -38,8 +38,13 @@ final class IdempotencyKey
 
     /**
      * The charge key for a generation. Collapses widget double-clicks (the
-     * client_request_id is the last, stable segment) AND queue retries (the rest
+     * client_request_id is the last stable identity segment) AND queue retries (the rest
      * is fully determined by the generation identity + the selected variant).
+     *
+     * $directiveVersion folds in the platform-global rules directive that is woven into the
+     * try-on prompt (output-deciding): a Super-Admin rule edit bumps it so a same-input generation
+     * re-runs instead of colliding. It is a NO-OP when 0 (no active directive) — the key is then
+     * byte-identical to a directive-less one, so every existing generation key is unchanged.
      */
     public static function forGeneration(
         int $accountId,
@@ -48,8 +53,9 @@ final class IdempotencyKey
         int $productId,
         array|string $variant,
         string $clientRequestId,
+        int $directiveVersion = 0,
     ): string {
-        return implode(':', [
+        $segments = [
             self::PREFIX_GENERATION,
             $accountId,
             $siteId,
@@ -57,7 +63,13 @@ final class IdempotencyKey
             $productId,
             self::hashVariant($variant),
             $clientRequestId,
-        ]);
+        ];
+
+        if ($directiveVersion > 0) {
+            $segments[] = 'd'.$directiveVersion;
+        }
+
+        return implode(':', $segments);
     }
 
     /**
@@ -100,6 +112,11 @@ final class IdempotencyKey
      * fingerprint so a DIFFERENT choice is a genuinely different image (never a false "already
      * exists" that skips it), and the SAME choice still dedups a double-clicked batch.
      *
+     * $directiveVersion folds in the platform-global rules directive woven into the image-studio
+     * prompt (output-deciding): a Super-Admin rule edit re-generates instead of colliding. It is a
+     * NO-OP when 0 (no active directive) — omitted from the fingerprint so every existing key stays
+     * byte-identical.
+     *
      * @param  array<string,mixed>  $modelParams  the resolved sampler bag (seed/temperature/...)
      * @param  array<string,mixed>  $extra  output-deciding choices (style_id, notes, aspect, quality)
      */
@@ -114,12 +131,13 @@ final class IdempotencyKey
         array $modelParams,
         string $clientRequestId,
         array $extra = [],
+        int $directiveVersion = 0,
     ): string {
         $params = $modelParams;
         ksort($params);
         ksort($extra);
 
-        $fingerprint = sha1((string) json_encode([
+        $fingerprintData = [
             'product_id' => $productId,
             'source_image_hash' => $sourceImageHash,
             'operation_key' => $operationKey,
@@ -127,7 +145,13 @@ final class IdempotencyKey
             'model_id' => $modelId,
             'model_params' => $params,
             'extra' => $extra,
-        ]));
+        ];
+
+        if ($directiveVersion > 0) {
+            $fingerprintData['directive_version'] = $directiveVersion;
+        }
+
+        $fingerprint = sha1((string) json_encode($fingerprintData));
 
         return implode(':', [
             self::PREFIX_PRODUCT_ASSET,

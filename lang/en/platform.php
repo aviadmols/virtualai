@@ -18,6 +18,28 @@ return [
         'controls' => 'Controls',
     ],
 
+    // Global Rules — platform-wide fixed rules woven into every generation, across all sites.
+    'rules' => [
+        'nav' => 'Global Rules',
+        'title' => 'Global Rules',
+        'save' => 'Save',
+        'saved' => 'Global rules saved.',
+        'image_studio' => [
+            'title' => 'Image Studio rules',
+            'sub' => 'Applied to every product image (packshot & on-model), for every site.',
+        ],
+        'try_on' => [
+            'title' => 'Try-On rules',
+            'sub' => 'Applied to every try-on generation, for every site.',
+        ],
+        'field' => [
+            'rules' => 'Rules',
+            'rules_help' => 'Fixed art-direction / constraints woven into every generation of this surface — e.g. always a pure white background, never show faces, keep the brand colors. Applied on top of the merchant\'s own prompt.',
+            'active' => 'Active',
+            'active_help' => 'When off, these rules are ignored. Editing active rules makes future generations re-render.',
+        ],
+    ],
+
     // Queue & worker health widget (dashboard).
     'health' => [
         'worker' => 'Worker',

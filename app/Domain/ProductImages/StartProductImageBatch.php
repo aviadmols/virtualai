@@ -310,6 +310,8 @@ final class StartProductImageBatch
                 'aspect_ratio' => (string) $batch->aspect_ratio,
                 'image_quality' => (string) $batch->image_quality,
             ],
+            // The platform-global rules directive version (0 = none) — a rule edit re-generates.
+            directiveVersion: $config->directiveVersion,
         );
 
         try {
