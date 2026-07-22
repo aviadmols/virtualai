@@ -13,7 +13,7 @@ return [
     'sub' => 'Turn your existing product photos into clean packshots, or render your products on a model. Pick the products, pick the photo, and review every result before you use it.',
 
     // The money contract — stated plainly, before anything is generated.
-    'charge_notice' => 'Each image is charged when the AI succeeds — even if you reject it afterwards. Rejecting an image does not refund it. A generation that fails is never charged.',
+    'charge_notice' => 'You pay only for images the AI delivers — a generation that fails is always free.',
 
     'balance' => 'Available credit',
 

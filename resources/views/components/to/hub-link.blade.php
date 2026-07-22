@@ -18,6 +18,8 @@
     'title',
     'sub' => null,
 ])
+{{-- Vertical card: icon tile, title, sentence. The chevron is absolutely placed in
+     the end corner (shop-hub.css), so it never squeezes the title's column. --}}
 <a href="{{ $href }}" {{ $attributes->class(['to-hub-link']) }}>
     <span class="to-hub-link__icon" aria-hidden="true">
         <x-filament::icon :icon="$icon" class="to-hub-link__glyph" />

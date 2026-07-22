@@ -17,13 +17,8 @@
         <x-slot:heading>{{ __('product_images.heading') }}</x-slot:heading>
         <x-slot:description>{{ __('product_images.sub') }}</x-slot:description>
 
-        <div class="to-studio__notice">
-            <x-filament::icon icon="heroicon-o-exclamation-triangle" class="to-studio__notice-icon" />
-            <p class="to-studio__notice-text">{{ __('product_images.charge_notice') }}</p>
-        </div>
-
         <dl class="to-studio__facts">
-            <div class="to-studio__fact">
+            <div class="to-studio__fact to-studio__fact--lead">
                 <dt class="to-studio__label">{{ __('product_images.balance') }}</dt>
                 <dd class="to-studio__value">{{ $spendable }}</dd>
             </div>
@@ -44,6 +39,12 @@
                 <dd class="to-studio__value">{{ number_format($counts['failed']) }}</dd>
             </div>
         </dl>
+
+        {{-- The money contract, stated calmly: a caption under the stats, not an alarm. --}}
+        <p class="to-studio__notice">
+            <x-filament::icon icon="heroicon-o-information-circle" class="to-studio__notice-icon" />
+            <span class="to-studio__notice-text">{{ __('product_images.charge_notice') }}</span>
+        </p>
     </x-filament::section>
 
     {{-- LIVE progress — the batch row is the truth, not the queue. --}}
