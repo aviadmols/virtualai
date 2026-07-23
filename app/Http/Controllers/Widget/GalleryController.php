@@ -50,6 +50,8 @@ final class GalleryController
             ->where('site_id', $site->getKey())
             ->where('end_user_id', $endUser->getKey())
             ->where('status', Generation::STATUS_SUCCEEDED)
+            // Product + variant power the per-look name/price/add-to-cart in the strip.
+            ->with(['product', 'variant'])
             ->orderByDesc('id')
             ->limit($this->limit($request))
             ->get()

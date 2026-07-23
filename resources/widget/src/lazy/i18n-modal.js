@@ -46,6 +46,7 @@ export const MODAL_MESSAGES = {
 
     'result.title': "Here's your look",
     'result.disclaimer': '* For visualization only. The actual fit may vary.',
+    'result.zoom': 'Zoom',
     'result.zoom_hint': 'Tap to zoom',
     'result.regenerate': 'Create it again',
     'result.error': 'Something went wrong',
@@ -144,6 +145,7 @@ export const MODAL_MESSAGES = {
 
     'result.title': 'הנה הלוק שלכם',
     'result.disclaimer': '* להמחשה בלבד. הגזרה בפועל עשויה להשתנות.',
+    'result.zoom': 'הגדלה',
     'result.zoom_hint': 'הקישו להגדלה',
     'result.regenerate': 'ליצור שוב',
     'result.error': 'משהו השתבש',

@@ -15,12 +15,15 @@ import { ICON_SPARKLE, ICON_CLOSE } from './icons.js';
 let closingTimer = null;
 
 /**
- * The brand header: the wordmark + the product title with its LAST whitespace-delimited token
- * filled by the brand gradient. A one-word title is entirely gradient. The title is inserted as
- * TEXT, never as HTML — it is merchant data. A missing title renders the wordmark alone, never
- * an empty heading or a dangling gradient span.
+ * The brand header: the wordmark + a "PRODUCT NAME · price" caption with the PRICE filled by the
+ * brand gradient. The product defaults to the PDP product (state.product) but the result screen
+ * passes the LOOK's own product, so switching a past look of a different product reprices the
+ * header. The name is inserted as TEXT, never HTML — it is merchant data. A missing product
+ * renders the wordmark alone, never an empty heading or a dangling gradient span.
  */
-export function brandHeader() {
+export function brandHeader(product) {
+  const p = product || state.product;
+
   // The Vsio wordmark logo when the origin is known; otherwise the sparkle + text fallback (so a
   // pre-boot skeleton, or an unknown base, never renders a broken image).
   const logo = logoUrl();
@@ -33,21 +36,41 @@ export function brandHeader() {
 
   const children = [mark];
 
-  const title = (state.product && state.product.name ? String(state.product.name) : '').trim();
-  if (title) {
-    const parts = title.split(/\s+/);
-    const last = parts.pop();
+  const name = (p && p.name ? String(p.name) : '').trim();
+  if (name) {
     const heading = el('h2', { class: 'ton-brand__title' });
-    if (parts.length) heading.appendChild(document.createTextNode(parts.join(' ') + ' '));
-    heading.appendChild(el('span', { class: 'ton-brand__accent', text: last }));
+    heading.appendChild(document.createTextNode(name));
+    const price = formatPrice(p);
+    if (price) {
+      heading.appendChild(document.createTextNode(' · '));
+      heading.appendChild(el('span', { class: 'ton-brand__accent', text: price }));
+    }
     children.push(heading);
   }
 
   return el('div', { class: 'ton-brand' }, children);
 }
 
-/** The glass box: close (top-inline-end), an optional chip (top-inline-start), the brand header. */
-export function panel(body, { onClose, chip, skeleton } = {}) {
+/**
+ * A product's price for the header: price_minor (integer minor units) formatted in its currency
+ * for the shopper's locale. Empty when the product carries no price — the header shows the name
+ * alone. Never throws into the host page.
+ */
+function formatPrice(product) {
+  const minor = product && product.price_minor;
+  const currency = product && product.currency;
+  if (minor == null || !currency) return '';
+
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(Number(minor) / 100);
+  } catch {
+    return '';
+  }
+}
+
+/** The glass box: close (top-inline-end), an optional chip (top-inline-start), the brand header,
+ *  the body, and the "Powered by Vsio" footer. `product` reprices the header for a past look. */
+export function panel(body, { onClose, chip, skeleton, product } = {}) {
   // The body is the ONE flex-growing column inside the modal. Without this class the preview
   // cannot shrink and Add to Cart scrolls off-screen on short viewports.
   if (body && body.classList) body.classList.add('ton-modal__body');
@@ -66,10 +89,23 @@ export function panel(body, { onClose, chip, skeleton } = {}) {
         on: { click: () => onClose && onClose() },
       }),
       chip || null,
-      brandHeader(),
+      brandHeader(product),
       body,
+      poweredBy(),
     ],
   );
+}
+
+/** The "Powered by Vsio" footer. The brand name is not translated; only the lead-in is. */
+function poweredBy() {
+  return el('div', { class: 'ton-powered' }, [
+    document.createTextNode(t('powered_by') + ' '),
+    el('a', {
+      class: 'ton-powered__link',
+      attrs: { href: 'https://vsio.app/', target: '_blank', rel: 'noopener noreferrer' },
+      text: 'Vsio',
+    }),
+  ]);
 }
 
 function cancelClosing() {

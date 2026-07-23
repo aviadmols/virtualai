@@ -28,7 +28,7 @@ import {
 import { el, warn } from '../dom.js';
 import { prepare, ImageError } from '../image.js';
 import { state, newIntent, panel, button, hud, pending, gen, t, tries } from './bridge.js';
-import { ICON_UPLOAD, ICON_SAVE, ICON_SAVED, ICON_SHARE, ICON_REGEN } from './icons.js';
+import { ICON_UPLOAD, ICON_SAVE, ICON_SAVED, ICON_SHARE, ICON_ZOOM } from './icons.js';
 import * as cart from './cart.js';
 import { share, SHARE_OUTCOME } from './share.js';
 import { api } from './bridge.js';
@@ -99,8 +99,8 @@ export function close() {
   }
 }
 
-function mount(body, chip) {
-  panel.mount(panel.panel(body, { onClose: close, chip }), close);
+function mount(body, chip, product) {
+  panel.mount(panel.panel(body, { onClose: close, chip, product }), close);
 }
 
 // ---------------------------------------------------------------------------
@@ -405,14 +405,19 @@ async function loadStrip(container, { onUpload, disabled = false, current = null
 /**
  * View a past look. It VIEWS — it never starts a paid generation.
  *
- * Add to Cart is disabled here: the gallery payload carries no variant, so we cannot claim this
- * look is of the option currently selected on the page, and a historical look must never add the
- * wrong SKU. (Escalated to laravel-backend: add product_id + variant_id to GenerationPayload and
- * this becomes a real, enabled add-to-cart.)
+ * The gallery payload now carries the look's OWN product + variant, so switching a look of a
+ * different product reprices the header (name + price) and points Add to Cart at THAT product's
+ * exact variant. Add to Cart stays disabled only for an older look whose variant is no longer
+ * recoverable (item.variant is null) — a look must never add the wrong SKU.
  */
 function viewPastLook(item) {
   activeThumb = item.id;
-  renderResult(item.result_url, { generationId: item.id, variant: null, historical: true });
+  renderResult(item.result_url, {
+    generationId: item.id,
+    product: item.product || null,
+    variant: item.variant || null,
+    historical: !item.variant,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -538,34 +543,47 @@ function renderLoading() {
 // ---------------------------------------------------------------------------
 function renderResult(resultUrl, look) {
   const generationId = look && look.generationId;
-  const variant = look && look.variant;
-  const historical = !!(look && look.historical);
+  const product = (look && look.product) || state.product;
+  // A look adds to cart only when its exact variant is known — the PDP variant for a fresh look,
+  // or the look's OWN recorded variant for a past one. No variant => view-only (never a wrong SKU).
+  const variant = (look && look.variant) || null;
+  const historical = !!(look && look.historical) && !variant;
 
   const img = el('img', { class: 'ton-result__img', attrs: { src: resultUrl, alt: t('result.title') } });
-  const hint = el('div', { class: 'ton-result__zoom-hint', text: t('result.zoom_hint') });
 
   // The disclaimer is a SIBLING of the image, never a child — so it survives the zoom transform.
   const disclaimer = el('div', { class: 'ton-result__disclaimer', text: t('result.disclaimer') });
 
-  const regen = el('button', {
-    class: 'ton-regen',
-    attrs: { type: 'button', 'aria-label': t('result.regenerate'), title: t('result.regenerate') },
-    html: ICON_REGEN,
-    on: { click: onRegenerate },
+  const zoomBtn = el('button', {
+    class: 'ton-zoom-btn',
+    attrs: { type: 'button', 'aria-label': t('result.zoom') },
+    html: ICON_ZOOM,
   });
 
-  const frame = el('div', { class: 'ton-preview ton-result__frame' }, [img, hint, disclaimer, regen]);
-  enableZoom(frame, img, hint);
+  const frame = el('div', { class: 'ton-preview ton-result__frame' }, [img, disclaimer, zoomBtn]);
+  enableZoom(frame, img, zoomBtn);
 
   const toast = el('div', { class: 'ton-toast', attrs: { hidden: true } });
   const strip = el('div', { class: 'ton-gallery' });
   const actions = buildActions({ generationId, resultUrl, variant, historical, toast });
 
-  mount(el('div', {}, [frame, strip, actions, toast]));
+  // The strip + actions float over the bottom of the full-bleed preview on a white fade.
+  const controls = el('div', { class: 'ton-overlay-controls' }, [toast, strip, actions]);
+  const bodyFrame = el('div', { class: 'ton-body-frame' }, [frame, controls]);
+
+  // The header is repriced for THIS look's product (a past look of a different product).
+  mount(bodyFrame, null, product);
   void loadStrip(strip, { onUpload: onChangePhoto, current: activeThumb || generationId });
 }
 
 function buildActions({ generationId, resultUrl, variant, historical, toast }) {
+  const addLabel = el('span', { text: t('result.add_to_cart') });
+  const addBtn = el('button', {
+    class: 'ton-action ton-action--primary',
+    attrs: { type: 'button', disabled: historical },
+    on: { click: () => onAddToCart(addBtn, addLabel, toast, variant, generationId) },
+  }, [addLabel]);
+
   const save = el('button', {
     class: 'ton-action',
     attrs: { type: 'button' },
@@ -578,25 +596,19 @@ function buildActions({ generationId, resultUrl, variant, historical, toast }) {
     on: { click: () => onShare(shareBtn, toast, generationId, resultUrl) },
   }, [el('span', { html: ICON_SHARE, attrs: { 'aria-hidden': 'true' } }), el('span', { text: t('share.action') })]);
 
-  const addLabel = el('span', { text: t('result.add_to_cart') });
-  const addBtn = el('button', {
-    class: 'ton-action ton-action--primary',
-    attrs: { type: 'button', disabled: historical },
-    on: { click: () => onAddToCart(addBtn, addLabel, toast, variant, generationId) },
-  }, [addLabel]);
-
-  // A look of a different option must never add the wrong SKU. Say so, plainly.
+  // A look whose variant is unknown must never add the wrong SKU. Say so, plainly.
   if (historical) showToast(toast, t('cart.variant_changed'), 0);
 
-  return el('div', { class: 'ton-actions' }, [save, shareBtn, addBtn]);
+  // Row order (inline-start → end): Add to cart (50%), Save, Share.
+  return el('div', { class: 'ton-actions' }, [addBtn, save, shareBtn]);
 }
 
 /**
- * Tap/click the result image to zoom (and again to reset). While zoomed, moving the pointer
- * (desktop) or dragging (mobile) pans a magnifier. A small move between press and release is a
- * pan, not a zoom toggle.
+ * Zoom the result: tap/click the image (or the zoom button) to toggle, and again to reset. While
+ * zoomed, moving the pointer (desktop) or dragging (mobile) pans the magnifier. A small move
+ * between press and release is a pan, not a zoom toggle.
  */
-function enableZoom(frame, img, hint) {
+function enableZoom(frame, img, zoomBtn) {
   let zoomed = false;
   let downX = 0;
   let downY = 0;
@@ -615,7 +627,6 @@ function enableZoom(frame, img, hint) {
     zoomed = on;
     frame.classList.toggle('ton-result__frame--zoomed', on);
     img.classList.toggle('ton-result__img--zoomed', on);
-    if (hint) hint.hidden = on;
     if (on && clientX != null) setOrigin(clientX, clientY);
   };
 
@@ -631,14 +642,21 @@ function enableZoom(frame, img, hint) {
   });
 
   frame.addEventListener('click', (e) => {
-    // The regenerate button lives inside the frame — a tap on it is not a zoom.
-    if (e.target.closest && e.target.closest('.ton-regen')) return;
+    // The zoom button is its own toggle — a tap on it is handled below, not here.
+    if (e.target.closest && e.target.closest('.ton-zoom-btn')) return;
     if (moved) {
       moved = false;
       return;
     }
     setZoom(!zoomed, e.clientX, e.clientY);
   });
+
+  if (zoomBtn) {
+    zoomBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setZoom(!zoomed);
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -31,3 +31,11 @@ export const ICON_REGEN =
   `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" ${STROKE}>` +
   '<polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />' +
   '<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>';
+
+// A magnifier with a plus; the vertical stroke is classed so it hides (becoming a minus) while
+// the result is zoomed. Not directional — never flipped in RTL.
+export const ICON_ZOOM =
+  `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" ${STROKE}>` +
+  '<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />' +
+  '<line x1="8" y1="11" x2="14" y2="11" />' +
+  '<line class="ton-zoom__plus-v" x1="11" y1="8" x2="11" y2="14" /></svg>';

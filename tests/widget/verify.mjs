@@ -477,13 +477,13 @@ async function galleryGate(browser) {
 }
 
 /**
- * Custom placement gate (the visual picker's runtime path): (1) a resolvable merchant-picked
- * anchor -> the button is placed relative to THAT element, not add-to-cart; (2) a custom anchor
- * that no longer resolves on the live page -> the button falls back to after add-to-cart so it
- * never vanishes.
+ * Forced-placement override gate: the vyra design forces the glass button ONTO the product image
+ * everywhere, so a site's placement config (custom / after-add-to-cart / a fixed corner) is
+ * overridden — the button lands inside the product-image container regardless. (The unresolvable-
+ * image fallback to add-to-cart is covered by onImagePlacementGate.)
  */
 async function customPlacementGate(browser) {
-  console.log('\n=== custom placement (picked anchor + runtime fallback) ===');
+  console.log('\n=== forced on-image overrides the merchant placement config ===');
   let failures = 0;
   let appearanceOverride = {};
 
@@ -499,36 +499,32 @@ async function customPlacementGate(browser) {
     return page;
   };
 
-  // (1) A resolvable custom anchor: place the button immediately BEFORE the price element.
-  try {
-    appearanceOverride = { button_placement: 'custom', custom_anchor_selector: '.product__price', custom_position: 'before' };
-    const page = await openPage();
-    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
-    await waitForBoot(page);
-    const placed = await page.evaluate((sentinel) => {
-      const price = document.querySelector('.product__price');
-      const btn = document.querySelector('[' + sentinel + ']');
-      return !!btn && price.previousElementSibling === btn && btn.parentNode === price.parentNode;
-    }, SENTINEL);
-    assert(placed, 'resolvable custom anchor: button placed at the picked element (before .product__price)');
-    await page.close();
-  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+  // Every placement config is overridden -> the button is forced onto the product image.
+  const overrides = [
+    { button_placement: 'custom', custom_anchor_selector: '.product__price', custom_position: 'before' },
+    { button_placement: 'after_add_to_cart' },
+    { button_placement: 'fixed_bottom_right' },
+  ];
 
-  // (2) A custom anchor that does NOT resolve: fall back to after add-to-cart.
-  try {
-    appearanceOverride = { button_placement: 'custom', custom_anchor_selector: '#nope-not-here', custom_position: 'before' };
-    const page = await openPage();
-    await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
-    await waitForBoot(page);
-    const fellBack = await page.evaluate((sentinel) => {
-      const atc = document.querySelector('#add-to-cart');
-      const btn = document.querySelector('[' + sentinel + ']');
-      const below = btn ? !!(atc.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING) : false;
-      return !!btn && below && btn.parentNode === atc.parentNode;
-    }, SENTINEL);
-    assert(fellBack, 'missing custom anchor: button falls back to after add-to-cart');
-    await page.close();
-  } catch (e) { failures++; console.error('  FAIL:', e.message); }
+  for (const override of overrides) {
+    try {
+      appearanceOverride = override;
+      const page = await openPage();
+      await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+      await waitForBoot(page);
+      const onImage = await page.evaluate((sentinel) => {
+        const image = document.querySelector('.product__image');
+        const container = image
+          ? (image.tagName === 'IMG' || image.tagName === 'PICTURE' ? image.parentElement : image)
+          : null;
+        const btn = document.querySelector('[' + sentinel + ']');
+        return !!(btn && container && container.contains(btn)
+          && btn.shadowRoot.querySelector('.ton-button--on-image'));
+      }, SENTINEL);
+      assert(onImage, `placement "${override.button_placement}" overridden -> button forced on the product image`);
+      await page.close();
+    } catch (e) { failures++; console.error('  FAIL:', e.message); }
+  }
 
   return failures;
 }
@@ -1819,31 +1815,34 @@ async function run() {
     try {
       await waitForBoot(page);
 
-      // --- mount gate: button is BELOW add-to-cart and exactly one ---
+      // --- mount gate: the vyra design FORCES the glass button onto the product image
+      //     (bottom-left), exactly once, regardless of the site's placement config ---
       const mountInfo = await page.evaluate((sentinel) => {
-        const atc = document.querySelector('#add-to-cart');
+        const image = document.querySelector('.product__image');
+        const container = image
+          ? (image.tagName === 'IMG' || image.tagName === 'PICTURE' ? image.parentElement : image)
+          : null;
         const wrappers = document.querySelectorAll('[' + sentinel + ']');
         const btn = wrappers[0];
-        const below = btn ? !!(atc.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING) : false;
-        return { count: wrappers.length, below, hasBtn: !!btn };
+        const onImage = !!(btn && container && container.contains(btn));
+        const glass = !!(btn && btn.shadowRoot && btn.shadowRoot.querySelector('.ton-button--on-image'));
+        return { count: wrappers.length, onImage, glass, hasBtn: !!btn };
       }, SENTINEL);
       assert(mountInfo.hasBtn, 'button is mounted');
       assert(mountInfo.count === 1, 'button mounted exactly once (no duplicate)');
-      assert(mountInfo.below, 'button sits BELOW the add-to-cart element');
+      assert(mountInfo.onImage, 'button is forced ONTO the product image (the vyra design)');
+      assert(mountInfo.glass, 'and it wears the glass on-image skin (ignores merchant button colors)');
 
-      // --- appearance gate: label + bg color applied from config ---
+      // --- appearance gate: the merchant LABEL still applies (only the colors are overridden) ---
       const appearance = await page.evaluate((sentinel) => {
         const wrapper = document.querySelector('[' + sentinel + ']');
-        const root = wrapper.shadowRoot;
-        const button = root.querySelector('.ton-button');
-        const cs = root.host.shadowRoot ? getComputedStyle(button) : null;
-        return { label: button.textContent.trim(), bg: getComputedStyle(button).backgroundColor };
+        const button = wrapper.shadowRoot.querySelector('.ton-button');
+        return { label: button.textContent.trim() };
       }, SENTINEL);
       assert(
         appearance.label.includes(locale === 'he' ? 'מדדו' : 'Tray On'),
         `button label from config (${appearance.label})`,
       );
-      assert(appearance.bg === 'rgb(10, 125, 82)', `button bg from config (${appearance.bg})`);
 
       // --- CSS-bleed gate: the button lives in a shadow root; host .ton-button rule can't reach it ---
       const bleed = await page.evaluate((sentinel) => {

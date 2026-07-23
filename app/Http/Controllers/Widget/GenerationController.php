@@ -154,6 +154,9 @@ final class GenerationController
             return WidgetResponse::error('generation_not_found', __('widget_api.not_found.generation'), WidgetResponse::STATUS_NOT_FOUND);
         }
 
+        // The payload reads the look's product + variant (name/price + add-to-cart target).
+        $generation->loadMissing(['product', 'variant']);
+
         return WidgetResponse::ok([
             'generation' => GenerationPayload::make($generation, $this->media),
         ]);

@@ -16,12 +16,13 @@ import {
   THEME_SLOT_ATTR,
   APPEARANCE,
   PLACEMENT,
+  SELECTOR_ROLES,
   OBSERVER_DEBOUNCE_MS,
   EVENTS,
   HOST_VARIANT_EVENT,
 } from './constants.js';
 import { state } from './state.js';
-import { debounce, safeQuery } from './dom.js';
+import { debounce, safeQuery, selectorString } from './dom.js';
 import { findAddToCart, readSelectedVariant, readExternalVariantId } from './pdp.js';
 import * as button from './button.js';
 import * as shell from './shell.js';
@@ -53,7 +54,11 @@ function onMutate() {
 function inject() {
   const selectors = state.config.selectors;
   const appearance = state.config.appearance;
-  const placement = appearance[APPEARANCE.placement];
+  // The vyra design forces the glass button onto the product image (bottom-left) EVERYWHERE,
+  // overriding the site's placement config. A merchant theme-slot block below still wins, and
+  // the on-image path falls back to the add-to-cart anchor when the image can't be found, so
+  // the button never vanishes from a live PDP.
+  const placement = PLACEMENT.onImage;
 
   // Already mounted with a LIVE button? Do nothing. A theme that re-renders via cloneNode()
   // copies the sentinel attribute but NOT the shadow root (shadow roots are not cloned), leaving
@@ -83,21 +88,13 @@ function inject() {
 
   const anchor = findAddToCart(selectors, state.platform);
 
-  // Custom placement carries the merchant-picked anchor + position; the add-to-cart anchor is
-  // its runtime fallback (place() uses it if the custom selector no longer resolves).
-  const custom = placement === PLACEMENT.custom
-    ? { selector: appearance[APPEARANCE.customAnchor], position: appearance[APPEARANCE.customPosition] }
-    : null;
-  const customAnchor = custom ? safeQuery(custom.selector) : null;
+  // On-image needs EITHER the product-image container OR the add-to-cart fallback to resolve —
+  // else the theme isn't ready yet and the observer will call us again.
+  const imageTarget = safeQuery(selectorString(selectors, SELECTOR_ROLES.productImage));
+  if (!anchor && !imageTarget) return;
 
-  // Fixed placements need no anchor. Inline placements need the add-to-cart anchor. Custom and
-  // on-image need EITHER their own target OR the add-to-cart fallback — else the theme isn't
-  // ready yet and the observer will call us again.
-  const isFixed = placement === PLACEMENT.fixedBR || placement === PLACEMENT.fixedBL;
-  if (!isFixed && !anchor && !customAnchor) return;
-
-  wrapper = button.build(appearance);
-  button.place(wrapper, anchor, placement, custom, selectors);
+  wrapper = button.build({ ...appearance, [APPEARANCE.placement]: placement });
+  button.place(wrapper, anchor, placement, null, selectors);
 }
 
 /** Re-read the selected variant; emit a change event when it differs. */

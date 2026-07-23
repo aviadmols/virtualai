@@ -29,15 +29,17 @@
   --ton-ink-2: #222222;
   --ton-ink-muted: #666666;
   --ton-ink-subtle: #888888;
+  --ton-ink-faint: #aaaaaa;
   --ton-danger: #dc2626;
 
   /* ---- Glass surfaces ---- */
   --ton-glass-trigger: rgba(255, 255, 255, 0.9);
-  --ton-glass-modal: rgba(255, 255, 255, 0.9);
+  --ton-glass-modal: #ffffff;
   --ton-glass-hud: rgba(255, 255, 255, 0.95);
   --ton-glass-preview: rgba(255, 255, 255, 0.7);
   --ton-glass-control: rgba(240, 240, 240, 0.8);
   --ton-surface: #ffffff;
+  --ton-border-soft: #eaeaea;
   --ton-overlay: rgba(0, 0, 0, 0.4);
   --ton-scrim-text: rgba(255, 255, 255, 0.9);
   --ton-scrim-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
@@ -49,8 +51,9 @@
   --ton-blur-hud: 10px;
 
   /* ---- Radius / shadow / elevation ---- */
-  --ton-radius-modal: 24px;
+  --ton-radius-modal: 28px;
   --ton-radius-image: 16px;
+  --ton-radius-body: 20px;
   --ton-radius-control: 10px;
   --ton-radius-pill: 999px;
   --ton-radius-dot: 50%;
@@ -71,10 +74,13 @@
 
   --ton-fs-logo: 16px;
   --ton-fs-title: 28px;
+  --ton-fs-product: 12px;
   --ton-fs-cta: 18px;
   --ton-fs-trigger: 15px;
   --ton-fs-button: 14px;
   --ton-fs-body: 14px;
+  --ton-fs-action: 13px;
+  --ton-fs-sub: 11px;
   --ton-fs-hud-title: 13px;
   --ton-fs-hud-sub: 11px;
   --ton-fs-loader: 13px;
@@ -88,7 +94,9 @@
   --ton-fw-semibold: 600;
 
   --ton-track-logo: 4px;
+  --ton-track-product: 3px;
   --ton-track-cta: 3px;
+  --ton-track-action: 1px;
   --ton-track-loader: 1px;
   --ton-track-disclaimer: 0.5px;
   --ton-lh-body: 1.5;
@@ -102,14 +110,20 @@
   --ton-space-6: 24px;
   --ton-space-8: 32px;
   --ton-space-10: 40px;
+  --ton-pad-btn: 14px;
 
-  --ton-modal-pad: var(--ton-space-10);
-  --ton-modal-max-w: 500px;
-  --ton-modal-max-h: 95vh;
+  /* Reference modal padding: 32 top / 24 inline / 20 bottom (vyra-dash). The media queries
+     in modal.css tighten these on small / short viewports. */
+  --ton-modal-pad-top: var(--ton-space-8);
+  --ton-modal-pad-inline: var(--ton-space-6);
+  --ton-modal-pad-bottom: var(--ton-space-5);
+  --ton-modal-max-w: 480px;
+  --ton-modal-max-h: 860px;
   --ton-preview-ratio: 3 / 4;
   --ton-preview-max-h: 60vh;
   --ton-thumb-w: 70px;
   --ton-thumb-h: 85px;
+  --ton-thumb-gallery: 58px;
   --ton-hud-inset: 24px;
   --ton-spinner-size: 44px;
   --ton-spinner-stroke: 2px;
@@ -120,7 +134,7 @@
   --ton-icon-lg: 24px;
 
   /* Exact reference spacings (vyra-dash) — not on the 4px scale on purpose. */
-  --ton-space-brand: 25px;
+  --ton-space-brand: 22px;
   --ton-space-preview: 25px;
   --ton-space-gallery: 30px;
   --ton-space-actions: 15px;
@@ -157,6 +171,7 @@
   --ton-glass-preview: rgba(255, 255, 255, 0.06);
   --ton-glass-control: rgba(255, 255, 255, 0.08);
   --ton-surface: #111111;
+  --ton-border-soft: rgba(255, 255, 255, 0.14);
   --ton-ink: #fafafa;
   --ton-ink-2: #f4f4f5;
   --ton-ink-muted: #a1a1aa;
@@ -485,12 +500,12 @@
   /* A definite height is required for flex-shrink on the preview to fire. max-height alone
      lets the box grow to content then paint a scrollbar — which is exactly the bug we hit.
      min(max-content, …) sizes to content on tall screens and caps on short ones. */
-  height: min(max-content, 95vh);
-  height: min(max-content, 95dvh);
-  max-height: min(var(--ton-modal-max-h), 95vh);
-  max-height: min(var(--ton-modal-max-h), 95dvh);
+  height: min(max-content, 94vh);
+  height: min(max-content, 94dvh);
+  max-height: min(var(--ton-modal-max-h), 94vh);
+  max-height: min(var(--ton-modal-max-h), 94dvh);
   overflow: hidden;
-  padding: var(--ton-modal-pad);
+  padding: var(--ton-modal-pad-top) var(--ton-modal-pad-inline) var(--ton-modal-pad-bottom);
   border: 0;
   border-radius: var(--ton-radius-modal);
   background: var(--ton-glass-modal);
@@ -588,22 +603,25 @@
  * keeps its 3.68:1 ratio. Centered as a block image inside the (text-centered) header. */
 .ton-brand__logo {
   display: block;
-  block-size: calc(var(--ton-fs-logo) * 1.4);
+  block-size: 20px;
   inline-size: auto;
   margin-inline: auto;
+  margin-block-end: var(--ton-space-4);
 }
 
+/* "PRODUCT NAME · price" — a small uppercase caption with the PRICE gradient-filled. One
+   line, ellipsised, so a long merchant title never blows the modal out. */
 .ton-brand__title {
-  margin: var(--ton-space-3) 0 0;
-  font-size: var(--ton-fs-title);
-  font-weight: var(--ton-fw-light);
-  line-height: 1.2;
+  margin: 0;
+  font-size: var(--ton-fs-product);
+  font-weight: var(--ton-fw-semibold);
+  letter-spacing: var(--ton-track-product);
+  text-transform: uppercase;
+  line-height: 1.4;
   color: var(--ton-ink-2);
-  /* Two lines, then an ellipsis — a long merchant title never blows the modal out. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ton-brand__accent {
@@ -613,6 +631,28 @@
   -webkit-text-fill-color: transparent;
   color: transparent;
   font-weight: inherit;
+}
+
+/* ---- "Powered by Vsio" footer (below the modal body) --------------------------------- */
+.ton-powered {
+  flex: none;
+  margin-block-start: var(--ton-space-4);
+  text-align: center;
+  font-size: var(--ton-fs-disclaimer);
+  letter-spacing: var(--ton-track-disclaimer);
+  color: var(--ton-ink-faint);
+}
+
+.ton-powered__link {
+  color: var(--ton-ink-subtle);
+  font-weight: var(--ton-fw-medium);
+  text-decoration: none;
+  transition: color var(--ton-t);
+}
+
+.ton-powered__link:hover {
+  color: var(--ton-accent);
+  text-decoration: underline;
 }
 
 /* ---- Skeleton (shown only when the modal chunk takes longer than CHUNK_SHELL_DELAY_MS) --- */

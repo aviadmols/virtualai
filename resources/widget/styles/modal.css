@@ -39,7 +39,9 @@
 /* Modal padding tightens on a phone; the preview shortens so the strip + actions stay reachable. */
 @media (max-width: 480px) {
   .ton-modal {
-    --ton-modal-pad: var(--ton-space-6);
+    --ton-modal-pad-top: var(--ton-space-6);
+    --ton-modal-pad-inline: var(--ton-space-4);
+    --ton-modal-pad-bottom: var(--ton-space-4);
     --ton-preview-max-h: 55vh;
   }
 }
@@ -48,7 +50,8 @@
    without scrolling — the preview keeps giving ground via flex. */
 @media (max-height: 740px) {
   .ton-modal {
-    --ton-modal-pad: var(--ton-space-6);
+    --ton-modal-pad-top: var(--ton-space-6);
+    --ton-modal-pad-bottom: var(--ton-space-4);
     --ton-space-brand: var(--ton-space-4);
     --ton-space-preview: var(--ton-space-4);
     --ton-space-gallery: var(--ton-space-4);
@@ -285,6 +288,42 @@
   color: var(--ton-ink-muted);
 }
 
+/* ---- The result body: the try-on fills a rounded frame; the strip + actions float over its
+   bottom on a white fade (vyra-dash overlay-controls). -------------------------------------- */
+.ton-body-frame {
+  position: relative;
+  display: flex;
+  flex: 1 1 0%;
+  min-height: 0;
+  border-radius: var(--ton-radius-body);
+  overflow: hidden;
+  background: var(--ton-surface);
+}
+
+/* The preview fills the whole frame; the controls overlay it, so it carries no bottom margin
+   or radius of its own here. */
+.ton-body-frame > .ton-preview {
+  flex: 1 1 0%;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  margin-block-end: 0;
+  border-radius: 0;
+}
+
+.ton-overlay-controls {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ton-space-3);
+  /* A tall top pad so the fade begins well above the controls (vyra-dash: 35 12 12). */
+  padding: var(--ton-space-10) var(--ton-space-3) var(--ton-space-3);
+  background: linear-gradient(180deg, transparent 0%, var(--ton-surface) 32%, var(--ton-surface) 100%);
+}
+
 /* ---- Result --------------------------------------------------------------------------- */
 .ton-result__frame {
   cursor: zoom-in;
@@ -299,7 +338,7 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   animation: ton-fade var(--ton-t-image);
   transition: transform var(--ton-t);
   will-change: transform;
@@ -309,15 +348,14 @@
   transform: scale(2.4);
 }
 
-/* Always on a GENERATED image, never on the shopper's own photo. A sibling of the image, so it
-   survives the zoom transform. */
+/* Always on a GENERATED image, never on the shopper's own photo. A sibling of the image (so it
+   survives the zoom transform), pinned top-inline-start (vyra-dash). */
 .ton-result__disclaimer {
   position: absolute;
-  inset-block-end: var(--ton-space-3);
-  inset-inline: 0;
-  text-align: center;
+  inset-block-start: var(--ton-space-3);
+  inset-inline-start: var(--ton-space-3);
   font-size: var(--ton-fs-disclaimer);
-  font-weight: var(--ton-fw-light);
+  font-weight: var(--ton-fw-regular);
   letter-spacing: var(--ton-track-disclaimer);
   color: var(--ton-scrim-text);
   text-shadow: var(--ton-scrim-shadow);
@@ -325,20 +363,8 @@
   z-index: 1;
 }
 
-.ton-result__zoom-hint {
-  position: absolute;
-  inset-block-start: var(--ton-space-3);
-  inset-inline-start: var(--ton-space-3);
-  font-size: var(--ton-fs-disclaimer);
-  font-weight: var(--ton-fw-light);
-  color: var(--ton-scrim-text);
-  text-shadow: var(--ton-scrim-shadow);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* The always-available answer to "that doesn't look like me" — an invitation, not an apology. */
-.ton-regen {
+/* The zoom toggle — a glass circle, top-inline-end (vyra-dash .zoom-btn). */
+.ton-zoom-btn {
   position: absolute;
   inset-block-start: var(--ton-space-3);
   inset-inline-end: var(--ton-space-3);
@@ -349,30 +375,39 @@
   height: var(--ton-close-size);
   padding: 0;
   border: 0;
-  border-radius: var(--ton-radius-control);
+  border-radius: var(--ton-radius-dot);
   background: var(--ton-glass-control);
   backdrop-filter: blur(var(--ton-blur-trigger));
   -webkit-backdrop-filter: blur(var(--ton-blur-trigger));
   color: var(--ton-ink-2);
   cursor: pointer;
   z-index: 2;
-  transition: background-color var(--ton-t-fast), color var(--ton-t-fast), transform var(--ton-t-fast);
+  transition: background-color var(--ton-t-fast), transform var(--ton-t-fast);
 }
 
-.ton-regen:hover {
+.ton-zoom-btn:hover {
   background: var(--ton-surface);
-  color: var(--ton-accent);
-  transform: translateY(-2px);
+  transform: scale(1.05);
 }
 
-.ton-regen svg {
+.ton-zoom-btn svg {
   width: var(--ton-icon-sm);
   height: var(--ton-icon-sm);
+}
+
+/* The plus stroke becomes a minus when zoomed (the horizontal stroke stays). */
+.ton-result__frame--zoomed .ton-zoom__plus-v {
+  display: none;
 }
 
 /* ---- Thumb strip + Upload tile --------------------------------------------------------- */
 .ton-gallery {
   margin-block-end: var(--ton-space-gallery);
+}
+
+/* Inside the result overlay the strip is spaced by the overlay's own gap, not a margin. */
+.ton-overlay-controls .ton-gallery {
+  margin-block-end: 0;
 }
 
 .ton-gallery__strip {
@@ -381,6 +416,10 @@
   overflow-x: auto;
   padding: var(--ton-strip-pad) var(--ton-strip-pad) var(--ton-space-4) var(--ton-strip-pad);
   scrollbar-width: none;
+}
+
+.ton-overlay-controls .ton-gallery__strip {
+  padding-block-end: 0;
 }
 
 .ton-gallery__strip::-webkit-scrollbar {
@@ -393,9 +432,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--ton-space-2);
-  width: var(--ton-thumb-w);
-  height: var(--ton-thumb-h);
+  gap: var(--ton-space-1);
+  width: var(--ton-thumb-gallery);
+  height: var(--ton-thumb-gallery);
   padding: 0;
   border: 0;
   border-radius: var(--ton-radius-control);
@@ -420,8 +459,8 @@
 
 .ton-gallery__thumb {
   flex: none;
-  width: var(--ton-thumb-w);
-  height: var(--ton-thumb-h);
+  width: var(--ton-thumb-gallery);
+  height: var(--ton-thumb-gallery);
   padding: 0;
   border: 0;
   border-radius: var(--ton-radius-control);
@@ -570,33 +609,38 @@
   font-weight: var(--ton-fw-regular);
 }
 
-/* ---- Action row: [ Save Look ] [ Share ] / [ Add to Cart ] ------------------------------ */
+/* ---- Action row: one line — [ Add to Cart 50% ] [ Save 25% ] [ Share 25% ] (vyra-dash) --- */
 .ton-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--ton-space-actions);
+  display: flex;
+  align-items: center;
+  gap: var(--ton-space-2);
 }
 
+/* The sub actions (Save / Share): white, bordered, uppercase. */
 .ton-action {
+  flex: 0 0 calc(25% - 6px);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--ton-space-2);
-  padding: var(--ton-space-4);
-  border: 0;
+  gap: var(--ton-space-1);
+  padding: var(--ton-pad-btn) var(--ton-space-1);
+  border: 1px solid var(--ton-border-soft);
   border-radius: var(--ton-radius-control);
-  background: var(--ton-glass-control);
+  background: var(--ton-surface);
   color: var(--ton-ink-2);
   font-family: inherit;
-  font-size: var(--ton-fs-button);
-  font-weight: var(--ton-fw-regular);
+  font-size: var(--ton-fs-sub);
+  font-weight: var(--ton-fw-semibold);
+  letter-spacing: var(--ton-track-disclaimer);
+  text-transform: uppercase;
+  white-space: nowrap;
   cursor: pointer;
-  transition: transform var(--ton-t-fast), background-color var(--ton-t-fast), color var(--ton-t-fast);
+  transition: transform var(--ton-t-fast), background-color var(--ton-t-fast), color var(--ton-t-fast), border-color var(--ton-t-fast);
 }
 
 .ton-action:hover:not(:disabled) {
-  background: var(--ton-surface);
   color: var(--ton-accent);
+  border-color: var(--ton-accent);
   transform: translateY(-2px);
 }
 
@@ -610,15 +654,16 @@
   height: var(--ton-icon-sm);
 }
 
+/* Add to cart — the gradient half of the row (inline-start). */
 .ton-action--primary {
-  grid-column: 1 / -1;
-  margin-block-start: var(--ton-space-cta-top);
-  padding: var(--ton-space-5);
+  flex: 0 0 50%;
+  padding: var(--ton-pad-btn) var(--ton-space-2);
+  border: 0;
   background: var(--ton-gradient);
   color: var(--ton-surface);
-  font-size: var(--ton-fs-cta);
-  font-weight: var(--ton-fw-medium);
-  letter-spacing: var(--ton-track-cta);
+  font-size: var(--ton-fs-action);
+  font-weight: var(--ton-fw-semibold);
+  letter-spacing: var(--ton-track-action);
   text-transform: uppercase;
   box-shadow: var(--ton-shadow-cta);
   transition: transform var(--ton-t), box-shadow var(--ton-t), color var(--ton-t);
@@ -626,6 +671,7 @@
 
 .ton-action--primary:hover:not(:disabled) {
   background: var(--ton-gradient);
+  border-color: transparent;
   box-shadow: var(--ton-shadow-cta-hover);
   color: var(--ton-ink);
 }
@@ -679,7 +725,7 @@
   .ton-action,
   .ton-gallery__thumb,
   .ton-strip__upload,
-  .ton-regen {
+  .ton-zoom-btn {
     transition: none;
   }
 
@@ -687,7 +733,7 @@
   .ton-action:hover:not(:disabled),
   .ton-gallery__thumb:hover:not(:disabled),
   .ton-strip__upload:hover:not(:disabled),
-  .ton-regen:hover {
+  .ton-zoom-btn:hover {
     transform: none;
   }
 }
