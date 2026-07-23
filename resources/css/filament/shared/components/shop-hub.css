@@ -7,10 +7,22 @@
  * value literals; RTL is a logical flip (only the chevron glyph mirrors).
  * TOKENS: --toa-surface --toa-border --toa-radius-card --toa-shadow-card
  *   --toa-shadow-card-hover --toa-accent --toa-accent-soft --toa-accent-line
- *   --to-ink --to-ink-muted --to-ink-subtle --to-space-2..6 --toa-kpi-min
+ *   --to-ink --to-ink-muted --to-ink-subtle --to-space-2..8 --toa-kpi-min
  *   --toa-type-h-size --toa-type-caption-size --to-fw-semibold --to-fw-medium
  *   --to-r-control --to-bw-input --to-t-base --to-t-fast
  * ==========================================================================*/
+
+/* The hub's vertical rhythm. The partial stacks a run of top-level blocks (welcome
+   head, hero, onboarding, KPI band, quick-links, embed, products, activity) as bare
+   siblings — without this they collapse together with no breathing room. A single
+   flex column with one gap token gives every surface that renders the partial (the
+   tenant Overview widget AND the record-bound ViewSite page) the SAME calm spacing,
+   so the two read as one hub. */
+.to-shop-hub {
+    display: flex;
+    flex-direction: column;
+    gap: var(--to-space-8);
+}
 
 /* The quick-link grid. A wider minimum than the KPI band on purpose: these cards
    carry a TITLE + a sentence, so a KPI-width column shredded the title into four

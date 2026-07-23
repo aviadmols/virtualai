@@ -4,5 +4,8 @@
     come from RendersShopHub on this page.
 --}}
 <x-filament-panels::page>
-    @include('filament.merchant.partials.shop-hub')
+    {{-- Same wrapper the Overview widget uses, so both hub surfaces share ONE vertical rhythm. --}}
+    <div class="to-shop-hub">
+        @include('filament.merchant.partials.shop-hub')
+    </div>
 </x-filament-panels::page>
