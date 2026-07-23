@@ -49,6 +49,32 @@ final class MediaVolumeServingTest extends TestCase
         $this->get('/media/pub/'.$stored->path)->assertNotFound();
     }
 
+    public function test_a_platform_media_asset_is_served_publicly_with_cors_for_fonts(): void
+    {
+        // Super-Admin media-assets (fonts/media at stable URLs) are the second public family:
+        // served cacheably, no signature, and with a cross-origin header so @font-face works
+        // from a storefront on another origin.
+        Storage::disk('volume')->put('media-assets/heebo.woff2', 'FONTBYTES');
+
+        $res = $this->get('/media/pub/media-assets/heebo.woff2');
+
+        $res->assertOk();
+        $this->assertSame('FONTBYTES', $res->streamedContent());
+        $this->assertStringContainsString('max-age=31536000', (string) $res->headers->get('Cache-Control'));
+        $this->assertSame('*', $res->headers->get('Access-Control-Allow-Origin'));
+    }
+
+    public function test_an_uploaded_svg_asset_is_sandboxed(): void
+    {
+        // SVG can carry script; the public door ships a sandbox CSP as defense in depth.
+        Storage::disk('volume')->put('media-assets/logo.svg', '<svg></svg>');
+
+        $res = $this->get('/media/pub/media-assets/logo.svg');
+
+        $res->assertOk();
+        $this->assertStringContainsString('sandbox', (string) $res->headers->get('Content-Security-Policy'));
+    }
+
     public function test_private_media_needs_a_valid_signature(): void
     {
         $stored = $this->media()->storeResult(1, 1, 5, 'SECRET', 'image/png');

@@ -29,6 +29,7 @@
 @import '../shared/components/resolver-preview.css';
 @import '../shared/components/embed-code.css';
 @import '../shared/components/style-before-after.css';
+@import '../shared/components/brand-logo.css';
 
 @config 'tailwind.config.js';
 
@@ -44,6 +45,9 @@
     --toa-accent-soft: #eef2ff;   /* indigo-50 — selected rows, active-nav pill */
     --toa-accent-line: #818cf8;   /* indigo-400 — active-nav indicator bar */
     --toa-focus: rgb(99 102 241 / 32%);
+
+    /* Brand wordmark height in the sidebar/header (brand-logo.css consumes it). */
+    --to-brand-logo-height: 1.9rem;
 
     /* Re-map Filament's own primary scale onto Indigo so native buttons, links,
        toggles, badges, and active states inherit the brand for free. The platform

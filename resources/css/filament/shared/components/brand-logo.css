@@ -1,0 +1,28 @@
+/* ============================================================================
+ * Vsio brand wordmark in the panel header/sidebar. Two files ship: the light
+ * logo (dark letters + gradient "I") and a dark-mode variant (white letters),
+ * swapped by Filament's `.dark` root class so the mark never disappears on the
+ * dark sidebar. Height is set per panel in its own theme.css (they differ).
+ * Plain CSS on purpose — Filament toggles dark by CLASS, not prefers-color-scheme,
+ * so an external <img> SVG can't self-adapt; the swap must live here.
+ * ==========================================================================*/
+
+.to-brand-logo {
+    display: block;
+    width: auto;
+    height: var(--to-brand-logo-height, 2rem);
+}
+
+/* Light theme: show the dark-lettered mark, hide the light-lettered one. */
+.to-brand-logo--dark {
+    display: none;
+}
+
+/* Dark theme: flip them. */
+.dark .to-brand-logo--light {
+    display: none;
+}
+
+.dark .to-brand-logo--dark {
+    display: block;
+}

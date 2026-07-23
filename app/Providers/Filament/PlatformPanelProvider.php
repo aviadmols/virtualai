@@ -52,10 +52,10 @@ class PlatformPanelProvider extends PanelProvider
     // them so HE never falls back. Weights 400–700 match the OpenRouter range.
     private const FONT_FAMILY = 'Inter';
 
-    // The Vsio wordmark (public/vsio-logo.svg) replaces the text brand name in the sidebar/header.
-    private const BRAND_LOGO = 'vsio-logo.svg';
-
-    private const BRAND_LOGO_HEIGHT = '1.9rem';
+    // The Vsio wordmark replaces the text brand name in the sidebar/header. A light +
+    // dark SVG pair is swapped by theme (brand-logo.blade + brand-logo.css); height is
+    // the --to-brand-logo-height token in this panel's theme.css.
+    private const BRAND_LOGO_VIEW = 'filament.brand-logo';
 
     private const HEBREW_FONT_HEAD = '<link rel="preconnect" href="https://fonts.bunny.net">'
         .'<link href="https://fonts.bunny.net/css?family=assistant:400,500,600,700&display=swap" rel="stylesheet" />';
@@ -82,8 +82,7 @@ class PlatformPanelProvider extends PanelProvider
             ->login()
             ->colors(self::colors())
             ->font(self::FONT_FAMILY)
-            ->brandLogo(asset(self::BRAND_LOGO))
-            ->brandLogoHeight(self::BRAND_LOGO_HEIGHT)
+            ->brandLogo(fn () => view(self::BRAND_LOGO_VIEW))
             ->renderHook(
                 PanelsRenderHook::HEAD_START,
                 static fn (): HtmlString => new HtmlString(self::HEBREW_FONT_HEAD),

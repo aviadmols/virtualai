@@ -15,6 +15,12 @@ use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
+    // === CONSTANTS ===
+    // Livewire's temporary-upload ceiling (KB). The default (12MB) is too small for
+    // the platform media-assets area (video/audio uploads); each FileUpload still
+    // enforces its own tighter maxSize on top of this ceiling.
+    private const UPLOAD_CEILING_KB = 51200;
+
     /**
      * Register any application services.
      */
@@ -48,6 +54,10 @@ class AppServiceProvider extends ServiceProvider
                 Cache::put(QueueHealth::HEARTBEAT_KEY, $now, QueueHealth::HEARTBEAT_TTL);
             }
         });
+
+        // Raise Livewire's temporary-upload ceiling so media-asset video/audio
+        // uploads fit; per-field maxSize rules stay the real limits.
+        config(['livewire.temporary_file_upload.rules' => ['required', 'file', 'max:'.self::UPLOAD_CEILING_KB]]);
 
         // Behind Railway's TLS-terminating proxy the request can look like HTTP.
         // When the configured app URL is HTTPS, force HTTPS URL generation so

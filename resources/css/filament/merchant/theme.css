@@ -41,6 +41,7 @@
 @import '../shared/components/product-studio.css';
 @import '../shared/components/token-picker.css';
 @import '../shared/components/topbar-credits.css';
+@import '../shared/components/brand-logo.css';
 
 @config 'tailwind.config.js';
 
@@ -54,6 +55,9 @@
     --toa-accent-soft: #eef2ff;   /* indigo-50 — selected rows, active-nav pill */
     --toa-accent-line: #6366f1;   /* indigo-500 — active-nav indicator bar */
     --toa-focus: rgb(79 70 229 / 32%);
+
+    /* Brand wordmark height in the sidebar/header (brand-logo.css consumes it). */
+    --to-brand-logo-height: 2.25rem;
 
     /* "Upgraded light" — the merchant panel opts geometry + gradients into the shared component
        hooks; the platform theme sets none of these, so it keeps its calm hairline look. */

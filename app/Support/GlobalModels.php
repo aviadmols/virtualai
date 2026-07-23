@@ -35,6 +35,7 @@ final class GlobalModels
         'App\\Models\\PlatformDirective',    // Super-Admin global rules per surface (control plane).
         'App\\Models\\PlaygroundRun',        // Super-Admin model-test runs (no tenant; never charges).
         'App\\Models\\StylePreset',          // Super-Admin global style library (no tenant; only swaps a prompt).
+        'App\\Models\\MediaAsset',           // Super-Admin uploaded fonts/media at stable public URLs.
         // Storyboard (admin AI pre-production builder) — admin-owned, no tenant, never charges.
         'App\\Models\\StoryboardProject',
         'App\\Models\\StoryboardAsset',

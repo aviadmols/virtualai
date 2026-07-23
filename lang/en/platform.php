@@ -517,6 +517,46 @@ return [
         'empty_sub' => 'Create a style — a reference image + a prompt — then generate a sample and approve it.',
     ],
 
+    // Platform — the global media-assets library (fonts + media served at stable public URLs).
+    'media_assets' => [
+        'title' => 'Media & fonts',
+        'singular' => 'Media asset',
+        'field' => [
+            'name' => 'Name',
+            'name_help' => 'For fonts this becomes the font-family name in the @font-face snippet.',
+            'file' => 'File',
+            'file_help' => 'Fonts (woff2/woff/ttf/otf), images, video, audio or files. Up to 50 MB. The link is permanent — replacing = upload a new asset.',
+        ],
+        'col' => [
+            'name' => 'Name',
+            'kind' => 'Type',
+            'size' => 'Size',
+            'url' => 'Public link',
+            'uploaded' => 'Uploaded',
+        ],
+        'kind' => [
+            'font' => 'Font',
+            'image' => 'Image',
+            'video' => 'Video',
+            'audio' => 'Audio',
+            'file' => 'File',
+        ],
+        'filter' => [
+            'kind' => 'Type',
+        ],
+        'action' => [
+            'upload' => 'Upload asset',
+            'open' => 'Open',
+            'font_css' => '@font-face',
+            'font_css_help' => 'Paste this into your CSS, then use the font-family anywhere.',
+            'close' => 'Close',
+        ],
+        'copied' => 'Link copied',
+        'copy_hint' => 'Click to copy the public link',
+        'empty' => 'No media yet',
+        'empty_sub' => 'Upload a font or media file and get a permanent public link you can use across the system.',
+    ],
+
     // P3 — Sites (cross-account, full CRUD via audited seams).
     'sites' => [
         'title' => 'Sites',
