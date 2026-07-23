@@ -62,14 +62,36 @@ class StoryboardCombineVideoTest extends TestCase
         $method = new \ReflectionMethod($composer, 'concatCommand');
 
         $args = $method->invoke($composer, [
-            ['file' => '/tmp/clip_0000.mp4', 'seconds' => 3],
-            ['file' => '/tmp/clip_0001.mp4', 'seconds' => 6],
+            ['file' => '/tmp/clip_0000.mp4', 'seconds' => 3, 'trim' => true],
+            ['file' => '/tmp/clip_0001.mp4', 'seconds' => 6, 'trim' => true],
         ], 1080, 1920, '/tmp/final.mp4');
 
         $filter = $args[array_search('-filter_complex', $args, true) + 1];
         $this->assertStringContainsString('fps=30,trim=duration=3,setpts=PTS-STARTPTS[v0]', $filter);
         $this->assertStringContainsString('fps=30,trim=duration=6,setpts=PTS-STARTPTS[v1]', $filter);
         $this->assertStringContainsString('concat=n=2:v=1:a=0', $filter);
+    }
+
+    public function test_a_clip_that_lands_on_the_next_shot_keeps_its_full_length(): void
+    {
+        // A clip flagged trim => false LANDS on the next shot's opening frame (image_tail): its
+        // end frame IS the cut, so the composer must NOT trim it — trimming would chop off the
+        // connecting frame and break the shot-to-shot continuity. The LAST clip (trim => true)
+        // is still trimmed to its shot length.
+        $composer = app(StoryboardVideoComposer::class);
+        $method = new \ReflectionMethod($composer, 'concatCommand');
+
+        $args = $method->invoke($composer, [
+            ['file' => '/tmp/clip_0000.mp4', 'seconds' => 3, 'trim' => false],
+            ['file' => '/tmp/clip_0001.mp4', 'seconds' => 4, 'trim' => true],
+        ], 1080, 1920, '/tmp/final.mp4');
+
+        $filter = $args[array_search('-filter_complex', $args, true) + 1];
+        // The connecting clip: CFR + PTS reset, but NO trim (the landing frame survives).
+        $this->assertStringContainsString('setsar=1,fps=30,setpts=PTS-STARTPTS[v0]', $filter);
+        $this->assertStringNotContainsString('trim=duration=3', $filter);
+        // The final clip is trimmed to its shot length as usual.
+        $this->assertStringContainsString('fps=30,trim=duration=4,setpts=PTS-STARTPTS[v1]', $filter);
     }
 
     public function test_animate_with_no_frame_images_fails_cleanly_and_never_charges(): void

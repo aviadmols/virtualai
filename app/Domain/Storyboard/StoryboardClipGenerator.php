@@ -117,7 +117,15 @@ final class StoryboardClipGenerator
             return false;
         }
 
-        $frame->update(['video_task_id' => $taskId]);
+        // The clip LANDS on the next shot's frame only when the tail was sent AND not dropped by a
+        // 400 retry. The composer keeps a landed clip at full length so that connecting frame
+        // survives the concat; any other clip is trimmed to its shot seconds.
+        $landed = $tail !== null && ! ($frame->video_meta[self::META_TAIL_DROPPED] ?? false);
+
+        $frame->update([
+            'video_task_id' => $taskId,
+            'video_meta' => array_merge($frame->video_meta ?? [], [StoryboardFrame::META_TAIL_APPLIED => $landed]),
+        ]);
 
         return true;
     }

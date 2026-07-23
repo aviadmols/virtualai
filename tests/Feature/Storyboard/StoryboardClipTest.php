@@ -120,6 +120,8 @@ class StoryboardClipTest extends TestCase
         $frame->refresh();
         $this->assertSame(StoryboardFrame::VIDEO_GENERATING, $frame->video_status);
         $this->assertSame('/v1/videos/image2video|'.self::KLING_TASK, $frame->video_task_id);
+        // The tail landed → the composer must keep this clip at full length (the cut IS its end frame).
+        $this->assertTrue($frame->video_meta[StoryboardFrame::META_TAIL_APPLIED] ?? false);
         Bus::assertDispatched(PollStoryboardClipJob::class);
 
         Http::assertSent(function ($req): bool {
@@ -158,6 +160,8 @@ class StoryboardClipTest extends TestCase
         Http::assertSent(fn ($req) => str_ends_with($req->url(), '/v1/videos/image2video')
             && ! array_key_exists('image_tail', (array) json_decode((string) $req->body(), true))
             && (json_decode((string) $req->body(), true)['duration'] ?? null) === '10');
+        // No tail → not a landing clip → the composer trims it to its shot length.
+        $this->assertFalse($long->fresh()->video_meta[StoryboardFrame::META_TAIL_APPLIED]);
 
         $short = $this->frame(['start_second' => 0, 'end_second' => 1]);
         (new GenerateStoryboardClipJob($short->id))->handle(app(StoryboardClipGenerator::class));
@@ -191,6 +195,8 @@ class StoryboardClipTest extends TestCase
         $this->assertSame(StoryboardFrame::VIDEO_GENERATING, $frame->video_status);
         $this->assertTrue((bool) ($frame->video_meta['tail_dropped'] ?? false));
         $this->assertNotSame('', (string) ($frame->video_meta['tail_error'] ?? ''));
+        // A dropped tail does NOT land on the next shot → the clip is trimmed like any other.
+        $this->assertFalse($frame->video_meta[StoryboardFrame::META_TAIL_APPLIED]);
 
         // First submit carried the tail; the retry did not.
         $tails = [];

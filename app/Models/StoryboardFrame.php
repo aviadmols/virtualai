@@ -30,6 +30,12 @@ class StoryboardFrame extends Model
     public const VIDEO_READY = 'ready';
     public const VIDEO_FAILED = 'failed';
 
+    // video_meta flag: this clip will LAND on the next shot's opening frame (Kling image_tail),
+    // so the composer must keep it at full rendered length — trimming it to the shot seconds
+    // would cut off the very frame that makes the cut seamless. Written by the clip generator,
+    // read by the video composer.
+    public const META_TAIL_APPLIED = 'tail_applied';
+
     protected $fillable = [
         'project_id',
         'frame_number',

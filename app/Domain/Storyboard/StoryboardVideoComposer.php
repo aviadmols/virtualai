@@ -3,6 +3,7 @@
 namespace App\Domain\Storyboard;
 
 use App\Domain\Media\MediaStorage;
+use App\Models\StoryboardFrame;
 use App\Models\StoryboardProject;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
@@ -83,18 +84,23 @@ final class StoryboardVideoComposer
 
     /**
      * Join the per-frame AI motion clips (video_path), in frame order, into ONE real animated MP4.
-     * Each clip is TRIMMED to its frame's locked shot length — video models render fixed enum
-     * lengths (Kling: 5s/10s), so an untrimmed 5s render of a 3s shot would stretch the film.
-     * Skips frames whose clip failed / vanished. @throws RuntimeException when no clips or ffmpeg fails.
+     * A clip is TRIMMED to its frame's locked shot length — video models render fixed enum lengths
+     * (Kling: 5s/10s), so an untrimmed 5s render of a 3s shot would stretch the film. The ONE
+     * exception is a clip that LANDS on the next shot's opening frame (Kling image_tail): it keeps
+     * its full length, because the connecting frame sits at the clip's END and the trim would cut
+     * it off — defeating the shot-to-shot connection. Skips frames whose clip failed / vanished.
+     * @throws RuntimeException when no clips or ffmpeg fails.
      */
     public function concatClips(StoryboardProject $project, string $resolution): string
     {
         $clips = $project->frames()
             ->whereNotNull('video_path')
-            ->get(['video_path', 'start_second', 'end_second'])
+            ->get(['video_path', 'start_second', 'end_second', 'video_meta'])
             ->map(static fn ($f): array => [
                 'path' => (string) $f->video_path,
                 'seconds' => max(1, (int) $f->end_second - (int) $f->start_second),
+                // A clip landing on the next shot's frame keeps its full render; every other is trimmed.
+                'trim' => ! (bool) data_get($f->video_meta, StoryboardFrame::META_TAIL_APPLIED, false),
             ])
             ->all();
 
@@ -189,11 +195,12 @@ final class StoryboardVideoComposer
     }
 
     /**
-     * Write each source clip to the temp dir; returns ordered [file, seconds] tuples so the
-     * skip-missing logic and the per-clip trim durations stay in lockstep.
+     * Write each source clip to the temp dir; returns ordered [file, seconds, trim] tuples so the
+     * skip-missing logic, the per-clip trim durations, and the keep-full-length decision stay in
+     * lockstep.
      *
-     * @param  array<int,array{path:string,seconds:int}>  $clips
-     * @return array<int,array{file:string,seconds:int}>
+     * @param  array<int,array{path:string,seconds:int,trim:bool}>  $clips
+     * @return array<int,array{file:string,seconds:int,trim:bool}>
      */
     private function downloadClipTuples(array $clips, string $dir): array
     {
@@ -208,7 +215,7 @@ final class StoryboardVideoComposer
             $ext = pathinfo($clip['path'], PATHINFO_EXTENSION) ?: self::DEFAULT_VIDEO_EXT;
             $file = $dir.'/clip_'.str_pad((string) $i, 4, '0', STR_PAD_LEFT).'.'.$ext;
             File::put($file, $bytes);
-            $files[] = ['file' => $file, 'seconds' => $clip['seconds']];
+            $files[] = ['file' => $file, 'seconds' => $clip['seconds'], 'trim' => $clip['trim']];
         }
 
         if ($files === []) {
@@ -222,9 +229,11 @@ final class StoryboardVideoComposer
      * The ffmpeg argv to concat N video inputs: each scaled + padded to the target box,
      * normalised to CFR, TRIMMED to its shot's locked seconds (PTS reset so concat starts
      * each segment at zero), then joined into a single H.264 stream (video only — clips
-     * carry no audio). A trim longer than the clip is a harmless no-op.
+     * carry no audio). A clip flagged `trim => false` (it lands on the next shot's frame via
+     * image_tail) is kept at full length so the connecting end frame survives the concat.
+     * A trim longer than the clip is a harmless no-op.
      *
-     * @param  array<int,array{file:string,seconds:int}>  $inputs
+     * @param  array<int,array{file:string,seconds:int,trim:bool}>  $inputs
      * @return array<int,string>
      */
     private function concatCommand(array $inputs, int $width, int $height, string $output): array
@@ -239,9 +248,10 @@ final class StoryboardVideoComposer
         $filter = '';
         $count = count($inputs);
         foreach (array_values($inputs) as $i => $input) {
+            $trim = ($input['trim'] ?? true) ? ",trim=duration={$input['seconds']}" : '';
             $filter .= "[{$i}:v]scale={$width}:{$height}:force_original_aspect_ratio=decrease,"
                 ."pad={$width}:{$height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=".self::FPS
-                .",trim=duration={$input['seconds']},setpts=PTS-STARTPTS[v{$i}];";
+                .$trim.",setpts=PTS-STARTPTS[v{$i}];";
         }
         for ($i = 0; $i < $count; $i++) {
             $filter .= "[v{$i}]";
